@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>se.alipsa</groupId>
+    <artifactId>md2pdf-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>MarkdownToPdf</artifactId>
+  <packaging>jar</packaging>
+
+  <name>MarkdownToPdf Editor</name>
+  <description>Viewer for the MarkdownToPdf project</description>
+  <url>https://github.com/Alipsa/MarkdownToPdf</url>
+
+  <properties>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <classgraph.version>4.8.184</classgraph.version>
+    <fxsvgimage.version>1.5.1</fxsvgimage.version>
+
+    <!-- don't forget to change journoViewer.xml if javafx version is changed -->
+    <javafx.version>23.0.2</javafx.version>
+    <md2pdf.version>${revision}</md2pdf.version>
+    <log4j.version>2.25.3</log4j.version>
+    <pdfbox.version>3.0.6</pdfbox.version>
+    <richtextfx.version>0.11.7</richtextfx.version>
+  </properties>
+
+  <!--repositories>
+    <repository>
+      <id>jitpack.io</id>
+      <url>https://jitpack.io</url>
+    </repository>
+  </repositories-->
+
+  <dependencies>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>${javafx.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-swing</artifactId>
+      <version>${javafx.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-web</artifactId>
+      <version>${javafx.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>se.alipsa</groupId>
+      <artifactId>md2pdf</artifactId>
+      <version>${md2pdf.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>${pdfbox.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.xmlgraphics</groupId>
+      <artifactId>batik-codec</artifactId>
+      <version>${batik.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.groovy</groupId>
+      <artifactId>groovy-all</artifactId>
+      <version>${groovy-version}</version>
+      <type>pom</type>
+    </dependency>
+    <dependency>
+      <groupId>org.fxmisc.richtext</groupId>
+      <artifactId>richtextfx</artifactId>
+      <version>${richtextfx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.classgraph</groupId>
+      <artifactId>classgraph</artifactId>
+      <version>${classgraph.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>se.alipsa</groupId>
+      <artifactId>fxsvgimage</artifactId>
+      <version>${fxsvgimage.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://github.com/Alipsa/MarkdownToPdf/blob/main/LICENSE</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>Per Nyfelt</name>
+      <email>per.nyfelt@alipsa.se</email>
+      <organization>Alipsa HB</organization>
+      <organizationUrl>http://www.alipsa.se</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/Alipsa/MarkdownToPdf.git</connection>
+    <developerConnection>scm:git:https://github.com/Alipsa/MarkdownToPdf.git</developerConnection>
+    <url>https://github.com/Alipsa/MarkdownToPdf/tree/main</url>
+  </scm>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>enforce-releases-maven-java</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireMavenVersion>
+                  <version>[3.9.9,)</version>
+                  <level>ERROR</level>
+                  <message>Please use maven version 3.9.9 or higher</message>
+                </requireMavenVersion>
+                <requireJavaVersion>
+                  <version>[21,)</version>
+                  <level>ERROR</level>
+                  <message>Please use Java 21 or higher</message>
+                </requireJavaVersion>
+              </rules>
+            </configuration>
+          </execution>
+          <execution>
+            <id>enforce-bytecode</id>
+            <goals><goal>enforce</goal></goals>
+            <configuration>
+              <rules>
+                <enforceBytecodeVersion>
+                  <!-- Cap dependencies at JDK 21 -->
+                  <maxJdkVersion>21</maxJdkVersion>
+                  <!-- Optional: ignore test scope -->
+                  <ignoredScopes>
+                    <ignoredScope>test</ignoredScope>
+                  </ignoredScopes>
+                </enforceBytecodeVersion>
+              </rules>
+              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
+        <dependencies>
+          <dependency>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>extra-enforcer-rules</artifactId>
+            <version>1.11.0</version>
+          </dependency>
+        </dependencies>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>versions-maven-plugin</artifactId>
+        <configuration>
+          <rulesUri>file://${basedir}/version-plugin-rules.xml</rulesUri>
+        </configuration>
+      </plugin>
+      <plugin>
+        <!-- javafx plugin creates its own jar with a new manifest, so we must create a
+        separate properties file instead -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.2.0</version>
+        <executions>
+          <execution>
+            <id>createProps</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <propertyfile file="${project.build.outputDirectory}/MarkdownToPdf.properties">
+                  <entry key="Implementation-Version" value="${revision}"/>
+                  <entry key="Build-Time" value="${maven.build.timestamp}"/>
+                  <entry key="Batik-Version" value="${batik.version}"/>
+                  <entry key="Jsoup-Version" value="${jsoup.version}"/>
+                  <entry key="Openhtmltopdf-Version" value="${openhtmltopdfVersion}"/>
+                  <entry key="FreeMarker-Version" value="${freemarker.version}"/>
+                </propertyfile>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifest>
+              <!-- Below line will add the following attributes to the jar:
+                  Implementation-Title: ${pom.name}
+                  Implementation-Version: ${pom.version}
+                  Implementation-Vendor-Id: ${pom.groupId}
+                  Implementation-Vendor: ${pom.organization.name}
+              -->
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+              <addClasspath>true</addClasspath>
+              <mainClass>se.alipsa.md2pdf.gui.MarkdownToPdf</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  <profiles>
+    <profile>
+      <id>fatjar</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <configuration>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>module-info.class</exclude>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>org.openjfx:*</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+            </configuration>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>shade</goal>
+                </goals>
+                <configuration>
+                  <!-- note setting this to true requires a lot of filter settings to include groovy stuff-->
+                  <minimizeJar>false</minimizeJar>
+                  <shadedArtifactAttached>true</shadedArtifactAttached>
+                  <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>
