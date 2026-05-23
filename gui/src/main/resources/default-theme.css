@@ -1,0 +1,163 @@
+.styled-text-area .env-varName {
+    -fx-fill: black;
+}
+
+.styled-text-area .env-varValue {
+    -fx-fill: dimgray;
+}
+
+.styled-text-area {
+    -fx-cursor: text;
+    -fx-font-family: monospace;
+}
+
+.styled-text-area .paragraph-box .paragraph-text {
+    -fx-padding: 0 2px;
+}
+
+.styled-text-area .caret {
+    -rtfx-blink-rate: 500ms;
+    -fx-stroke-width: 1.0;
+}
+
+.styled-text-area .selection {
+    -fx-fill: dodgerblue;
+    -fx-stroke-width: 0;
+}
+
+.assign {
+    -fx-fill: dimgray;
+    -fx-font-weight: bold;
+}
+
+.bracket {
+    -fx-fill: dimgray;
+    -fx-font-weight: bold;
+}
+
+.brace {
+    -fx-fill: slategray;
+    -fx-font-weight: bold;
+}
+
+.comment {
+    -fx-fill: gray;
+    color: gray;
+}
+
+.digit {
+    /* -fx-fill:darkslateblue; */
+    -fx-fill:navy;
+}
+
+.error {
+    -fx-fill: red;
+}
+
+.function {
+    -fx-font-style: italic;
+    /*-fx-fill: darkblue;*/
+    -fx-fill: mediumblue;
+}
+
+.keyword {
+    -fx-fill: mediumblue;
+    /* -fx-font-weight: bold; */
+    color: mediumblue; /* web view */
+}
+
+.lineno {
+    -fx-background-color: GhostWhite;
+}
+
+.operator {
+    /*-fx-fill: darkslategray;*/
+    -fx-fill: dimgray;
+}
+
+.paragraph-box:has-caret {
+    -fx-background-color: #f2f9fc;
+}
+
+.paren {
+    -fx-fill: darkgray;
+    -fx-font-weight: bold;
+}
+
+.semicolon {
+    -fx-font-weight: bold;
+}
+
+.string {
+    -fx-fill: darkgreen;
+    color: darkgreen; /* web view */
+}
+
+.xml_tagmark {
+    -fx-fill: gray;
+}
+.xml_anytag {
+    -fx-fill: blue;
+}
+.xml_paren {
+    -fx-fill: darkgray;
+    -fx-font-weight: bold;
+}
+.xml_attribute {
+    -fx-fill: black;
+}
+.xml_avalue {
+    -fx-fill: darkgreen;
+}
+
+.xml_comment {
+    -fx-fill: darkseagreen;
+}
+
+.xml_pi {
+    -fx-fill: RebeccaPurple;
+}
+
+/* Markdown syntax highlighting */
+.md_heading {
+    -fx-fill: #0033aa;
+    -fx-font-weight: bold;
+}
+
+.md_bold {
+    -fx-fill: #1a1a1a;
+    -fx-font-weight: bold;
+}
+
+.md_italic {
+    -fx-fill: #333333;
+    -fx-font-style: italic;
+}
+
+.md_inlinecode {
+    -fx-fill: #c7254e;
+    -fx-background-color: #f9f2f4;
+}
+
+.md_codeblock {
+    -fx-fill: #476600;
+}
+
+.md_link {
+    -fx-fill: #0366d6;
+    -fx-underline: true;
+}
+
+.md_blockquote {
+    -fx-fill: #6a737d;
+    -fx-font-style: italic;
+}
+
+.md_listitem {
+    -fx-fill: #444444;
+    -fx-font-weight: bold;
+}
+
+.md_hrule {
+    -fx-fill: #999999;
+}

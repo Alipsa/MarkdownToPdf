@@ -1,92 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <parent>
-    <groupId>se.alipsa</groupId>
     <artifactId>md2pdf-parent</artifactId>
-    <version>${revision}</version>
+    <groupId>se.alipsa</groupId>
+    <version>0.1.0-SNAPSHOT</version>
   </parent>
+  <modelVersion>4.0.0</modelVersion>
   <artifactId>MarkdownToPdf</artifactId>
-  <packaging>jar</packaging>
-
   <name>MarkdownToPdf Editor</name>
   <description>Viewer for the MarkdownToPdf project</description>
   <url>https://github.com/Alipsa/MarkdownToPdf</url>
-
-  <properties>
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-    <!-- don't forget to change journoViewer.xml if javafx version is changed -->
-    <javafx.version>23.0.2</javafx.version>
-    <md2pdf.version>${revision}</md2pdf.version>
-    <log4j.version>2.25.3</log4j.version>
-    <pdfbox.version>3.0.6</pdfbox.version>
-    <richtextfx.version>0.11.7</richtextfx.version>
-  </properties>
-
-  <!--repositories>
-    <repository>
-      <id>jitpack.io</id>
-      <url>https://jitpack.io</url>
-    </repository>
-  </repositories-->
-
-  <dependencies>
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-controls</artifactId>
-      <version>${javafx.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-swing</artifactId>
-      <version>${javafx.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-web</artifactId>
-      <version>${javafx.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>se.alipsa</groupId>
-      <artifactId>md2pdf</artifactId>
-      <version>${md2pdf.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.pdfbox</groupId>
-      <artifactId>pdfbox</artifactId>
-      <version>${pdfbox.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.fxmisc.richtext</groupId>
-      <artifactId>richtextfx</artifactId>
-      <version>${richtextfx.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-      <version>${log4j.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter</artifactId>
-      <scope>test</scope>
-    </dependency>
-  </dependencies>
-  <licenses>
-    <license>
-      <name>MIT</name>
-      <url>https://github.com/Alipsa/MarkdownToPdf/blob/main/LICENSE</url>
-    </license>
-  </licenses>
   <developers>
     <developer>
       <name>Per Nyfelt</name>
@@ -95,16 +18,20 @@
       <organizationUrl>http://www.alipsa.se</organizationUrl>
     </developer>
   </developers>
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://github.com/Alipsa/MarkdownToPdf/blob/main/LICENSE</url>
+    </license>
+  </licenses>
   <scm>
     <connection>scm:git:https://github.com/Alipsa/MarkdownToPdf.git</connection>
     <developerConnection>scm:git:https://github.com/Alipsa/MarkdownToPdf.git</developerConnection>
     <url>https://github.com/Alipsa/MarkdownToPdf/tree/main</url>
   </scm>
-
   <build>
     <plugins>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
         <executions>
           <execution>
@@ -129,13 +56,13 @@
           </execution>
           <execution>
             <id>enforce-bytecode</id>
-            <goals><goal>enforce</goal></goals>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
             <configuration>
               <rules>
                 <enforceBytecodeVersion>
-                  <!-- Cap dependencies at JDK 21 -->
                   <maxJdkVersion>21</maxJdkVersion>
-                  <!-- Optional: ignore test scope -->
                   <ignoredScopes>
                     <ignoredScope>test</ignoredScope>
                   </ignoredScopes>
@@ -161,9 +88,6 @@
         </configuration>
       </plugin>
       <plugin>
-        <!-- javafx plugin creates its own jar with a new manifest, so we must create a
-        separate properties file instead -->
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
         <version>3.2.0</version>
         <executions>
@@ -175,13 +99,13 @@
             </goals>
             <configuration>
               <target>
-                <propertyfile file="${project.build.outputDirectory}/MarkdownToPdf.properties">
-                  <entry key="Implementation-Version" value="${revision}"/>
-                  <entry key="Build-Time" value="${maven.build.timestamp}"/>
-                  <entry key="Batik-Version" value="${batik.version}"/>
-                  <entry key="Jsoup-Version" value="${jsoup.version}"/>
-                  <entry key="Openhtmltopdf-Version" value="${openhtmltopdfVersion}"/>
-                  <entry key="FreeMarker-Version" value="${freemarker.version}"/>
+                <propertyfile>
+                  <entry />
+                  <entry />
+                  <entry />
+                  <entry />
+                  <entry />
+                  <entry />
                 </propertyfile>
               </target>
             </configuration>
@@ -189,17 +113,10 @@
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
             <manifest>
-              <!-- Below line will add the following attributes to the jar:
-                  Implementation-Title: ${pom.name}
-                  Implementation-Version: ${pom.version}
-                  Implementation-Vendor-Id: ${pom.groupId}
-                  Implementation-Vendor: ${pom.organization.name}
-              -->
               <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
               <addClasspath>true</addClasspath>
               <mainClass>se.alipsa.md2pdf.gui.MarkdownToPdf</mainClass>
@@ -208,7 +125,6 @@
         </configuration>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <executions>
           <execution>
@@ -220,7 +136,6 @@
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
         <executions>
           <execution>
@@ -239,8 +154,20 @@
       <build>
         <plugins>
           <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-shade-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>shade</goal>
+                </goals>
+                <configuration>
+                  <minimizeJar>false</minimizeJar>
+                  <shadedArtifactAttached>true</shadedArtifactAttached>
+                  <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
+                </configuration>
+              </execution>
+            </executions>
             <configuration>
               <filters>
                 <filter>
@@ -255,23 +182,60 @@
                 </filter>
               </filters>
             </configuration>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>shade</goal>
-                </goals>
-                <configuration>
-                  <!-- note setting this to true requires a lot of filter settings to include groovy stuff-->
-                  <minimizeJar>false</minimizeJar>
-                  <shadedArtifactAttached>true</shadedArtifactAttached>
-                  <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
-                </configuration>
-              </execution>
-            </executions>
           </plugin>
         </plugins>
       </build>
     </profile>
   </profiles>
+  <dependencies>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>23.0.2</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-swing</artifactId>
+      <version>23.0.2</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-web</artifactId>
+      <version>23.0.2</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.groovy</groupId>
+      <artifactId>groovy-all</artifactId>
+      <version>5.0.6</version>
+      <type>pom</type>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>6.0.3</version>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>junit-jupiter-params</artifactId>
+          <groupId>org.junit.jupiter</groupId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+  </dependencies>
+  <properties>
+    <classgraph.version>4.8.184</classgraph.version>
+    <pdfbox.version>3.0.6</pdfbox.version>
+    <maven.compiler.source>21</maven.compiler.source>
+    <richtextfx.version>0.11.7</richtextfx.version>
+    <maven.compiler.target>21</maven.compiler.target>
+    <fxsvgimage.version>1.5.1</fxsvgimage.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <javafx.version>23.0.2</javafx.version>
+    <log4j.version>2.25.3</log4j.version>
+    <md2pdf.version>0.1.0-SNAPSHOT</md2pdf.version>
+  </properties>
 </project>

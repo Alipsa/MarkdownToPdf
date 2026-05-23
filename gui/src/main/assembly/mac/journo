@@ -1,0 +1,6 @@
+#!/usr/bin/env zsh
+# This script goes into the Contents/MacOS folder
+DIR="${0:A:h}"
+
+source "$HOME/.zshrc"
+source "$DIR/../../run.zsh"
