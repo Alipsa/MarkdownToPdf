@@ -1,3 +1,9 @@
 **/target
 .flattened-pom.xml
 .idea
+dependency-reduced-pom.xml
+*.iml
+*.log
+*.class
+.claude
+.remember

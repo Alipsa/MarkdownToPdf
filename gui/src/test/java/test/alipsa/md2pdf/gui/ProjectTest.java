@@ -2,15 +2,14 @@ package test.alipsa.md2pdf.gui;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import org.junit.jupiter.api.Test;
-import se.alipsa.md2pdf.model.Project;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+import org.junit.jupiter.api.Test;
+import se.alipsa.md2pdf.model.Project;
 
 public class ProjectTest {
 
@@ -50,7 +49,10 @@ public class ProjectTest {
     Project.save(p, path);
 
     Project p2 = Project.load(path);
-    assertEquals("Default", p2.getStyleProfileName(), "Missing styleProfileName should default to 'Default'");
+    assertEquals(
+        "Default",
+        p2.getStyleProfileName(),
+        "Missing styleProfileName should default to 'Default'");
   }
 
   @Test

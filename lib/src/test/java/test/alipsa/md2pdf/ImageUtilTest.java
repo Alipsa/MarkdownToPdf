@@ -1,14 +1,13 @@
 package test.alipsa.md2pdf;
 
-import org.junit.jupiter.api.Test;
-import se.alipsa.md2pdf.ImageUtil;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import se.alipsa.md2pdf.ImageUtil;
 
 public class ImageUtilTest {
 

@@ -1,32 +1,5 @@
 package se.alipsa.md2pdf.gui;
 
-import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.collections.ObservableList;
-import javafx.concurrent.Task;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Cursor;
-import javafx.scene.Node;
-import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.image.Image;
-import javafx.scene.input.KeyCode;
-import javafx.scene.layout.*;
-import javafx.scene.web.WebView;
-import javafx.stage.FileChooser;
-import javafx.stage.Stage;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.core.Appender;
-import org.apache.logging.log4j.core.appender.FileAppender;
-import se.alipsa.md2pdf.Md2PdfException;
-import se.alipsa.md2pdf.gui.widgets.Alerts;
-import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
-import se.alipsa.md2pdf.gui.widgets.Popup;
-import se.alipsa.md2pdf.model.Project;
-import se.alipsa.md2pdf.model.StyleProfileManager;
-
 import java.awt.Desktop;
 import java.awt.Taskbar;
 import java.awt.Toolkit;
@@ -42,12 +15,41 @@ import java.util.*;
 import java.util.List;
 import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Cursor;
+import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
+import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
+import javafx.stage.Stage;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.appender.FileAppender;
+import se.alipsa.md2pdf.Md2PdfException;
+import se.alipsa.md2pdf.gui.widgets.Alerts;
+import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
+import se.alipsa.md2pdf.model.Project;
+import se.alipsa.md2pdf.model.StyleProfileManager;
 
+/**
+ * Main JavaFX application class. Builds the primary window with a Markdown editor tab, a Style tab,
+ * and a PDF output tab; wires project and style management.
+ */
 public class MarkdownToPdf extends Application {
 
   private static final Logger logger = LogManager.getLogger(MarkdownToPdf.class);
 
-  private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
+  private final DateTimeFormatter dateFormat =
+      DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
   private final DateTimeFormatter isoFormat = DateTimeFormatter.ISO_DATE_TIME;
 
   private PDFViewer pdfViewer;
@@ -70,6 +72,11 @@ public class MarkdownToPdf extends Application {
   private static URL styleSheetUrl;
   private final List<String> searchStrings = new UniqueList<>();
 
+  /**
+   * Application entry point.
+   *
+   * @param args command-line arguments (unused)
+   */
   public static void main(String[] args) {
     launch();
   }
@@ -83,7 +90,7 @@ public class MarkdownToPdf extends Application {
     pdfTab = createPdfTab();
 
     // Wire style changes → preview refresh
-    styleTab.setOnProfileChanged(profile -> markdownTab.refreshPreview());
+    styleTab.setOnProfileChanged(markdownTab::refreshPreview);
 
     tabPane.getTabs().addAll(markdownTab, styleTab, pdfTab);
 
@@ -101,28 +108,31 @@ public class MarkdownToPdf extends Application {
 
     scene = new Scene(root, 1100, 820);
     scene.getStylesheets().add(getStyleSheet().toExternalForm());
-    appIcon = getLogo();
+    getLogo();
 
-    primaryStage.setOnCloseRequest(t -> {
-      if (markdownTab.isChanged()) {
-        boolean exitAnyway = Alerts.confirm(
-            "Unsaved changes",
-            "The markdown file has unsaved changes.",
-            "Exit without saving?"
-        );
-        if (!exitAnyway) {
-          t.consume();
-          return;
-        }
-      }
-      endProgram();
-    });
+    primaryStage.setOnCloseRequest(
+        t -> {
+          if (markdownTab.isChanged()) {
+            boolean exitAnyway =
+                Alerts.confirm(
+                    "Unsaved changes",
+                    "The markdown file has unsaved changes.",
+                    "Exit without saving?");
+            if (!exitAnyway) {
+              t.consume();
+              return;
+            }
+          }
+          endProgram();
+        });
 
     if (appIcon != null) primaryStage.getIcons().add(appIcon);
     if (Taskbar.isTaskbarSupported()) {
       var taskbar = Taskbar.getTaskbar();
       if (taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
-        var dockIcon = Toolkit.getDefaultToolkit().getImage(getClass().getResource("/MarkdownToPdf-rounded.png"));
+        var dockIcon =
+            Toolkit.getDefaultToolkit()
+                .getImage(getClass().getResource("/MarkdownToPdf-rounded.png"));
         taskbar.setIconImage(dockIcon);
       }
     }
@@ -132,17 +142,27 @@ public class MarkdownToPdf extends Application {
     primaryStage.show();
   }
 
+  /**
+   * Returns the application icon image, loading it from resources on first call.
+   *
+   * @return the icon {@link Image}, or {@code null} if the resource is missing
+   */
   public static Image getLogo() {
     if (appIcon == null) {
       try (InputStream is = MarkdownToPdf.class.getResourceAsStream("/MarkdownToPdf-rounded.png")) {
         appIcon = is == null ? null : new Image(is);
-      } catch (Exception e) {
-        // ignore
+      } catch (IOException e) {
+        logger.warn("Failed to load app icon", e);
       }
     }
     return appIcon;
   }
 
+  /**
+   * Returns the URL of the application stylesheet, loading it from resources on first call.
+   *
+   * @return the stylesheet {@link URL}
+   */
   public static URL getStyleSheet() {
     if (styleSheetUrl == null) {
       styleSheetUrl = MarkdownToPdf.class.getResource("/default-theme.css");
@@ -153,9 +173,13 @@ public class MarkdownToPdf extends Application {
   public void endProgram() {
     Platform.exit();
     Timer timer = new Timer();
-    timer.schedule(new TimerTask() {
-      public void run() { System.exit(0); }
-    }, 200);
+    timer.schedule(
+        new TimerTask() {
+          public void run() {
+            System.exit(0);
+          }
+        },
+        200);
   }
 
   // ── Project bar ────────────────────────────────────────────────────────────
@@ -181,10 +205,11 @@ public class MarkdownToPdf extends Application {
     } catch (Exception e) {
       ExceptionAlert.showAlert("Failed to load projects from preferences", e);
     }
-    projectCombo.setOnAction(a -> {
-      Project p = projectCombo.getValue();
-      if (p != null) setActiveProject(p);
-    });
+    projectCombo.setOnAction(
+        a -> {
+          Project p = projectCombo.getValue();
+          if (p != null) setActiveProject(p);
+        });
 
     Label styleLabel = new Label("Style:");
     styleLabel.setPadding(new Insets(4, 0, 0, 8));
@@ -192,19 +217,20 @@ public class MarkdownToPdf extends Application {
     styleCombo = new ComboBox<>();
     styleCombo.getItems().addAll(profileManager.listNames());
     styleCombo.setValue("Default");
-    styleCombo.setOnAction(a -> {
-      String name = styleCombo.getValue();
-      if (name != null) {
-        styleTab.applyProfile(name);
-        markdownTab.refreshPreview();
-      }
-    });
+    styleCombo.setOnAction(
+        a -> {
+          String name = styleCombo.getValue();
+          if (name != null) {
+            styleTab.applyProfile(name);
+            markdownTab.refreshPreview();
+          }
+        });
 
-    hbox.getChildren().addAll(
-        viewPdfButton, viewExternalButton,
-        projectLabel, projectCombo,
-        styleLabel, styleCombo
-    );
+    hbox.getChildren()
+        .addAll(
+            viewPdfButton, viewExternalButton,
+            projectLabel, projectCombo,
+            styleLabel, styleCombo);
     return hbox;
   }
 
@@ -221,20 +247,37 @@ public class MarkdownToPdf extends Application {
     MenuItem saveMi = new MenuItem("Save");
     saveMi.setOnAction(a -> markdownTab.save());
     MenuItem saveAsMi = new MenuItem("Save As…");
-    saveAsMi.setOnAction(a -> { markdownTab.setFile((File) null); markdownTab.save(); });
+    saveAsMi.setOnAction(
+        a -> {
+          markdownTab.setFile((File) null);
+          markdownTab.save();
+        });
     MenuItem exportHtmlMi = new MenuItem("Export HTML…");
     exportHtmlMi.setOnAction(a -> exportHtml());
     MenuItem exportPdfMi = new MenuItem("Export PDF…");
     exportPdfMi.setOnAction(a -> exportPdf());
-    fileMenu.getItems().addAll(newMi, openMi, saveMi, saveAsMi,
-        new SeparatorMenuItem(), exportHtmlMi, exportPdfMi,
-        new SeparatorMenuItem(), new MenuItem("Exit") {{
-          setOnAction(e -> {
-            if (!markdownTab.isChanged() || Alerts.confirm("Exit", "Unsaved changes", "Exit without saving?")) {
-              endProgram();
-            }
-          });
-        }});
+    fileMenu
+        .getItems()
+        .addAll(
+            newMi,
+            openMi,
+            saveMi,
+            saveAsMi,
+            new SeparatorMenuItem(),
+            exportHtmlMi,
+            exportPdfMi,
+            new SeparatorMenuItem(),
+            new MenuItem("Exit") {
+              {
+                setOnAction(
+                    e -> {
+                      if (!markdownTab.isChanged()
+                          || Alerts.confirm("Exit", "Unsaved changes", "Exit without saving?")) {
+                        endProgram();
+                      }
+                    });
+              }
+            });
 
     // Project menu
     Menu projectMenu = new Menu("Project");
@@ -243,13 +286,16 @@ public class MarkdownToPdf extends Application {
     MenuItem openProjectMi = new MenuItem("Open project…");
     openProjectMi.setOnAction(a -> openProject());
     MenuItem saveProjectMi = new MenuItem("Save project");
-    saveProjectMi.setOnAction(a -> {
-      if (getActiveProject() != null) {
-        try { saveProject(getActiveProject()); } catch (IOException e) {
-          ExceptionAlert.showAlert("Failed to save project", e);
-        }
-      }
-    });
+    saveProjectMi.setOnAction(
+        a -> {
+          if (getActiveProject() != null) {
+            try {
+              saveProject(getActiveProject());
+            } catch (IOException e) {
+              ExceptionAlert.showAlert("Failed to save project", e);
+            }
+          }
+        });
     projectMenu.getItems().addAll(newProjectMi, openProjectMi, saveProjectMi);
 
     // Edit menu
@@ -278,9 +324,11 @@ public class MarkdownToPdf extends Application {
 
   private void newDocument() {
     if (markdownTab.isChanged()) {
-      boolean proceed = Alerts.confirm("New document",
-          "The current file has unsaved changes.",
-          "Discard changes and create a new document?");
+      boolean proceed =
+          Alerts.confirm(
+              "New document",
+              "The current file has unsaved changes.",
+              "Discard changes and create a new document?");
       if (!proceed) return;
     }
     markdownTab.clear();
@@ -356,12 +404,14 @@ public class MarkdownToPdf extends Application {
   }
 
   private void openInExternalApp(File file) {
-    Task<Void> task = new Task<>() {
-      @Override protected Void call() throws Exception {
-        Desktop.getDesktop().open(file);
-        return null;
-      }
-    };
+    Task<Void> task =
+        new Task<>() {
+          @Override
+          protected Void call() throws Exception {
+            Desktop.getDesktop().open(file);
+            return null;
+          }
+        };
     task.setOnFailed(e -> ExceptionAlert.showAlert("Failed to open " + file, task.getException()));
     new Thread(task).start();
   }
@@ -374,28 +424,29 @@ public class MarkdownToPdf extends Application {
     dialog.setHeaderText("Create a new project");
     dialog.setContentText("Project name:");
     Optional<String> result = dialog.showAndWait();
-    result.ifPresent(name -> {
-      if (name.isBlank()) return;
-      FileChooser fc = new FileChooser();
-      fc.setTitle("Save project file");
-      fc.setInitialDirectory(getProjectDir());
-      fc.setInitialFileName(name + ".jpr");
-      fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Project files", "*.jpr"));
-      File projectFile = fc.showSaveDialog(stage);
-      if (projectFile != null) {
-        Project p = new Project();
-        p.setName(name);
-        String styleName = styleCombo != null ? styleCombo.getValue() : "Default";
-        p.setStyleProfileName(styleName);
-        try {
-          saveProject(p, projectFile.toPath().toString());
-          projectCombo.getItems().add(p);
-          projectCombo.setValue(p);
-        } catch (IOException e) {
-          ExceptionAlert.showAlert("Failed to save project", e);
-        }
-      }
-    });
+    result.ifPresent(
+        name -> {
+          if (name.isBlank()) return;
+          FileChooser fc = new FileChooser();
+          fc.setTitle("Save project file");
+          fc.setInitialDirectory(getProjectDir());
+          fc.setInitialFileName(name + ".jpr");
+          fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Project files", "*.jpr"));
+          File projectFile = fc.showSaveDialog(stage);
+          if (projectFile != null) {
+            Project p = new Project();
+            p.setName(name);
+            String styleName = styleCombo != null ? styleCombo.getValue() : "Default";
+            p.setStyleProfileName(styleName);
+            try {
+              saveProject(p, projectFile.toPath().toString());
+              projectCombo.getItems().add(p);
+              projectCombo.setValue(p);
+            } catch (IOException e) {
+              ExceptionAlert.showAlert("Failed to save project", e);
+            }
+          }
+        });
   }
 
   private void openProject() {
@@ -435,16 +486,23 @@ public class MarkdownToPdf extends Application {
     }
   }
 
-  void populateProjectCombo(ComboBox<Project> projectCombo) throws BackingStoreException, IOException {
+  void populateProjectCombo(ComboBox<Project> projectCombo)
+      throws BackingStoreException, IOException {
     Preferences projects = preferences().node("projects");
     ObservableList<Project> list = projectCombo.getItems();
     for (String name : projects.childrenNames()) {
       String path = projects.node(name).get("projectFile", null);
-      if (path == null) { projects.node(name).removeNode(); continue; }
+      if (path == null) {
+        projects.node(name).removeNode();
+        continue;
+      }
       Path projectFilePath = Paths.get(path);
       if (Files.exists(projectFilePath)) {
-        try { list.add(Project.load(projectFilePath)); }
-        catch (Exception e) { ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e); }
+        try {
+          list.add(Project.load(projectFilePath));
+        } catch (Exception e) {
+          ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
+        }
       } else {
         logger.info("{} does not exist, removing preference", projectFilePath);
         projects.node(name).removeNode();
@@ -495,16 +553,20 @@ public class MarkdownToPdf extends Application {
     Button reloadButton = new Button("Reload");
     reloadButton.setOnAction(a -> run());
     Button saveButton = new Button("Save…");
-    saveButton.setOnAction(a -> {
-      FileChooser fc = new FileChooser();
-      fc.setInitialDirectory(getProjectDir());
-      fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
-      File file = fc.showSaveDialog(stage);
-      if (file != null) {
-        try { writeToFile(file, pdfViewer.getContent()); }
-        catch (IOException e) { ExceptionAlert.showAlert("Failed to save " + file, e); }
-      }
-    });
+    saveButton.setOnAction(
+        a -> {
+          FileChooser fc = new FileChooser();
+          fc.setInitialDirectory(getProjectDir());
+          fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+          File file = fc.showSaveDialog(stage);
+          if (file != null) {
+            try {
+              writeToFile(file, pdfViewer.getContent());
+            } catch (IOException e) {
+              ExceptionAlert.showAlert("Failed to save " + file, e);
+            }
+          }
+        });
     buttonPane.getChildren().addAll(reloadButton, saveButton);
     root.setLeft(buttonPane);
 
@@ -526,8 +588,13 @@ public class MarkdownToPdf extends Application {
     if (area != null) area.redo();
   }
 
+  /** Opens the Find dialog, or brings it to front if already open. */
   public void displayFind() {
-    if (searchWindow != null) { searchWindow.toFront(); searchWindow.requestFocus(); return; }
+    if (searchWindow != null) {
+      searchWindow.toFront();
+      searchWindow.requestFocus();
+      return;
+    }
 
     VBox vBox = new VBox();
     vBox.setPadding(new Insets(3));
@@ -543,38 +610,52 @@ public class MarkdownToPdf extends Application {
     Button findButton = new Button("Find");
     ComboBox<String> searchInput = new ComboBox<>();
     searchInput.setEditable(true);
-    searchInput.setOnKeyPressed(e -> { if (e.getCode() == KeyCode.ENTER) findButton.fire(); });
+    searchInput.setOnKeyPressed(
+        e -> {
+          if (e.getCode() == KeyCode.ENTER) findButton.fire();
+        });
     if (!searchStrings.isEmpty()) {
       searchStrings.forEach(s -> searchInput.getItems().add(s));
       searchInput.setValue(searchStrings.get(searchStrings.size() - 1));
     }
 
-    findButton.setOnAction(e -> {
-      CodeTextArea codeArea = markdownTab.getCodeArea();
-      if (codeArea == null) { resultLabel.setText("No active editor"); return; }
-      int caretPos = codeArea.getCaretPosition();
-      String text = codeArea.getText().substring(caretPos);
-      String searchWord = searchInput.getValue();
-      if (searchWord == null) searchWord = searchInput.getEditor().getText();
-      if (searchWord == null || searchWord.isBlank()) { resultLabel.setText("Nothing to search for"); return; }
-      searchStrings.add(searchWord);
-      if (!searchInput.getItems().contains(searchWord)) searchInput.getItems().add(searchWord);
-      if (text.contains(searchWord)) {
-        int place = text.indexOf(searchWord);
-        codeArea.moveTo(place);
-        codeArea.selectRange(caretPos + place, caretPos + place + searchWord.length());
-        codeArea.requestFollowCaret();
-        resultLabel.setText("Found on line " + (codeArea.getCurrentParagraph() + 1));
-      } else {
-        resultLabel.setText("\"" + searchWord + "\" not found");
-      }
-    });
+    findButton.setOnAction(
+        e -> {
+          CodeTextArea codeArea = markdownTab.getCodeArea();
+          if (codeArea == null) {
+            resultLabel.setText("No active editor");
+            return;
+          }
+          int caretPos = codeArea.getCaretPosition();
+          String text = codeArea.getText().substring(caretPos);
+          String searchWord = searchInput.getValue();
+          if (searchWord == null) searchWord = searchInput.getEditor().getText();
+          if (searchWord == null || searchWord.isBlank()) {
+            resultLabel.setText("Nothing to search for");
+            return;
+          }
+          searchStrings.add(searchWord);
+          if (!searchInput.getItems().contains(searchWord)) searchInput.getItems().add(searchWord);
+          if (text.contains(searchWord)) {
+            int place = text.indexOf(searchWord);
+            codeArea.moveTo(place);
+            codeArea.selectRange(caretPos + place, caretPos + place + searchWord.length());
+            codeArea.requestFollowCaret();
+            resultLabel.setText("Found on line " + (codeArea.getCurrentParagraph() + 1));
+          } else {
+            resultLabel.setText("\"" + searchWord + "\" not found");
+          }
+        });
 
     Button toTopButton = new Button("Go to start");
-    toTopButton.setOnAction(a -> {
-      CodeTextArea codeArea = markdownTab.getCodeArea();
-      if (codeArea != null) { codeArea.moveTo(0); codeArea.requestFollowCaret(); }
-    });
+    toTopButton.setOnAction(
+        a -> {
+          CodeTextArea codeArea = markdownTab.getCodeArea();
+          if (codeArea != null) {
+            codeArea.moveTo(0);
+            codeArea.requestFollowCaret();
+          }
+        });
 
     pane.getChildren().addAll(searchInput, findButton, toTopButton);
     Scene scene = new Scene(vBox);
@@ -604,8 +685,11 @@ public class MarkdownToPdf extends Application {
         version = props.getProperty("Implementation-Version", version);
         String dt = props.getProperty("Build-Time");
         if (dt != null) {
-          try { buildTime = dateFormat.format(ZonedDateTime.parse(dt.trim(), isoFormat)); }
-          catch (DateTimeParseException e) { buildTime = dt; }
+          try {
+            buildTime = dateFormat.format(ZonedDateTime.parse(dt.trim(), isoFormat));
+          } catch (DateTimeParseException e) {
+            buildTime = dt;
+          }
         }
         batikVersion = props.getProperty("Batik-Version", batikVersion);
         jsoupVersion = props.getProperty("Jsoup-Version", jsoupVersion);
@@ -614,14 +698,22 @@ public class MarkdownToPdf extends Application {
     } catch (IOException e) {
       ExceptionAlert.showAlert("Error reading MarkdownToPdf.properties", e);
     }
-    content.append("MarkdownToPdf version: ").append(version)
-        .append("\nBuilt: ").append(buildTime)
-        .append("\n\nOpenHTMLtoPDF version: ").append(openHtmlVersion)
-        .append("\nBatik version: ").append(batikVersion)
-        .append("\nJsoup version: ").append(jsoupVersion)
+    content
+        .append("MarkdownToPdf version: ")
+        .append(version)
+        .append("\nBuilt: ")
+        .append(buildTime)
+        .append("\n\nOpenHTMLtoPDF version: ")
+        .append(openHtmlVersion)
+        .append("\nBatik version: ")
+        .append(batikVersion)
+        .append("\nJsoup version: ")
+        .append(jsoupVersion)
         .append("\n\nJava Runtime Version: ")
         .append(System.getProperty("java.runtime.version"))
-        .append(" (").append(System.getProperty("os.arch")).append(")");
+        .append(" (")
+        .append(System.getProperty("os.arch"))
+        .append(")");
 
     Alert dialog = new Alert(Alert.AlertType.INFORMATION, content.toString());
     dialog.setHeaderText("About MarkdownToPdf");
@@ -630,15 +722,22 @@ public class MarkdownToPdf extends Application {
 
   private void viewLogFile(javafx.event.ActionEvent actionEvent) {
     try {
-      org.apache.logging.log4j.core.Logger l = (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
-      Map.Entry<String, Appender> appenderEntry = l.get().getAppenders().entrySet().stream()
-          .filter(e -> "MarkdownToPdfLog".equals(e.getKey())).findAny().orElse(null);
+      org.apache.logging.log4j.core.Logger l =
+          (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
+      Map.Entry<String, Appender> appenderEntry =
+          l.get().getAppenders().entrySet().stream()
+              .filter(e -> "MarkdownToPdfLog".equals(e.getKey()))
+              .findAny()
+              .orElse(null);
       if (appenderEntry == null) {
         Alerts.warn("Log file not found", "No appender named 'MarkdownToPdfLog' found.");
         return;
       }
       File logFile = new File(((FileAppender) appenderEntry.getValue()).getFileName());
-      if (!logFile.exists()) { Alerts.warn("Log file not found", logFile.getAbsolutePath()); return; }
+      if (!logFile.exists()) {
+        Alerts.warn("Log file not found", logFile.getAbsolutePath());
+        return;
+      }
       Alerts.info(logFile.getAbsolutePath(), Files.readString(logFile.toPath()));
     } catch (Exception e) {
       ExceptionAlert.showAlert("Failed to show log file", e);
@@ -647,21 +746,57 @@ public class MarkdownToPdf extends Application {
 
   // ── Public accessors / helpers ─────────────────────────────────────────────
 
+  /**
+   * Returns the Style tab.
+   *
+   * @return the {@link StyleTab}
+   */
   public StyleTab getStyleTab() {
     return styleTab;
   }
 
-  public Stage getStage() { return stage; }
+  /**
+   * Returns the primary application {@link Stage}.
+   *
+   * @return the primary stage
+   */
+  public Stage getStage() {
+    return stage;
+  }
 
-  public void setStatus(String status) { statusField.setText(status); }
+  /**
+   * Displays a message in the bottom status bar.
+   *
+   * @param status the status message
+   */
+  public void setStatus(String status) {
+    statusField.setText(status);
+  }
 
-  public Project getActiveProject() { return projectCombo.getValue(); }
+  /**
+   * Returns the currently selected project, or {@code null} if none is selected.
+   *
+   * @return the active {@link Project}
+   */
+  public Project getActiveProject() {
+    return projectCombo.getValue();
+  }
 
+  /**
+   * Updates the Markdown file path on the currently active project.
+   *
+   * @param file the new Markdown file path; ignored if no project is active or {@code file} is null
+   */
   public void setProjectMarkdownFile(Path file) {
     Project p = projectCombo.getValue();
     if (p != null && file != null) p.setMarkdownFile(file);
   }
 
+  /**
+   * Returns the current working directory used as the initial directory for file choosers.
+   *
+   * @return the project directory
+   */
   public File getProjectDir() {
     File dir = new File(System.getProperty("user.dir"));
     if (dir.isFile()) return dir.getParentFile();
@@ -675,11 +810,24 @@ public class MarkdownToPdf extends Application {
     return dir;
   }
 
+  /**
+   * Sets the working directory by updating the {@code user.dir} system property.
+   *
+   * @param dir the directory to set; if {@code dir} is a file, its parent is used
+   */
   public void setProjectDir(File dir) {
     if (dir != null && dir.isFile()) dir = dir.getParentFile();
     if (dir != null) System.setProperty("user.dir", dir.getAbsolutePath());
   }
 
+  /**
+   * Writes raw bytes to a file.
+   *
+   * @param file the destination file
+   * @param content the bytes to write
+   * @return the path written to
+   * @throws IOException if writing fails
+   */
   public static Path writeToFile(File file, byte[] content) throws IOException {
     return Files.write(file.toPath(), content);
   }

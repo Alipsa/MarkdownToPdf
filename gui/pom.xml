@@ -24,8 +24,8 @@
     <!-- don't forget to change journoViewer.xml if javafx version is changed -->
     <javafx.version>23.0.2</javafx.version>
     <md2pdf.version>${revision}</md2pdf.version>
-    <log4j.version>2.25.3</log4j.version>
-    <pdfbox.version>3.0.6</pdfbox.version>
+    <log4j.version>2.26.0</log4j.version>
+    <pdfbox.version>3.0.7</pdfbox.version>
     <richtextfx.version>0.11.7</richtextfx.version>
   </properties>
 
@@ -149,7 +149,7 @@
           <dependency>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>extra-enforcer-rules</artifactId>
-            <version>1.11.0</version>
+            <version>1.12.0</version>
           </dependency>
         </dependencies>
       </plugin>
@@ -230,6 +230,13 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <excludeFilterFile>${project.basedir}/spotbugs-exclude.xml</excludeFilterFile>
+        </configuration>
       </plugin>
     </plugins>
   </build>

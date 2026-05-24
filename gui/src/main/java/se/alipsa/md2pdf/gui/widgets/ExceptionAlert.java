@@ -1,5 +1,8 @@
 package se.alipsa.md2pdf.gui.widgets;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.Optional;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
@@ -12,19 +15,23 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import se.alipsa.md2pdf.gui.MarkdownToPdf;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.Optional;
-
+/** Alert dialog that logs an exception and shows its stack trace in an expandable panel. */
 public class ExceptionAlert extends Alert {
 
   private static Logger logger = LogManager.getLogger(ExceptionAlert.class);
+
+  /** Creates an error-type alert. */
   public ExceptionAlert() {
     super(AlertType.ERROR);
   }
 
   /**
-   * log and display the exception.
+   * Logs {@code throwable} at ERROR level, then shows a styled alert with an expandable stack
+   * trace.
+   *
+   * @param message the human-readable error description shown in the dialog body
+   * @param throwable the exception whose stack trace is rendered in the expandable section
+   * @return the button the user clicked
    */
   public static Optional<ButtonType> showAlert(String message, Throwable throwable) {
     logger.error(message, throwable);
@@ -50,7 +57,6 @@ public class ExceptionAlert extends Alert {
     textArea.setMaxHeight(Double.MAX_VALUE);
     textArea.setMinHeight(Region.USE_PREF_SIZE);
 
-
     Label label = new Label("The exception stacktrace was:");
     GridPane expContent = new GridPane();
     GridPane.setVgrow(textArea, Priority.ALWAYS);
@@ -73,5 +79,4 @@ public class ExceptionAlert extends Alert {
 
     return alert.showAndWait();
   }
-
 }

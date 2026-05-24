@@ -1,0 +1,32 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Background: deep indigo, macOS-style rounded square -->
+  <rect width="512" height="512" fill="#1a237e" rx="80"/>
+
+  <!-- "M" drawn as a stroked skeleton path — no font required.
+       stroke-linecap="square" extends each open end 20 px past the stated endpoint,
+       so the actual rendered bars start at y=85 (top) and end at y=295 (bottom).
+       Left bar:  x 41–81   Right bar:  x 261–301   V-tip: (171, 236) -->
+  <path d="M 61,275 L 61,105 L 171,236 L 281,105 L 281,275"
+        stroke="white" stroke-width="40"
+        stroke-linecap="square" stroke-linejoin="miter"
+        fill="none"/>
+
+  <!-- Downward arrow  (centred at x=413, spanning y 85–308) -->
+  <!-- stem -->
+  <rect x="393" y="85" width="40" height="134" fill="white" rx="4"/>
+  <!-- arrowhead -->
+  <polygon points="354,219 472,219 413,308" fill="white"/>
+
+  <!-- Thin accent line between the symbol and the "pdf" label -->
+  <rect x="60" y="328" width="392" height="2" fill="#3f51b5" opacity="0.8"/>
+
+  <!-- "pdf" — lowercase, bold, coral-red, bottom third -->
+  <text x="256" y="442"
+        text-anchor="middle"
+        fill="#ef5350"
+        font-family="Arial, 'Liberation Sans', sans-serif"
+        font-weight="900"
+        font-size="118">pdf</text>
+
+</svg>

@@ -10,8 +10,8 @@
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleIconFile</key>
-    <string>journo.icns</string>
+    <string>md2pdf.icns</string>
     <key>CFBundleIconName</key>
-    <string>journo</string>
+    <string>md2pdf</string>
   </dict>
 </plist>

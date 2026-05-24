@@ -3,17 +3,20 @@ package se.alipsa.md2pdf;
 import com.openhtmltopdf.util.Diagnostic;
 import com.openhtmltopdf.util.XRLog;
 import com.openhtmltopdf.util.XRLogger;
-import org.slf4j.LoggerFactory;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO: contribute this class to the openhtmltopdf project
  * https://github.com/danfickle/openhtmltopdf
  */
+/** Bridges openhtmltopdf's XRLog to SLF4J. */
 public class Slf4jXRLogger implements XRLogger {
+
+  /** Creates a new logger bridge. */
+  public Slf4jXRLogger() {}
 
   private static final String DEFAULT_LOGGER_NAME = "org.openhtmltopdf.other";
 
@@ -38,16 +41,12 @@ public class Slf4jXRLogger implements XRLogger {
 
   @Override
   public void log(String where, Level level, String msg) {
-    LoggerFactory.getLogger(getLoggerName(where))
-        .atLevel(toSlf4JLevel(level))
-        .log(msg);
+    LoggerFactory.getLogger(getLoggerName(where)).atLevel(toSlf4JLevel(level)).log(msg);
   }
 
   @Override
   public void log(String where, Level level, String msg, Throwable th) {
-    LoggerFactory.getLogger(getLoggerName(where))
-        .atLevel(toSlf4JLevel(level))
-        .log(msg, th);
+    LoggerFactory.getLogger(getLoggerName(where)).atLevel(toSlf4JLevel(level)).log(msg, th);
   }
 
   @Override
@@ -132,8 +131,11 @@ public class Slf4jXRLogger implements XRLogger {
     try {
       Class<?> levelClass = Class.forName("org.apache.logging.log4j.Level");
       Object log4jLevel = levelClass.getMethod("valueOf", String.class).invoke(null, levelName);
-      Class<?> configuratorClass = Class.forName("org.apache.logging.log4j.core.config.Configurator");
-      configuratorClass.getMethod("setLevel", String.class, levelClass).invoke(null, loggerName, log4jLevel);
+      Class<?> configuratorClass =
+          Class.forName("org.apache.logging.log4j.core.config.Configurator");
+      configuratorClass
+          .getMethod("setLevel", String.class, levelClass)
+          .invoke(null, loggerName, log4jLevel);
       return true;
     } catch (ReflectiveOperationException e) {
       return false;

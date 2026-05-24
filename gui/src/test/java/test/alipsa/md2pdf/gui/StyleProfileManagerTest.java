@@ -1,21 +1,23 @@
 package test.alipsa.md2pdf.gui;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import se.alipsa.md2pdf.model.StyleProfile;
 import se.alipsa.md2pdf.model.StyleProfileManager;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 public class StyleProfileManagerTest {
 
   @Test
   void builtinProfilesAlwaysPresent() {
-    StyleProfileManager manager = new StyleProfileManager(Path.of(System.getProperty("java.io.tmpdir"), "md2pdf-test-empty-" + System.nanoTime()));
+    StyleProfileManager manager =
+        new StyleProfileManager(
+            Path.of(
+                System.getProperty("java.io.tmpdir"), "md2pdf-test-empty-" + System.nanoTime()));
     List<String> names = manager.listNames();
     assertTrue(names.contains("Default"), "Default builtin must always be listed");
     assertTrue(names.contains("Minimal"), "Minimal builtin must always be listed");
@@ -26,7 +28,8 @@ public class StyleProfileManagerTest {
   void builtinDefaultMatchesLibDefaults() {
     StyleProfile defaultProfile = StyleProfileManager.getBuiltin("Default");
     assertNotNull(defaultProfile, "Default builtin profile must not be null");
-    assertTrue(defaultProfile.getBodyFont().contains("sans-serif"), "Default font must be sans-serif");
+    assertTrue(
+        defaultProfile.getBodyFont().contains("sans-serif"), "Default font must be sans-serif");
     assertEquals(1.6, defaultProfile.getLineHeight(), 0.001);
     assertEquals("A4", defaultProfile.getPageSize());
   }
@@ -77,12 +80,16 @@ public class StyleProfileManagerTest {
     assertTrue(manager.listUserProfileNames().contains("ToDelete"));
 
     manager.delete("ToDelete");
-    assertFalse(manager.listUserProfileNames().contains("ToDelete"), "Deleted profile must not appear in user list");
+    assertFalse(
+        manager.listUserProfileNames().contains("ToDelete"),
+        "Deleted profile must not appear in user list");
   }
 
   @Test
   void loadBuiltinByName() throws IOException {
-    StyleProfileManager manager = new StyleProfileManager(Path.of(System.getProperty("java.io.tmpdir"), "md2pdf-test-bi-" + System.nanoTime()));
+    StyleProfileManager manager =
+        new StyleProfileManager(
+            Path.of(System.getProperty("java.io.tmpdir"), "md2pdf-test-bi-" + System.nanoTime()));
     StyleProfile p = manager.load("Default");
     assertNotNull(p);
     assertEquals("Default", p.getName());

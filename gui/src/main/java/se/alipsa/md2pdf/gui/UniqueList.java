@@ -5,16 +5,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 
 /**
- * A naive implementation of a List containing only unique items
- * Works fine for small lists but for bigger lists something more advanced is needed due to
- * performance issues with contains methods used to guarantee uniqueness.
+ * A naive {@link java.util.List} implementation that silently rejects duplicate elements. Works
+ * well for small lists; for larger collections use a {@link java.util.LinkedHashSet} instead, as
+ * the {@code contains} check here is O(n).
  *
- * @param <T>
+ * @param <T> the element type
  */
 public class UniqueList<T> extends ArrayList<T> {
 
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
 
   @Override
   public boolean add(T t) {

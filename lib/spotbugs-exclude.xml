@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <!--
+    Text blocks used as HTML format strings always use \n (Java spec normalises text block
+    line endings to \n). Using %n here would produce \r\n on Windows inside HTML, which is
+    not what we want. This is a false positive for HTML-generating code.
+  -->
+  <Match>
+    <Class name="se.alipsa.md2pdf.Md2PdfEngine$Job"/>
+    <Method name="buildHtml"/>
+    <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+  </Match>
+</FindBugsFilter>

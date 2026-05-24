@@ -2,17 +2,15 @@ package test.alipsa.md2pdf;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
-import se.alipsa.md2pdf.Md2PdfException;
-import se.alipsa.md2pdf.Md2PdfEngine;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import org.junit.jupiter.api.Test;
+import se.alipsa.md2pdf.Md2PdfEngine;
+import se.alipsa.md2pdf.Md2PdfException;
 
 public class ExternalCssTest {
 
@@ -21,7 +19,8 @@ public class ExternalCssTest {
     Md2PdfEngine engine = new Md2PdfEngine();
 
     File externalCssPath = new File(this.getClass().getResource("/style/mystyle.css").toURI());
-    String markdown = """
+    String markdown =
+        """
         # Welcome Per
         Our latest product: [Greeting](https://some.url.se/)
         """;

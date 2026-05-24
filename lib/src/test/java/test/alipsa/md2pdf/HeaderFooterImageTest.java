@@ -1,5 +1,10 @@
 package test.alipsa.md2pdf;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -8,14 +13,7 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import se.alipsa.md2pdf.ImageUtil;
-import se.alipsa.md2pdf.Md2PdfException;
 import se.alipsa.md2pdf.Md2PdfEngine;
-
-import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class HeaderFooterImageTest {
 
@@ -24,7 +22,8 @@ public class HeaderFooterImageTest {
     Md2PdfEngine engine = new Md2PdfEngine();
     String alice2 = ImageUtil.asDataUrl("/images/alice2.png");
 
-    String css = """
+    String css =
+        """
         @page {
           size: 4.18in 6.88in;
           margin: 0.25in;
@@ -47,7 +46,8 @@ public class HeaderFooterImageTest {
         }
         """;
 
-    String md = """
+    String md =
+        """
         <div class="content" id="page1">
 
         # CHAPTER I
@@ -76,12 +76,16 @@ public class HeaderFooterImageTest {
           <b>White Rabbit checking watch</b>
         </p>
         </div>
-        """.formatted(alice2);
+        """
+            .formatted(alice2);
 
-    var job = engine.markdown(md)
-        .css(css)
-        .pageHeader("Alice's Adventures in Wonderland")
-        .pageFooter("Page <span class=\"page-number\"></span> of <span class=\"total-pages\"></span>");
+    var job =
+        engine
+            .markdown(md)
+            .css(css)
+            .pageHeader("Alice's Adventures in Wonderland")
+            .pageFooter(
+                "Page <span class=\"page-number\"></span> of <span class=\"total-pages\"></span>");
 
     String html = job.toHtml();
     assertTrue(html.contains("Alice"));

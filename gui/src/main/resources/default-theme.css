@@ -161,3 +161,31 @@
 .md_hrule {
     -fx-fill: #999999;
 }
+
+/* CSS syntax highlighting */
+.css_comment {
+    -fx-fill: gray;
+    -fx-font-style: italic;
+}
+.css_atrule {
+    -fx-fill: #7b00c4;
+}
+.css_property {
+    -fx-fill: mediumblue;
+}
+.css_hex {
+    -fx-fill: #2e7d32;
+}
+.css_string {
+    -fx-fill: darkgreen;
+}
+.css_number {
+    -fx-fill: navy;
+}
+.css_brace {
+    -fx-fill: dimgray;
+    -fx-font-weight: bold;
+}
+.css_semicolon {
+    -fx-font-weight: bold;
+}

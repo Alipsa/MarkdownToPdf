@@ -13,7 +13,6 @@ import java.util.logging.Level;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import se.alipsa.md2pdf.Md2PdfEngine;
 import se.alipsa.md2pdf.Md2PdfException;
@@ -34,32 +33,36 @@ public class ConcurrencyTest {
     Path path1 = Paths.get("target/blue.pdf");
     Path path2 = Paths.get("target/yellow.pdf");
 
-    String md1 = """
+    String md1 =
+        """
       # Blue Circle
       A big blue circle
       """;
-    String md2 = """
+    String md2 =
+        """
       # Yellow Circle
       A big yellow circle
       """;
 
     ExecutorService executorService = Executors.newFixedThreadPool(2);
-    Runnable task1 = () -> {
-      try {
-        engine.markdown(md1).toPdf(path1);
-      } catch (Md2PdfException e) {
-        e.printStackTrace();
-        throw new RuntimeException(e);
-      }
-    };
-    Runnable task2 = () -> {
-      try {
-        engine.markdown(md2).toPdf(path2);
-      } catch (Md2PdfException e) {
-        e.printStackTrace();
-        throw new RuntimeException(e);
-      }
-    };
+    Runnable task1 =
+        () -> {
+          try {
+            engine.markdown(md1).toPdf(path1);
+          } catch (Md2PdfException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+          }
+        };
+    Runnable task2 =
+        () -> {
+          try {
+            engine.markdown(md2).toPdf(path2);
+          } catch (Md2PdfException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+          }
+        };
     executorService.submit(task1);
     executorService.submit(task2);
     executorService.shutdown();
@@ -75,34 +78,38 @@ public class ConcurrencyTest {
     Path path1 = Paths.get("target/blue2.pdf");
     Path path2 = Paths.get("target/yellow2.pdf");
 
-    String md1 = """
+    String md1 =
+        """
       # Blue Circle
       A big blue circle
       """;
-    String md2 = """
+    String md2 =
+        """
       # Yellow Circle
       A big yellow circle
       """;
 
     ExecutorService executorService = Executors.newFixedThreadPool(2);
-    Runnable task1 = () -> {
-      Md2PdfEngine engine = new Md2PdfEngine();
-      try {
-        engine.markdown(md1).toPdf(path1);
-      } catch (Md2PdfException e) {
-        e.printStackTrace();
-        throw new RuntimeException(e);
-      }
-    };
-    Runnable task2 = () -> {
-      Md2PdfEngine engine = new Md2PdfEngine();
-      try {
-        engine.markdown(md2).toPdf(path2);
-      } catch (Md2PdfException e) {
-        e.printStackTrace();
-        throw new RuntimeException(e);
-      }
-    };
+    Runnable task1 =
+        () -> {
+          Md2PdfEngine engine = new Md2PdfEngine();
+          try {
+            engine.markdown(md1).toPdf(path1);
+          } catch (Md2PdfException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+          }
+        };
+    Runnable task2 =
+        () -> {
+          Md2PdfEngine engine = new Md2PdfEngine();
+          try {
+            engine.markdown(md2).toPdf(path2);
+          } catch (Md2PdfException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+          }
+        };
     executorService.submit(task1);
     executorService.submit(task2);
     executorService.shutdown();
@@ -114,7 +121,7 @@ public class ConcurrencyTest {
   }
 
   String extractContent(Path path) throws IOException {
-    try(PDDocument pdf = Loader.loadPDF(path.toFile())) {
+    try (PDDocument pdf = Loader.loadPDF(path.toFile())) {
       return new PDFTextStripper().getText(pdf);
     }
   }

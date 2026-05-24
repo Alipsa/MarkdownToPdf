@@ -1,13 +1,7 @@
 package test.alipsa.md2pdf;
 
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDResources;
-import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
-import org.junit.jupiter.api.Test;
-import se.alipsa.md2pdf.Md2PdfException;
-import se.alipsa.md2pdf.Md2PdfEngine;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -15,10 +9,14 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.junit.jupiter.api.Test;
+import se.alipsa.md2pdf.Md2PdfEngine;
+import se.alipsa.md2pdf.Md2PdfException;
 
 public class OutputTest {
 
@@ -26,27 +24,29 @@ public class OutputTest {
 
   @Test
   public void TestRenderToHtml() throws Md2PdfException {
-    String md = """
+    String md =
+        """
       # TestRenderToHtml
       - Users
         - Per
         - Sixten
-      
+
       [Fancy stuff](http://some.url.se/)
       """;
     String html = engine.markdown(md).toHtml();
-    //System.out.println(html);
+    // System.out.println(html);
     assertTrue(html.contains("<li>Per</li>"));
     assertTrue(html.contains("<a href=\"http://some.url.se/\">Fancy stuff</a>"));
   }
 
   @Test
   public void testRenderToFile() throws Md2PdfException {
-    String md = """
+    String md =
+        """
       # TestRenderToFile
       - Users
         - Per
-      
+
       [Fancy stuff](http://some.url.se/)
       """;
     Path path = Paths.get("target/testRenderToFile.pdf");
@@ -59,7 +59,8 @@ public class OutputTest {
 
   @Test
   public void testRenderToByteArray() throws Md2PdfException {
-    String md = """
+    String md =
+        """
       # TestRenderToByteArray
       - Users
         - Per
@@ -70,7 +71,8 @@ public class OutputTest {
 
   @Test
   public void testRenderToStream() throws Md2PdfException, IOException {
-    String md = """
+    String md =
+        """
       # TestRenderToStream
       - Users
         - Per
@@ -83,7 +85,8 @@ public class OutputTest {
 
   @Test
   public void testRenderToStreamDoesNotCloseCallerStream() throws Md2PdfException {
-    String md = """
+    String md =
+        """
       # TestRenderToStreamDoesNotCloseCallerStream
       - Users
         - Per
@@ -100,7 +103,8 @@ public class OutputTest {
     // MathML must be in a CommonMark HTML block (blank line before the <math> tag).
     // Without the blank line it becomes inline HTML and the softbreak renderer
     // inserts <br /> between every line, breaking the MathML structure.
-    String md = """
+    String md =
+        """
       # MathML Test
       The quadratic formula:
 

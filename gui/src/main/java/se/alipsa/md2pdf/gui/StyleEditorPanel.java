@@ -1,5 +1,7 @@
 package se.alipsa.md2pdf.gui;
 
+import java.io.IOException;
+import java.util.function.Consumer;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -13,13 +15,10 @@ import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
 import se.alipsa.md2pdf.model.StyleProfile;
 import se.alipsa.md2pdf.model.StyleProfileManager;
 
-import java.io.IOException;
-import java.util.function.Consumer;
-
 /**
- * Visual panel for editing a {@link StyleProfile}.
- * Attach a callback via {@link #setOnProfileChanged(Consumer)} to be notified
- * whenever the user modifies a control or loads a profile.
+ * Visual panel for editing a {@link StyleProfile}. Attach a callback via {@link
+ * #setOnProfileChanged(Consumer)} to be notified whenever the user modifies a control or loads a
+ * profile.
  */
 public class StyleEditorPanel extends ScrollPane {
 
@@ -43,6 +42,7 @@ public class StyleEditorPanel extends ScrollPane {
   private final Spinner<Double> h2Spinner = new Spinner<>(0.8, 4.0, 1.5, 0.1);
   private final Spinner<Double> h3Spinner = new Spinner<>(0.8, 4.0, 1.25, 0.1);
   private final ColorPicker headingColorPicker = new ColorPicker();
+  private final CheckBox h1BorderCheckBox = new CheckBox("Show border line under H1");
 
   // Links
   private final ColorPicker linkColorPicker = new ColorPicker();
@@ -67,6 +67,11 @@ public class StyleEditorPanel extends ScrollPane {
   private final Spinner<Double> marginLeftSpinner = new Spinner<>(0.1, 6.0, 1.0, 0.1);
   private final ComboBox<String> marginUnitCombo = new ComboBox<>();
 
+  /**
+   * Creates the visual style editor pre-populated with the built-in Default profile.
+   *
+   * @param profileManager the profile manager used to load and save named profiles
+   */
   public StyleEditorPanel(StyleProfileManager profileManager) {
     this.profileManager = profileManager;
     setFitToWidth(true);
@@ -74,15 +79,16 @@ public class StyleEditorPanel extends ScrollPane {
     VBox content = new VBox(16);
     content.setPadding(new Insets(12));
 
-    content.getChildren().addAll(
-        buildProfileBar(),
-        buildSection("Typography", buildTypographyGrid()),
-        buildSection("Headings", buildHeadingsGrid()),
-        buildSection("Links", buildLinksGrid()),
-        buildSection("Code & Preformatted", buildCodeGrid()),
-        buildSection("Block Quotes", buildBlockquoteGrid()),
-        buildSection("Page (PDF)", buildPageGrid())
-    );
+    content
+        .getChildren()
+        .addAll(
+            buildProfileBar(),
+            buildSection("Typography", buildTypographyGrid()),
+            buildSection("Headings", buildHeadingsGrid()),
+            buildSection("Links", buildLinksGrid()),
+            buildSection("Code & Preformatted", buildCodeGrid()),
+            buildSection("Block Quotes", buildBlockquoteGrid()),
+            buildSection("Page (PDF)", buildPageGrid()));
 
     setContent(content);
     configureControls();
@@ -157,9 +163,8 @@ public class StyleEditorPanel extends ScrollPane {
       Alerts.warn("No profile name", "Please enter the name of the profile to delete.");
       return;
     }
-    boolean confirmed = Alerts.confirm("Delete profile",
-        "Delete '" + name + "'?",
-        "This cannot be undone.");
+    boolean confirmed =
+        Alerts.confirm("Delete profile", "Delete '" + name + "'?", "This cannot be undone.");
     if (confirmed) {
       try {
         profileManager.delete(name);
@@ -196,6 +201,7 @@ public class StyleEditorPanel extends ScrollPane {
     addRow(g, 1, "H2 size (em)", row(h2Spinner, new Label("em")));
     addRow(g, 2, "H3 size (em)", row(h3Spinner, new Label("em")));
     addRow(g, 3, "Colour", headingColorPicker);
+    addRow(g, 4, "H1 border", h1BorderCheckBox);
     return g;
   }
 
@@ -236,25 +242,27 @@ public class StyleEditorPanel extends ScrollPane {
   // ── Control configuration ──────────────────────────────────────────────────
 
   private void configureControls() {
-    bodyFontCombo.getItems().addAll(
-        "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
-        "Arial, Helvetica, sans-serif",
-        "Georgia, \"Times New Roman\", Times, serif",
-        "\"Times New Roman\", Times, serif",
-        "\"Courier New\", Courier, monospace",
-        "Verdana, Geneva, sans-serif",
-        "Tahoma, Geneva, sans-serif"
-    );
+    bodyFontCombo
+        .getItems()
+        .addAll(
+            "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "Arial, Helvetica, sans-serif",
+            "Georgia, \"Times New Roman\", Times, serif",
+            "\"Times New Roman\", Times, serif",
+            "\"Courier New\", Courier, monospace",
+            "Verdana, Geneva, sans-serif",
+            "Tahoma, Geneva, sans-serif");
     bodyFontCombo.setEditable(true);
     bodyFontCombo.setPrefWidth(320);
 
-    codeFontCombo.getItems().addAll(
-        "monospace",
-        "\"Courier New\", Courier, monospace",
-        "\"Consolas\", monospace",
-        "\"Source Code Pro\", monospace",
-        "\"Fira Code\", monospace"
-    );
+    codeFontCombo
+        .getItems()
+        .addAll(
+            "monospace",
+            "\"Courier New\", Courier, monospace",
+            "\"Consolas\", monospace",
+            "\"Source Code Pro\", monospace",
+            "\"Fira Code\", monospace");
     codeFontCombo.setEditable(true);
     codeFontCombo.setPrefWidth(260);
 
@@ -293,6 +301,7 @@ public class StyleEditorPanel extends ScrollPane {
     h2Spinner.valueProperty().addListener((o, ov, nv) -> fireChange());
     h3Spinner.valueProperty().addListener((o, ov, nv) -> fireChange());
     headingColorPicker.valueProperty().addListener((o, ov, nv) -> fireChange());
+    h1BorderCheckBox.selectedProperty().addListener((o, ov, nv) -> fireChange());
     linkColorPicker.valueProperty().addListener((o, ov, nv) -> fireChange());
     codeFontCombo.valueProperty().addListener((o, ov, nv) -> fireChange());
     codeSizeSpinner.valueProperty().addListener((o, ov, nv) -> fireChange());
@@ -333,6 +342,7 @@ public class StyleEditorPanel extends ScrollPane {
     h2Spinner.getValueFactory().setValue(p.getH2SizeEm());
     h3Spinner.getValueFactory().setValue(p.getH3SizeEm());
     headingColorPicker.setValue(Color.web(p.getHeadingColor()));
+    h1BorderCheckBox.setSelected(p.isH1ShowBorder());
 
     linkColorPicker.setValue(Color.web(p.getLinkColor()));
 
@@ -370,6 +380,7 @@ public class StyleEditorPanel extends ScrollPane {
     p.setH2SizeEm(h2Spinner.getValue());
     p.setH3SizeEm(h3Spinner.getValue());
     p.setHeadingColor(toHex(headingColorPicker.getValue()));
+    p.setH1ShowBorder(h1BorderCheckBox.isSelected());
 
     p.setLinkColor(toHex(linkColorPicker.getValue()));
 
@@ -424,7 +435,8 @@ public class StyleEditorPanel extends ScrollPane {
   }
 
   private static String toHex(Color color) {
-    return String.format("#%02X%02X%02X",
+    return String.format(
+        "#%02X%02X%02X",
         (int) Math.round(color.getRed() * 255),
         (int) Math.round(color.getGreen() * 255),
         (int) Math.round(color.getBlue() * 255));
@@ -441,6 +453,8 @@ public class StyleEditorPanel extends ScrollPane {
 
   private static String parseUnit(String margin) {
     if (margin == null || margin.isBlank()) return "in";
-    return margin.replaceAll("[0-9.]", "").trim().isEmpty() ? "in" : margin.replaceAll("[0-9.]", "").trim();
+    return margin.replaceAll("[0-9.]", "").trim().isEmpty()
+        ? "in"
+        : margin.replaceAll("[0-9.]", "").trim();
   }
 }

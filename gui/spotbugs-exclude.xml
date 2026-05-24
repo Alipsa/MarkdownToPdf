@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <!--
+    parentTab is read inside lambda bodies (event handlers / subscribers). SpotBugs does not
+    track field reads that occur in lambda-generated synthetic methods, producing a false positive.
+  -->
+  <Match>
+    <Class name="se.alipsa.md2pdf.gui.CodeTextArea"/>
+    <Field name="parentTab"/>
+    <Bug pattern="URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD"/>
+  </Match>
+
+  <!--
+    JavaFX GUI classes intentionally share mutable references (Stage, Tab, Panel, Image).
+    Defensive copying is not applicable to JavaFX scene-graph objects. All EI_EXPOSE_REP*
+    and MS_EXPOSE_REP findings in the gui package are architectural false positives.
+  -->
+  <Match>
+    <Package name="~se\.alipsa\.md2pdf\.gui.*"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Package name="~se\.alipsa\.md2pdf\.gui.*"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Package name="~se\.alipsa\.md2pdf\.gui.*"/>
+    <Bug pattern="MS_EXPOSE_REP"/>
+  </Match>
+
+  <!--
+    System.exit() in the close handler is intentional for a desktop application — it ensures
+    background threads (JavaFX, logging) are cleanly terminated on window close.
+  -->
+  <Match>
+    <Package name="~se\.alipsa\.md2pdf\.gui.*"/>
+    <Bug pattern="DM_EXIT"/>
+  </Match>
+</FindBugsFilter>

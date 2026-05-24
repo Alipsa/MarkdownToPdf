@@ -1,8 +1,5 @@
 package se.alipsa.md2pdf.model;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -12,10 +9,12 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
- * Manages named style profiles. Built-in profiles are returned from code;
- * user profiles are stored as .properties files under {@code profilesDir}.
+ * Manages named style profiles. Built-in profiles are returned from code; user profiles are stored
+ * as .properties files under {@code profilesDir}.
  */
 public class StyleProfileManager {
 
@@ -66,8 +65,7 @@ public class StyleProfileManager {
   }
 
   /**
-   * Loads a profile by name. Checks built-ins first, then disk.
-   * Returns {@code null} if not found.
+   * Loads a profile by name. Checks built-ins first, then disk. Returns {@code null} if not found.
    */
   public StyleProfile load(String name) throws IOException {
     StyleProfile builtin = getBuiltin(name);
@@ -112,8 +110,8 @@ public class StyleProfileManager {
   }
 
   /**
-   * Returns a built-in profile by name, or {@code null} if the name is not a built-in.
-   * Built-in profiles are synthesised in code and match the lib's DEFAULT_CSS defaults.
+   * Returns a built-in profile by name, or {@code null} if the name is not a built-in. Built-in
+   * profiles are synthesised in code and match the lib's DEFAULT_CSS defaults.
    */
   public static StyleProfile getBuiltin(String name) {
     return switch (name) {
@@ -127,7 +125,8 @@ public class StyleProfileManager {
   private static StyleProfile buildDefault() {
     // Mirrors the lib's DEFAULT_CSS so the preview looks identical to a raw conversion
     StyleProfile p = new StyleProfile("Default");
-    p.setBodyFont("-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif");
+    p.setBodyFont(
+        "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif");
     p.setBodyFontSizePt(11);
     p.setLineHeight(1.6);
     p.setBodyColor("#333333");

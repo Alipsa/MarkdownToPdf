@@ -1,18 +1,17 @@
 package test.alipsa.md2pdf;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.File;
+import java.net.URL;
+import java.nio.file.Paths;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.junit.jupiter.api.Test;
 import se.alipsa.md2pdf.Md2PdfEngine;
-
-import java.io.File;
-import java.net.URL;
-import java.nio.file.Paths;
-
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FluentFontTest {
 
@@ -23,7 +22,8 @@ public class FluentFontTest {
     assertNotNull(fontUrl, "Test font is missing");
 
     File pdf = Paths.get("target/testFluentFontRegistrationEmbedsFont.pdf").toFile();
-    engine.markdown("Custom font text")
+    engine
+        .markdown("Custom font text")
         .css("body { font-family: \"Jersey 25\"; }")
         .font(new File(fontUrl.toURI()), "Jersey 25")
         .toPdf(pdf);

@@ -5,6 +5,15 @@ import com.openhtmltopdf.mathmlsupport.MathMLDrawer;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.openhtmltopdf.svgsupport.BatikSVGDrawer;
 import com.openhtmltopdf.util.XRLog;
+import java.io.*;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -17,20 +26,11 @@ import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
 /**
  * This is the core class of the MarkdownToPdf library, used to create html or pdf output.
- * <p>
- * Usage example:
+ *
+ * <p>Usage example:
+ *
  * <pre>
  *   byte[] pdf = new Md2PdfEngine()
  *       .markdown("# Hello\n\nWorld")
@@ -42,7 +42,8 @@ public class Md2PdfEngine {
 
   private static final Logger log = LoggerFactory.getLogger(Md2PdfEngine.class);
 
-  private static final String DEFAULT_CSS = """
+  private static final String DEFAULT_CSS =
+      """
       body {
         line-height: 1.6;
         color: #333;
@@ -106,7 +107,8 @@ public class Md2PdfEngine {
       img { max-width: 100%; box-sizing: content-box; }
       """;
 
-  private static final String PAGE_HEADER_FOOTER_CSS = """
+  private static final String PAGE_HEADER_FOOTER_CSS =
+      """
       @page {
         @top-center { content: element(md2pdf-page-header) }
         @bottom-center { content: element(md2pdf-page-footer) }
@@ -136,6 +138,7 @@ public class Md2PdfEngine {
   private final Parser parser;
   private final HtmlRenderer renderer;
 
+  /** Creates a new engine with default settings (GFM tables enabled). */
   public Md2PdfEngine() {
     this(new Builder());
   }
@@ -143,8 +146,7 @@ public class Md2PdfEngine {
   private Md2PdfEngine(Builder builder) {
     XRLog.setLoggerImpl(new Slf4jXRLogger());
     var parserBuilder = Parser.builder();
-    var rendererBuilder = HtmlRenderer.builder()
-        .softbreak(builder.softbreak);
+    var rendererBuilder = HtmlRenderer.builder().softbreak(builder.softbreak);
     if (builder.tables) {
       var tablesExtension = TablesExtension.create();
       parserBuilder.extensions(List.of(tablesExtension));
@@ -163,7 +165,11 @@ public class Md2PdfEngine {
     return new Builder();
   }
 
+  /** Builder for configuring Markdown parsing and HTML rendering options. */
   public static class Builder {
+
+    /** Creates a Builder with default settings (tables enabled). */
+    public Builder() {}
 
     private boolean tables = true;
     private String softbreak = "<br />\n";
@@ -261,7 +267,9 @@ public class Md2PdfEngine {
   }
 
   private static String readString(InputStream is) throws Md2PdfException {
-    try (is; BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+    try (is;
+        BufferedReader reader =
+            new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
       StringBuilder sb = new StringBuilder();
       String line;
       while ((line = reader.readLine()) != null) {
@@ -297,9 +305,7 @@ public class Md2PdfEngine {
     }
   }
 
-  /**
-   * A conversion job configured with markdown and optionally CSS.
-   */
+  /** A conversion job configured with markdown and optionally CSS. */
   public class Job {
 
     private final String markdown;
@@ -324,11 +330,12 @@ public class Md2PdfEngine {
      * @return this Job for chaining
      */
     public Job basePath(Path basePath) {
-      this.baseUri = Objects.requireNonNull(basePath, "basePath")
-          .toAbsolutePath()
-          .normalize()
-          .toUri()
-          .toString();
+      this.baseUri =
+          Objects.requireNonNull(basePath, "basePath")
+              .toAbsolutePath()
+              .normalize()
+              .toUri()
+              .toString();
       return this;
     }
 
@@ -447,8 +454,8 @@ public class Md2PdfEngine {
 
     /**
      * Register a font file with the PDF renderer.
-     * <p>
-     * The family name should match the CSS {@code font-family} value that uses the font.
+     *
+     * <p>The family name should match the CSS {@code font-family} value that uses the font.
      *
      * @param file the font file
      * @param family the font family name
@@ -461,8 +468,8 @@ public class Md2PdfEngine {
 
     /**
      * Register a font file with the PDF renderer.
-     * <p>
-     * The family name should match the CSS {@code font-family} value that uses the font.
+     *
+     * <p>The family name should match the CSS {@code font-family} value that uses the font.
      *
      * @param path the path to the font file
      * @param family the font family name
@@ -474,8 +481,8 @@ public class Md2PdfEngine {
 
     /**
      * Register a font from a URL with the PDF renderer.
-     * <p>
-     * The family name should match the CSS {@code font-family} value that uses the font.
+     *
+     * <p>The family name should match the CSS {@code font-family} value that uses the font.
      *
      * @param url the URL pointing to font content
      * @param family the font family name
@@ -489,8 +496,8 @@ public class Md2PdfEngine {
 
     /**
      * Register a font from an input stream with the PDF renderer.
-     * <p>
-     * The family name should match the CSS {@code font-family} value that uses the font.
+     *
+     * <p>The family name should match the CSS {@code font-family} value that uses the font.
      *
      * @param inputStream the input stream containing font content
      * @param family the font family name
@@ -504,10 +511,10 @@ public class Md2PdfEngine {
 
     /**
      * Add an HTML fragment as a page header.
-     * <p>
-     * The header is rendered in the top page margin. Use
-     * {@code <span class="page-number"></span>} and
-     * {@code <span class="total-pages"></span>} to include page counters.
+     *
+     * <p>The header is rendered in the top page margin. Use {@code <span
+     * class="page-number"></span>} and {@code <span class="total-pages"></span>} to include page
+     * counters.
      *
      * @param html the header HTML fragment
      * @return this Job for chaining
@@ -519,10 +526,10 @@ public class Md2PdfEngine {
 
     /**
      * Add an HTML fragment as a page footer.
-     * <p>
-     * The footer is rendered in the bottom page margin. Use
-     * {@code <span class="page-number"></span>} and
-     * {@code <span class="total-pages"></span>} to include page counters.
+     *
+     * <p>The footer is rendered in the bottom page margin. Use {@code <span
+     * class="page-number"></span>} and {@code <span class="total-pages"></span>} to include page
+     * counters.
      *
      * @param html the footer HTML fragment
      * @return this Job for chaining
@@ -611,12 +618,10 @@ public class Md2PdfEngine {
       org.commonmark.node.Node document = parser.parse(markdown);
       String bodyHtml = renderer.render(document);
       String effectiveCss = buildCss();
-      String headerHtml = pageHeader != null
-          ? "<div class=\"md2pdf-page-header\">" + pageHeader + "</div>\n"
-          : "";
-      String footerHtml = pageFooter != null
-          ? "<div class=\"md2pdf-page-footer\">" + pageFooter + "</div>\n"
-          : "";
+      String headerHtml =
+          pageHeader != null ? "<div class=\"md2pdf-page-header\">" + pageHeader + "</div>\n" : "";
+      String footerHtml =
+          pageFooter != null ? "<div class=\"md2pdf-page-footer\">" + pageFooter + "</div>\n" : "";
       return """
           <!DOCTYPE html>
           <html>
@@ -631,7 +636,8 @@ public class Md2PdfEngine {
           %s
           </body>
           </html>
-          """.formatted(effectiveCss, headerHtml, footerHtml, bodyHtml);
+          """
+          .formatted(effectiveCss, headerHtml, footerHtml, bodyHtml);
     }
 
     private String buildCss() {
@@ -679,7 +685,8 @@ public class Md2PdfEngine {
      * @throws Md2PdfException if rendering or writing fails
      */
     public void toPdf(File file) throws Md2PdfException {
-      try (BufferedOutputStream fos = new BufferedOutputStream(Files.newOutputStream(file.toPath()))) {
+      try (BufferedOutputStream fos =
+          new BufferedOutputStream(Files.newOutputStream(file.toPath()))) {
         String html = buildHtml();
         String xhtml = htmlToXhtml(html);
         xhtmlToPdf(xhtml, fos, baseUri, fonts, metadata);
@@ -794,11 +801,8 @@ public class Md2PdfEngine {
   private MathMLDrawer mathMLDrawer;
 
   private synchronized byte[] xhtmlToPdf(
-      String xhtml,
-      String baseUri,
-      List<FontSpec> fonts,
-      PdfMetadata metadata
-  ) throws Md2PdfException {
+      String xhtml, String baseUri, List<FontSpec> fonts, PdfMetadata metadata)
+      throws Md2PdfException {
     try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
       xhtmlToPdf(xhtml, baos, baseUri, fonts, metadata);
       return baos.toByteArray();
@@ -808,12 +812,8 @@ public class Md2PdfEngine {
   }
 
   private synchronized void xhtmlToPdf(
-      String xhtml,
-      OutputStream os,
-      String baseUri,
-      List<FontSpec> fonts,
-      PdfMetadata metadata
-  ) throws Md2PdfException {
+      String xhtml, OutputStream os, String baseUri, List<FontSpec> fonts, PdfMetadata metadata)
+      throws Md2PdfException {
     try {
       var jsDoc = Jsoup.parse(xhtml);
       org.w3c.dom.Document doc = new W3CDom().fromJsoup(jsDoc);
@@ -834,19 +834,17 @@ public class Md2PdfEngine {
   }
 
   private void renderXhtmlToPdf(
-      org.w3c.dom.Document doc,
-      OutputStream os,
-      String baseUri,
-      List<FontSpec> fonts
-  ) throws IOException {
-      PdfRendererBuilder builder = new PdfRendererBuilder()
-          .withW3cDocument(doc, baseUri)
-          .useSVGDrawer(getSvgDrawer())
-          .useMathMLDrawer(getMathMLDrawer())
-          .toStream(os);
-      for (FontSpec font : fonts) {
-        font.apply(builder);
-      }
+      org.w3c.dom.Document doc, OutputStream os, String baseUri, List<FontSpec> fonts)
+      throws IOException {
+    PdfRendererBuilder builder =
+        new PdfRendererBuilder()
+            .withW3cDocument(doc, baseUri)
+            .useSVGDrawer(getSvgDrawer())
+            .useMathMLDrawer(getMathMLDrawer())
+            .toStream(os);
+    for (FontSpec font : fonts) {
+      font.apply(builder);
+    }
     builder.run();
   }
 
@@ -897,18 +895,12 @@ public class Md2PdfEngine {
 
     private static FontSpec of(File file, String family) {
       return new FontSpec(
-          Objects.requireNonNull(file, "file"),
-          null,
-          Objects.requireNonNull(family, "family")
-      );
+          Objects.requireNonNull(file, "file"), null, Objects.requireNonNull(family, "family"));
     }
 
     private static FontSpec of(byte[] data, String family) {
       return new FontSpec(
-          null,
-          Objects.requireNonNull(data, "data"),
-          Objects.requireNonNull(family, "family")
-      );
+          null, Objects.requireNonNull(data, "data"), Objects.requireNonNull(family, "family"));
     }
 
     private void apply(PdfRendererBuilder builder) {

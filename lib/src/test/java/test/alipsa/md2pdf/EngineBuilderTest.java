@@ -1,16 +1,17 @@
 package test.alipsa.md2pdf;
 
-import org.junit.jupiter.api.Test;
-import se.alipsa.md2pdf.Md2PdfEngine;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
+import se.alipsa.md2pdf.Md2PdfEngine;
 
 public class EngineBuilderTest {
 
   @Test
   void testDefaultBuilderMatchesDefaultConstructorForTables() {
-    String markdown = """
+    String markdown =
+        """
         | Name | Value |
         | --- | --- |
         | A | 1 |
@@ -25,17 +26,14 @@ public class EngineBuilderTest {
 
   @Test
   void testBuilderCanDisableTables() {
-    String markdown = """
+    String markdown =
+        """
         | Name | Value |
         | --- | --- |
         | A | 1 |
         """;
 
-    String html = Md2PdfEngine.builder()
-        .tables(false)
-        .build()
-        .markdown(markdown)
-        .toHtml();
+    String html = Md2PdfEngine.builder().tables(false).build().markdown(markdown).toHtml();
 
     assertFalse(html.contains("<table>"));
     assertTrue(html.contains("| Name | Value |"));
@@ -43,11 +41,7 @@ public class EngineBuilderTest {
 
   @Test
   void testBuilderCanCustomizeSoftbreak() {
-    String html = Md2PdfEngine.builder()
-        .softbreak("\n")
-        .build()
-        .markdown("first\nsecond")
-        .toHtml();
+    String html = Md2PdfEngine.builder().softbreak("\n").build().markdown("first\nsecond").toHtml();
 
     assertTrue(html.contains("first\nsecond"));
     assertFalse(html.contains("first<br />"));

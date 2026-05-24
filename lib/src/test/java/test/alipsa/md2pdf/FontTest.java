@@ -3,19 +3,18 @@ package test.alipsa.md2pdf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.junit.jupiter.api.Test;
-import se.alipsa.md2pdf.Md2PdfException;
 import se.alipsa.md2pdf.Md2PdfEngine;
-
-import java.io.File;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
+import se.alipsa.md2pdf.Md2PdfException;
 
 public class FontTest {
 
@@ -25,10 +24,11 @@ public class FontTest {
     URL urlJersey = getClass().getResource("/fonts/Jersey25-Regular.ttf");
     URL urlJacquard = getClass().getResource("/fonts/Jacquard24-Regular.ttf");
 
-    String md = """
+    String md =
+        """
       # Font Test
       Some text with custom fonts.
-      
+
       <div style="font-family: Jersey25;">
         ### JERSEY FONT
         Alice was beginning to get very tired of
@@ -47,9 +47,7 @@ public class FontTest {
       </div>
       """;
 
-    var job = engine.markdown(md)
-        .font(urlJersey, "Jersey25")
-        .font(urlJacquard, "Jacquard24");
+    var job = engine.markdown(md).font(urlJersey, "Jersey25").font(urlJacquard, "Jacquard24");
 
     String html = job.toHtml();
     assertNotNull(html);
@@ -63,12 +61,12 @@ public class FontTest {
 
     // Make sure the fonts are embedded in the PDF
     Map<String, FontInfo> fonts = new HashMap<>();
-    try(PDDocument pdDocument = Loader.loadPDF(file)) {
+    try (PDDocument pdDocument = Loader.loadPDF(file)) {
       var page = pdDocument.getPage(0);
       PDResources pageResources = page.getResources();
       for (var fontName : page.getResources().getFontNames()) {
         PDFont font = pageResources.getFont(fontName);
-        //System.out.println(font.getName() + ", embedded: " + font.isEmbedded());
+        // System.out.println(font.getName() + ", embedded: " + font.isEmbedded());
         if (font.getName().contains("Jersey25")) {
           fonts.put("Jersey25", new FontInfo(font.getName(), font.isEmbedded()));
         } else if (font.getName().contains("Jacquard24")) {

@@ -1,5 +1,10 @@
 package se.alipsa.md2pdf.gui;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.SplitPane;
@@ -8,23 +13,24 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
-import se.alipsa.md2pdf.Md2PdfException;
 import se.alipsa.md2pdf.Md2PdfEngine;
-
+import se.alipsa.md2pdf.Md2PdfException;
 import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
-import se.alipsa.md2pdf.model.StyleProfile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Duration;
-
+/**
+ * Tab containing the Markdown source editor alongside a live HTML preview. Drives PDF rendering via
+ * {@link #renderPdf()} and {@link #renderPdf(File)}.
+ */
 public class MarkdownTab extends BaseTab {
 
   private final MarkdownTextArea markdownArea;
   private final WebView webView = new WebView();
 
+  /**
+   * Creates the Markdown editor tab with a live split-pane preview.
+   *
+   * @param gui the main application window
+   */
   public MarkdownTab(MarkdownToPdf gui) {
     super(gui, "Markdown");
     setClosable(false);
@@ -43,7 +49,8 @@ public class MarkdownTab extends BaseTab {
     setContent(root);
 
     // Auto-update preview 500 ms after typing stops
-    markdownArea.plainTextChanges()
+    markdownArea
+        .plainTextChanges()
         .successionEnds(Duration.ofMillis(500))
         .subscribe(change -> Platform.runLater(this::refreshPreview));
   }
@@ -60,23 +67,28 @@ public class MarkdownTab extends BaseTab {
       return "<html><body></body></html>";
     }
     try {
-      StyleProfile profile = gui.getStyleTab() != null ? gui.getStyleTab().getActiveProfile() : null;
+      StyleTab styleTab = gui.getStyleTab();
+      String css = styleTab != null ? styleTab.getActiveCss() : null;
       Md2PdfEngine engine = new Md2PdfEngine();
       var job = engine.markdown(text);
-      if (profile != null) {
-        job = job.addCss(profile.toCss());
+      if (css != null && !css.isBlank()) {
+        job = job.addCss(css);
       }
-      return job.toHtml();
+      return HtmlUtils.injectSyntaxHighlighting(job.toHtml());
     } catch (Exception e) {
-      return "<html><body><pre style='color:red'>Preview error: " + e.getMessage() + "</pre></body></html>";
+      return "<html><body><pre style='color:red'>Preview error: "
+          + e.getMessage()
+          + "</pre></body></html>";
     }
   }
 
+  /** Opens a file chooser and loads the selected Markdown file into the editor. */
   public void promptAndLoad() {
     FileChooser fc = new FileChooser();
     fc.setTitle("Select Markdown file");
     fc.setInitialDirectory(gui.getProjectDir());
-    fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Markdown files", "*.md", "*.markdown"));
+    fc.getExtensionFilters()
+        .add(new FileChooser.ExtensionFilter("Markdown files", "*.md", "*.markdown"));
     File targetFile = fc.showOpenDialog(gui.getStage());
     if (targetFile != null) {
       try {
@@ -91,35 +103,61 @@ public class MarkdownTab extends BaseTab {
     }
   }
 
+  /**
+   * Renders the current Markdown content to PDF bytes using the active style profile.
+   *
+   * @return the raw PDF bytes
+   * @throws Md2PdfException if rendering fails
+   */
   public byte[] renderPdf() throws Md2PdfException {
-    StyleProfile profile = gui.getStyleTab() != null ? gui.getStyleTab().getActiveProfile() : null;
+    StyleTab styleTab = gui.getStyleTab();
+    String css = styleTab != null ? styleTab.getActiveCss() : null;
     var job = new Md2PdfEngine().markdown(markdownArea.getText());
-    if (profile != null) {
-      job = job.addCss(profile.toCss());
+    if (css != null && !css.isBlank()) {
+      job = job.addCss(css);
     }
     return job.toPdf();
   }
 
+  /**
+   * Renders the current Markdown content to a PDF file using the active style profile.
+   *
+   * @param toFile the destination file
+   * @throws Md2PdfException if rendering fails
+   */
   public void renderPdf(File toFile) throws Md2PdfException {
-    StyleProfile profile = gui.getStyleTab() != null ? gui.getStyleTab().getActiveProfile() : null;
+    StyleTab styleTab = gui.getStyleTab();
+    String css = styleTab != null ? styleTab.getActiveCss() : null;
     var job = new Md2PdfEngine().markdown(markdownArea.getText());
-    if (profile != null) {
-      job = job.addCss(profile.toCss());
+    if (css != null && !css.isBlank()) {
+      job = job.addCss(css);
     }
     job.toPdf(toFile);
   }
 
+  /**
+   * Returns the current Markdown rendered to an HTML string with the active style applied.
+   *
+   * @return the HTML string
+   * @throws Md2PdfException if rendering fails
+   */
   public String renderHtml() throws Md2PdfException {
     return buildHtmlWithCurrentStyle();
   }
 
+  /**
+   * Loads a Markdown file into the editor without prompting the user.
+   *
+   * @param markdownFile the path to load, or {@code null} to do nothing
+   */
   public void loadFile(Path markdownFile) {
     if (markdownFile == null) {
       return;
     }
     try {
       markdownArea.setText(Files.readString(markdownFile));
-      setTitle(markdownFile.getFileName().toString());
+      Path fileName = markdownFile.getFileName();
+      setTitle(fileName != null ? fileName.toString() : markdownFile.toString());
       setFile(markdownFile.toFile());
       contentSaved();
     } catch (IOException e) {
