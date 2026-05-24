@@ -1,82 +1,123 @@
 # MarkdownToPdf
 
-MarkdownToPdf is a javafx application simplifying the workflow of creating Freemarker Templates that are rendered into a PDF using Journo. 
+MarkdownToPdf is a JavaFX desktop application for editing Markdown documents and
+exporting them to PDF (or HTML). It provides a live preview, a visual style editor
+with named style profiles, and a CSS power-user mode.
 
-## Installing and Running MarkdownToPdf via maven
-A simple way to run MarkdownToPdf, provided you have maven and java >= 21 installed, is to do the following
-- download the MarkdownToPdf.xml from [github](https://github.com/Alipsa/journo/releases)
-- put the MarkdownToPdf.xml file in a directory of choice
-- open a command prompt in that directory and execute `mvn -f MarkdownToPdf.xml javafx:run`
+## Features
 
-This way you do not need to install a jdk with javafx included, any java jdk version 21 or above will work.
+- **Markdown editor** with syntax highlighting and live split-pane HTML preview
+- **Style profiles** — visual form controls for fonts, colours, heading sizes, page
+  margins and orientation; save and load named profiles
+- **CSS editor** — toggle to a raw CSS editor to write rules not exposed in the form;
+  switching back to the visual editor round-trips the CSS into the form controls
+- **Load CSS file** — open any `.css` file directly into the CSS editor
+- **PDF viewer** — embedded page-by-page viewer, save to file or open in the system
+  viewer
+- **Export** — export the current document as HTML or PDF via the File menu
+- **Project management** — create / open / save `.jpr` project files that remember the
+  Markdown source path and style profile
+- **Find** — Ctrl+F text search inside the editor
 
-## Installing the zipped release package
-Zipped releases are available on [github](https://github.com/Alipsa/MarkdownToPdf/releases)
+## Requirements
 
-### Mac
-1. Downloaded the release (journo-viewer.zip) and unzip it
-2. Move the unzipped `journo.app` to your applications folder
-3. The first time you run it you must right-click and choose `open` to establish it
-as a trusted application
+MarkdownToPdf requires **Java 21 or later** with **JavaFX bundled**.
+Standard OpenJDK distributions do not include JavaFX; use one of:
+
+- [Liberica Full JDK](https://bell-sw.com/pages/downloads/) (recommended)
+- [Azul Zulu with JavaFX](https://www.azul.com/downloads/)
+- [GraalVM](https://www.graalvm.org/) (includes JavaFX on some distributions)
+
+## Building
+
+Prerequisites: JDK 21+, Maven 3.9.9+.
+
+```bash
+# Standard build (compile + test + install)
+mvn install
+
+# Build a standalone fat-jar (includes all dependencies except JavaFX)
+mvn install -P fatjar
+```
+
+The fat-jar is created in `gui/target/` and named
+`MarkdownToPdf-<version>-jar-with-dependencies.jar`.
+
+## Running
+
+The launch scripts pick up the newest `MarkdownToPdf-*-with-dependencies.jar` from
+the same directory automatically.
 
 ### Linux
-1. Downloaded the release (journo-viewer.zip)
-2. Move the unzipped `journo.app` folder to a location of choice
-3. Run the `journo.app/createLauncher.sh` script to create a launcher (shortcut)
+
+```bash
+./run.sh
+```
+
+To create a `.desktop` launcher shortcut:
+
+```bash
+./createLauncher.sh
+```
+
+### macOS
+
+Double-click `MarkdownToPdf.app`, or from a terminal:
+
+```zsh
+./run.zsh
+```
+
+The `.app` bundle structure expected on disk:
+
+```
+MarkdownToPdf.app/
+  Contents/
+    MacOS/
+      markdownToPdf          # entry point called by macOS
+    Resources/
+      md2pdf.icns
+    Info.plist
+  run.zsh
+  MarkdownToPdf-<version>-with-dependencies.jar
+```
+
+The first time you open the app you may need to right-click and choose **Open** to
+mark it as a trusted application.
 
 ### Windows
-1. Downloaded the release (journo-viewer.zip)
-2. Move the unzipped `journo.app` folder to a location of choice
-3. Run the `journo.app\createShortcut.ps1` script to create a shortcut
 
-## Groovy code to generate data
-Using groovy scripts makes it easy to create mock data to provide input data to Freemarker.
-Groovy is almost 100% compatible with Java syntax but adds some nice things such as:
+Double-click `run.cmd`, or open a Command Prompt and run:
 
-- include dependencies using @Grab
-- shortened syntax for creating lists and maps
-- shorthand syntax for accessing ans assigning values to lists and maps
-
-The last line (the return value) of the Groovy script must be a Map<String, Object>. Each variable in the freemarker template (e.g. ${myVar}) corresponds to a key in the Map and will be replaced wing the Map value for that key.
-
-Here is a simple example:
-
-assuming a ftl with the following content:
-```injectedfreemarker
-<html>
-<body>
-<h1>Hello</h1>
-<p>Nice to see you ${name}!</p>
-Your phone number is
-<#if isValidNumber>
-    valid
-<#else>
-    not valid
-</#if>
-
-<p>There you go, nice huh?</p>
-</body>
-</html>
+```cmd
+run.cmd
 ```
 
-You can populate the two variable used with the following groovy script:
-```groovy
-@Grab('com.googlecode.libphonenumber:libphonenumber:8.13.29')
-import com.google.i18n.phonenumbers.PhoneNumberUtil
+To create a Desktop shortcut, open PowerShell and run:
 
-PhoneNumberUtil phoneNumberUtil = PhoneNumberUtil.getInstance()
-def number = phoneNumberUtil.parseAndKeepRawInput('070-1232345', "SE")
-
-// Using the groovy shorthand syntax to create a LinkedHashMAp<String, Object>
-[
-  name: 'Per',
-  isValidNumber: phoneNumberUtil.isPossibleNumber(number)
-]
+```powershell
+.\createShortcut.ps1
 ```
 
-# Building the journo viewer
-Journo uses maven. The prerequisites for building are
-1. A JDK version 21 or later
-2. Maven version 3.8.4 or later installed
+## Style Profiles
 
-Then it's just a matter of `mvn install`!
+Style profiles are stored as `.properties` files under
+`~/.config/md2pdf/profiles/` (Linux/macOS) or
+`%APPDATA%\md2pdf\profiles\` (Windows).
+
+The built-in **Default** profile can be loaded via the **Load ▼** button in the
+Style tab; custom profiles can be saved there too.
+
+## Project Files
+
+A project file (`.jpr`) is a standard Java properties file that records:
+
+| Key | Description |
+|-----|-------------|
+| `name` | Project name |
+| `templateFile` | Relative path to the Markdown source file |
+| `styleProfileName` | Name of the style profile to use |
+
+## License
+
+MIT — see [LICENSE](https://github.com/Alipsa/MarkdownToPdf/blob/main/LICENSE).
