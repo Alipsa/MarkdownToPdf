@@ -14,6 +14,6 @@ mvn -DskipTests -Pfatjar -q package
 echo "Released and ready for manual release at github!"
 echo "Upload the following"
 echo "- lib/target/md2pdf-[version]-javadoc.jar"
-echo "- lib/target/journo-runtime-[version]-jar-with-dependencies.jar"
+echo "- lib/target/md2pdf-[version]-jar-with-dependencies.jar"
 echo "- gui/target/journo-viewer.zip"
 echo "- gui/MarkdownToPdf.xml"

@@ -3,23 +3,23 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "${DIR}" || exit 1
 
-LAUNCHER=~/.local/share/applications/md2pdf.desktop
+LAUNCHER=~/.local/share/applications/MarkdownToPdf.desktop
 {
 echo "[Desktop Entry]
 Name=MarkdownToPdf
 Exec=${DIR}/run.sh
 Comment=MarkdownToPdf, a PDF Document Development Environment
 Terminal=false
-Icon=${DIR}/journo-rounded.png
+Icon=${DIR}/MarkdownToPdf-rounded.png
 Type=Application
 Categories=Development"
 } > ${LAUNCHER}
 
 chmod +x run.sh
 chmod +x ${LAUNCHER}
-if [[ -f ~/Desktop/md2pdf.desktop ]]; then
-  rm ~/Desktop/md2pdf.desktop
+if [[ -f ~/Desktop/MarkdownToPdf.desktop ]]; then
+  rm ~/Desktop/MarkdownToPdf.desktop
 fi
-ln -s ${LAUNCHER} ~/Desktop/md2pdf.desktop
+ln -s ${LAUNCHER} ~/Desktop/MarkdownToPdf.desktop
 
 echo "Launcher shortcuts created!"

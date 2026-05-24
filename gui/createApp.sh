@@ -21,15 +21,15 @@ RESOURCE_DIR="${CONTENT_DIR}/Resources"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCE_DIR"
 cp "src/main/assembly/mac/Info.plist" "$CONTENT_DIR/"
-cp "src/main/assembly/mac/journo.icns" "${RESOURCE_DIR}/"
-cp "src/main/assembly/mac/journo" "${MACOS_DIR}/"
-cp "$DIR"/target/md2pdf-gui*.jar "$targetDir"/
+cp "src/main/assembly/mac/md2pdf.icns" "${RESOURCE_DIR}/"
+cp "src/main/assembly/mac/markdownToPdf" "${MACOS_DIR}/"
+cp "$DIR"/target/MarkdownToPdf*.jar "$targetDir"/
 cp src/main/assembly/mac/run.zsh "$targetDir"/
 cp src/main/assembly/linux/* "$targetDir"/
-cp src/main/resources/md2pdf-rounded.* "$targetDir"/
+cp src/main/resources/MarkdownToPdf-rounded.* "$targetDir"/
 cp src/main/assembly/win/* "$targetDir"/
 
-chmod +x "${MACOS_DIR}/journo"
+chmod +x "${MACOS_DIR}/markdownToPdf"
 chmod +x  "$targetDir"/*.sh
 chmod +x  "$targetDir"/*.zsh
 
