@@ -59,11 +59,24 @@
       <groupId>se.alipsa</groupId>
       <artifactId>md2pdf</artifactId>
       <version>${md2pdf.version}</version>
+      <exclusions>
+        <!-- jcl-over-slf4j (provided by md2pdf) replaces commons-logging at runtime -->
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.pdfbox</groupId>
       <artifactId>pdfbox</artifactId>
       <version>${pdfbox.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.fxmisc.richtext</groupId>
@@ -247,20 +260,6 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-shade-plugin</artifactId>
-            <configuration>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>module-info.class</exclude>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                    <exclude>org.openjfx:*</exclude>
-                  </excludes>
-                </filter>
-              </filters>
-            </configuration>
             <executions>
               <execution>
                 <phase>package</phase>
@@ -268,10 +267,62 @@
                   <goal>shade</goal>
                 </goals>
                 <configuration>
-                  <!-- note setting this to true requires a lot of filter settings to include groovy stuff-->
                   <minimizeJar>false</minimizeJar>
                   <shadedArtifactAttached>true</shadedArtifactAttached>
                   <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
+                  <filters>
+                    <filter>
+                      <artifact>*:*</artifact>
+                      <excludes>
+                        <!-- Signature files from signed JARs break the uber-jar -->
+                        <exclude>META-INF/*.SF</exclude>
+                        <exclude>META-INF/*.DSA</exclude>
+                        <exclude>META-INF/*.RSA</exclude>
+                        <!-- module-info at root and inside multi-release JARs are meaningless in a flat uber-jar -->
+                        <exclude>**/module-info.class</exclude>
+                        <!-- Boilerplate Apache metadata present in every Apache JAR -->
+                        <exclude>META-INF/MANIFEST.MF</exclude>
+                        <exclude>META-INF/DEPENDENCIES</exclude>
+                        <exclude>META-INF/LICENSE</exclude>
+                        <exclude>META-INF/LICENSE.txt</exclude>
+                        <exclude>META-INF/LICENSE-LGPL-2.1.txt</exclude>
+                        <exclude>META-INF/LICENSE-LGPL-3.txt</exclude>
+                        <exclude>META-INF/LICENSE-W3C-TEST</exclude>
+                        <exclude>META-INF/NOTICE</exclude>
+                        <exclude>META-INF/NOTICE.txt</exclude>
+                      </excludes>
+                    </filter>
+                    <!-- jcl-over-slf4j bridges Commons Logging to SLF4J by replacing the same
+                         classes; keeping the real commons-logging JAR would override the bridge -->
+                    <filter>
+                      <artifact>commons-logging:commons-logging</artifact>
+                      <excludes>
+                        <exclude>**</exclude>
+                      </excludes>
+                    </filter>
+                    <!-- xml-apis license directories are redundant in the uber-jar -->
+                    <filter>
+                      <artifact>xml-apis:xml-apis</artifact>
+                      <excludes>
+                        <exclude>license/**</exclude>
+                      </excludes>
+                    </filter>
+                    <filter>
+                      <artifact>xml-apis:xml-apis-ext</artifact>
+                      <excludes>
+                        <exclude>license/**</exclude>
+                      </excludes>
+                    </filter>
+                  </filters>
+                  <transformers>
+                    <!-- Build a proper manifest with the correct Main-Class -->
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                      <mainClass>se.alipsa.md2pdf.gui.MarkdownToPdf</mainClass>
+                    </transformer>
+                    <!-- Merge META-INF/services/ entries from all JARs so SPI registrations
+                         (PDFBox font loaders, XML parsers, SLF4J) all survive into the uber-jar -->
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                  </transformers>
                 </configuration>
               </execution>
             </executions>

@@ -37,7 +37,7 @@ Prerequisites: JDK 21+, Maven 3.9.9+.
 mvn install
 
 # Build a standalone fat-jar (includes all dependencies except JavaFX)
-mvn install -P fatjar
+mvn install && mvn package -P fatjar -pl gui
 ```
 
 The fat-jar is created in `gui/target/` and named

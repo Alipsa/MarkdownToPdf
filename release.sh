@@ -9,11 +9,9 @@ echo "creating the gui zip"
 cd "$BASEDIR/gui"
 source ./createApp.sh skipInstructions
 echo "build the runtime fatjar"
-cd "$BASEDIR/lib"
-mvn -DskipTests -Pfatjar -q package
+cd "$BASEDIR"
+mvn install -DskipTests && mvn package -P fatjar -pl gui -DskipTests
 echo "Released and ready for manual release at github!"
 echo "Upload the following"
 echo "- lib/target/md2pdf-[version]-javadoc.jar"
-echo "- lib/target/md2pdf-[version]-jar-with-dependencies.jar"
-echo "- gui/target/journo-viewer.zip"
-echo "- gui/MarkdownToPdf.xml"
+echo "- gui/target/MarkdownToPdf-[version]-jar-with-dependencies.jar"

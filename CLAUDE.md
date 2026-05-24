@@ -11,8 +11,8 @@ mvn verify
 # Build and install to local Maven repo
 mvn install
 
-# Build the GUI standalone fat-jar
-mvn install -P fatjar
+# Build the GUI standalone fat-jar (two steps avoids reactor-mode shade warnings)
+mvn install && mvn package -P fatjar -pl gui
 
 # Auto-format all code (Google Java Format)
 mvn spotless:apply
