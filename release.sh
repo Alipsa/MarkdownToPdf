@@ -5,7 +5,7 @@ if command -v jdk21; then
   . jdk21
 fi
 mvn -Prelease clean site deploy
-echo "creating the viewer zip"
+echo "creating the gui zip"
 cd "$BASEDIR/gui"
 source ./createApp.sh skipInstructions
 echo "build the runtime fatjar"
