@@ -6,9 +6,9 @@
     <key>CFBundleGetInfoString</key>
     <string>Markdown To PDF IDE</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>0.1.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>0.1.0</string>
     <key>CFBundleIconFile</key>
     <string>md2pdf.icns</string>
     <key>CFBundleIconName</key>
