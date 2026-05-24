@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 
-JV=17
+JV=21
 
 if command -v java ; then
 	javaVersion=$(java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
@@ -31,6 +31,10 @@ fi
 DIR="${0:A:h}"
 cd "$DIR" || exit
 
-JAR=$(ls -1 -t MarkdownToPdf-*-with-dependencies.jar | head -1)
-java -Xmx8g -Xdock:name=MarkdownToPdf -Xdock:icon=./Contents/Resources/md2pdf.icns -jar ./$JAR
+JAR=$(ls -1 -t MarkdownToPdf-*-with-dependencies.jar 2>/dev/null | head -1)
+if [[ -z "$JAR" ]]; then
+  echo "No MarkdownToPdf-*-with-dependencies.jar found in $DIR"
+  exit 1
+fi
+java -Xmx8g -Xdock:name=MarkdownToPdf -Xdock:icon=./Contents/Resources/md2pdf.icns -jar "./$JAR"
 

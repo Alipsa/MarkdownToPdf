@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-JV=17
+JV=21
 
 if command -v java ; then
 	javaVersion=$(java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
@@ -33,6 +33,10 @@ cd "$DIR" || exit
 
 JAVA_OPTS="-Xmx8g"
 
-JAR=$(ls -1 -t MarkdownToPdf-*-with-dependencies.jar | head -1)
-java $JAVA_OPTS -jar ./$JAR
+JAR=$(ls -1 -t MarkdownToPdf-*-with-dependencies.jar 2>/dev/null | head -1)
+if [[ -z "$JAR" ]]; then
+  echo "No MarkdownToPdf-*-with-dependencies.jar found in $DIR"
+  exit 1
+fi
+java $JAVA_OPTS -jar "./$JAR"
 
