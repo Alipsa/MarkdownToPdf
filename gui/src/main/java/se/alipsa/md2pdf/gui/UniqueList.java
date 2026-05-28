@@ -15,6 +15,9 @@ public class UniqueList<T> extends ArrayList<T> {
 
   @Serial private static final long serialVersionUID = 1L;
 
+  /** Creates an empty list that rejects duplicate elements. */
+  public UniqueList() {}
+
   @Override
   public boolean add(T t) {
     if (!contains(t)) return super.add(t);

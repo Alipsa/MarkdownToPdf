@@ -61,7 +61,11 @@ public class StyleProfile {
     this.name = name;
   }
 
-  /** Generates override CSS to pass to {@code Job.addCss()}. */
+  /**
+   * Generates override CSS to pass to {@code Job.addCss()}.
+   *
+   * @return the generated CSS for this profile
+   */
   public String toCss() {
     return "body {\n"
         + "  font-family: "
@@ -147,6 +151,9 @@ public class StyleProfile {
   /**
    * Parses a CSS string into a StyleProfile. Known properties populate the corresponding fields;
    * everything else is stored verbatim in {@link #extraCss} so it survives a CSS round-trip.
+   *
+   * @param css the CSS to parse
+   * @return a profile populated from the parsed CSS
    */
   public static StyleProfile fromCss(String css) {
     StyleProfile p = new StyleProfile("");

@@ -72,6 +72,9 @@ public class MarkdownToPdf extends Application {
   private static URL styleSheetUrl;
   private final List<String> searchStrings = new UniqueList<>();
 
+  /** Creates the JavaFX application instance. */
+  public MarkdownToPdf() {}
+
   /**
    * Application entry point.
    *
@@ -170,6 +173,7 @@ public class MarkdownToPdf extends Application {
     return styleSheetUrl;
   }
 
+  /** Exits the JavaFX application and terminates the process shortly after shutdown. */
   public void endProgram() {
     Platform.exit();
     Timer timer = new Timer();

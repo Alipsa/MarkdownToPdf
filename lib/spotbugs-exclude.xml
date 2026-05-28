@@ -6,7 +6,7 @@
     not what we want. This is a false positive for HTML-generating code.
   -->
   <Match>
-    <Class name="se.alipsa.md2pdf.Md2PdfEngine$Job"/>
+    <Class name="se.alipsa.md2pdf.Md2PdfEngine$Renderer"/>
     <Method name="buildHtml"/>
     <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
   </Match>

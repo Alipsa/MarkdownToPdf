@@ -28,7 +28,11 @@ public class StyleProfileManager {
     this(Paths.get(System.getProperty("user.home"), ".config", "md2pdf", "styles"));
   }
 
-  /** Creates a manager using the given directory (used in tests). */
+  /**
+   * Creates a manager using the given directory.
+   *
+   * @param profilesDir the directory where user profiles are stored
+   */
   public StyleProfileManager(Path profilesDir) {
     this.profilesDir = profilesDir;
   }
@@ -36,6 +40,8 @@ public class StyleProfileManager {
   /**
    * Returns all available profile names: built-ins first, then user profiles sorted alphabetically.
    * Built-ins are always present even if the profiles directory does not exist.
+   *
+   * @return all available profile names
    */
   public List<String> listNames() {
     List<String> names = new ArrayList<>(BUILTIN_NAMES);
@@ -47,7 +53,11 @@ public class StyleProfileManager {
     return names;
   }
 
-  /** Returns only the user-defined profile names (not built-ins). */
+  /**
+   * Returns only the user-defined profile names (not built-ins).
+   *
+   * @return the user-defined profile names
+   */
   public List<String> listUserProfileNames() {
     if (!Files.isDirectory(profilesDir)) {
       return List.of();
@@ -66,6 +76,10 @@ public class StyleProfileManager {
 
   /**
    * Loads a profile by name. Checks built-ins first, then disk. Returns {@code null} if not found.
+   *
+   * @param name the profile name
+   * @return the loaded profile, or {@code null} if no profile exists with that name
+   * @throws IOException if the profile file cannot be read
    */
   public StyleProfile load(String name) throws IOException {
     StyleProfile builtin = getBuiltin(name);
@@ -83,7 +97,12 @@ public class StyleProfileManager {
     return StyleProfile.fromProperties(props);
   }
 
-  /** Saves a user profile to disk. Silently refuses to overwrite built-in names. */
+  /**
+   * Saves a user profile to disk. Silently refuses to overwrite built-in names.
+   *
+   * @param profile the profile to save
+   * @throws IOException if the profile cannot be written
+   */
   public void save(StyleProfile profile) throws IOException {
     if (BUILTIN_NAMES.contains(profile.getName())) {
       log.warn("Refusing to overwrite built-in profile '{}'", profile.getName());
@@ -100,7 +119,12 @@ public class StyleProfileManager {
     }
   }
 
-  /** Deletes a user profile. No-op for built-in profiles. */
+  /**
+   * Deletes a user profile. No-op for built-in profiles.
+   *
+   * @param name the profile name
+   * @throws IOException if the profile file cannot be deleted
+   */
   public void delete(String name) throws IOException {
     if (BUILTIN_NAMES.contains(name)) {
       return;
@@ -112,6 +136,9 @@ public class StyleProfileManager {
   /**
    * Returns a built-in profile by name, or {@code null} if the name is not a built-in. Built-in
    * profiles are synthesised in code and match the lib's DEFAULT_CSS defaults.
+   *
+   * @param name the built-in profile name
+   * @return the built-in profile, or {@code null} if the name is not built in
    */
   public static StyleProfile getBuiltin(String name) {
     return switch (name) {

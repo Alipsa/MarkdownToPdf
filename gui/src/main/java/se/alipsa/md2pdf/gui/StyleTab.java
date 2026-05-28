@@ -146,17 +146,27 @@ public class StyleTab extends BaseTab {
   /**
    * Returns the CSS to use for rendering. In CSS mode this is the raw editor text; in visual mode
    * it is the profile's generated CSS.
+   *
+   * @return the active CSS
    */
   public String getActiveCss() {
     return cssMode ? cssEditor.getText() : editorPanel.buildProfile().toCss();
   }
 
-  /** Returns the active visual profile, or {@code null} when in CSS mode. */
+  /**
+   * Returns the active visual profile, or {@code null} when in CSS mode.
+   *
+   * @return the active visual profile, or {@code null} in CSS mode
+   */
   public StyleProfile getActiveProfile() {
     return cssMode ? null : editorPanel.buildProfile();
   }
 
-  /** Loads the named profile into the visual editor (and into the CSS editor if open). */
+  /**
+   * Loads the named profile into the visual editor (and into the CSS editor if open).
+   *
+   * @param name the profile name
+   */
   public void applyProfile(String name) {
     try {
       StyleProfile p = profileManager.load(name);
@@ -175,6 +185,8 @@ public class StyleTab extends BaseTab {
   /**
    * Sets the callback fired whenever any style change occurs — whether from a visual control or a
    * CSS editor edit.
+   *
+   * @param callback the callback to invoke after a style change
    */
   public void setOnProfileChanged(Runnable callback) {
     this.externalCallback = callback == null ? () -> {} : callback;

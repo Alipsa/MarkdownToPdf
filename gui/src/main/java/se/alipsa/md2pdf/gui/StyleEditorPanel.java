@@ -323,12 +323,20 @@ public class StyleEditorPanel extends ScrollPane {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  /** Sets the callback invoked whenever any style control changes. */
+  /**
+   * Sets the callback invoked whenever any style control changes.
+   *
+   * @param callback the callback to invoke with the updated profile
+   */
   public void setOnProfileChanged(Consumer<StyleProfile> callback) {
     this.onProfileChanged = callback == null ? p -> {} : callback;
   }
 
-  /** Populates all controls from the given profile. Does NOT fire the change callback. */
+  /**
+   * Populates all controls from the given profile. Does NOT fire the change callback.
+   *
+   * @param p the profile to apply
+   */
   public void applyProfile(StyleProfile p) {
     if (p == null) return;
     profileNameField.setText(p.getName());
@@ -368,7 +376,11 @@ public class StyleEditorPanel extends ScrollPane {
     marginLeftSpinner.getValueFactory().setValue(parseMarginValue(p.getMarginLeft()));
   }
 
-  /** Builds a {@link StyleProfile} from the current control values. */
+  /**
+   * Builds a {@link StyleProfile} from the current control values.
+   *
+   * @return the profile represented by the current control values
+   */
   public StyleProfile buildProfile() {
     StyleProfile p = new StyleProfile(profileNameField.getText().trim());
     p.setBodyFont(bodyFontCombo.getValue());

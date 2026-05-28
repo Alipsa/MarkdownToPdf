@@ -23,7 +23,7 @@
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!-- Bump here, in gui/pom.xml <md2pdf.version>, and in Info.plist when releasing -->
-    <revision>0.1.0</revision>
+    <revision>0.1.1-SNAPSHOT</revision>
     <batik.version>1.19</batik.version>
     <commonmark.version>0.28.0</commonmark.version>
     <groovy-version>5.0.6</groovy-version>
@@ -31,7 +31,7 @@
     <junit-jupiter.version>6.1.0</junit-jupiter.version>
     <openhtmltopdfVersion>1.1.37</openhtmltopdfVersion>
     <slf4j.version>2.0.18</slf4j.version>
-    <spotless.version>3.5.1</spotless.version>
+    <spotless.version>3.6.0</spotless.version>
     <google-java-format.version>1.22.0</google-java-format.version>
     <spotbugs.version>4.9.8.3</spotbugs.version>
   </properties>
@@ -166,7 +166,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.5.5</version>
+          <version>3.5.6</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

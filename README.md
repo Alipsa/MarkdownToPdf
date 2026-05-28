@@ -2,9 +2,7 @@
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/se.alipsa/md2pdf/badge.svg)](https://maven-badges.herokuapp.com/maven-central/se.alipsa/md2pdf)
 [![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
 
-MarkdownToPdf is a Java library that converts Markdown to PDF. It can be used as a
-reporting engine in an application server (Spring Boot, Quarkus, etc.) or from any
-Java application.
+MarkdownToPdf is a Java library that converts Markdown to PDF.
 
 Internally it uses [commonmark-java](https://github.com/commonmark/commonmark-java)
 to render Markdown to HTML, [jsoup](https://jsoup.org/) to produce well-formed XHTML,
@@ -68,10 +66,10 @@ try (InputStream is = MyClass.class.getResourceAsStream("/report.md")) {
 
 ## Output
 
-Terminal methods on the job produce PDF or HTML:
+Terminal methods on the Renderer produce PDF or HTML:
 
 ```java
-Job job = engine.markdown("# Hello");
+Renderer job = engine.markdown("# Hello");
 
 byte[]      pdf  = job.toPdf();               // byte array
             job.toPdf(Path.of("out.pdf"));     // file

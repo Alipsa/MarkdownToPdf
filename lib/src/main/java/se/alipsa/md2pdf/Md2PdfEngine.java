@@ -135,8 +135,8 @@ public class Md2PdfEngine {
       }
       """;
 
-  private final Parser parser;
-  private final HtmlRenderer renderer;
+  private final Parser markdownParser;
+  private final HtmlRenderer htmlRenderer;
 
   /** Creates a new engine with default settings (GFM tables enabled). */
   public Md2PdfEngine() {
@@ -152,8 +152,8 @@ public class Md2PdfEngine {
       parserBuilder.extensions(List.of(tablesExtension));
       rendererBuilder.extensions(List.of(tablesExtension));
     }
-    parser = parserBuilder.build();
-    renderer = rendererBuilder.build();
+    markdownParser = parserBuilder.build();
+    htmlRenderer = rendererBuilder.build();
   }
 
   /**
@@ -210,31 +210,31 @@ public class Md2PdfEngine {
    * Start a conversion job with the given markdown content.
    *
    * @param markdown the markdown content
-   * @return a Job that can be configured further and rendered
+   * @return a Renderer that can be configured further and rendered
    */
-  public Job markdown(String markdown) {
-    return new Job(markdown, currentDirectoryUri());
+  public Renderer markdown(String markdown) {
+    return new Renderer(markdown, currentDirectoryUri());
   }
 
   /**
    * Start a conversion job reading markdown from the given file.
    *
    * @param file the file containing markdown
-   * @return a Job that can be configured further and rendered
+   * @return a Renderer that can be configured further and rendered
    * @throws Md2PdfException if the file cannot be read
    */
-  public Job markdown(File file) throws Md2PdfException {
-    return new Job(readString(file), parentDirectoryUri(file.toPath()));
+  public Renderer markdown(File file) throws Md2PdfException {
+    return new Renderer(readString(file), parentDirectoryUri(file.toPath()));
   }
 
   /**
    * Start a conversion job reading markdown from the given path.
    *
    * @param path the path to the markdown file
-   * @return a Job that can be configured further and rendered
+   * @return a Renderer that can be configured further and rendered
    * @throws Md2PdfException if the file cannot be read
    */
-  public Job markdown(Path path) throws Md2PdfException {
+  public Renderer markdown(Path path) throws Md2PdfException {
     return markdown(path.toFile());
   }
 
@@ -242,11 +242,11 @@ public class Md2PdfEngine {
    * Start a conversion job reading markdown from the given input stream.
    *
    * @param inputStream the input stream containing markdown
-   * @return a Job that can be configured further and rendered
+   * @return a Renderer that can be configured further and rendered
    * @throws Md2PdfException if the stream cannot be read
    */
-  public Job markdown(InputStream inputStream) throws Md2PdfException {
-    return new Job(readString(inputStream), currentDirectoryUri());
+  public Renderer markdown(InputStream inputStream) throws Md2PdfException {
+    return new Renderer(readString(inputStream), currentDirectoryUri());
   }
 
   private static String currentDirectoryUri() {
@@ -306,7 +306,7 @@ public class Md2PdfEngine {
   }
 
   /** A conversion job configured with markdown and optionally CSS. */
-  public class Job {
+  public class Renderer {
 
     private final String markdown;
     private String baseUri;
@@ -318,7 +318,7 @@ public class Md2PdfEngine {
     private final List<String> additionalCss = new ArrayList<>();
     private final List<FontSpec> fonts = new ArrayList<>();
 
-    private Job(String markdown, String baseUri) {
+    private Renderer(String markdown, String baseUri) {
       this.markdown = markdown;
       this.baseUri = baseUri;
     }
@@ -327,9 +327,9 @@ public class Md2PdfEngine {
      * Set the base path used to resolve relative resources such as images and CSS URLs.
      *
      * @param basePath the base directory
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job basePath(Path basePath) {
+    public Renderer basePath(Path basePath) {
       this.baseUri =
           Objects.requireNonNull(basePath, "basePath")
               .toAbsolutePath()
@@ -343,9 +343,9 @@ public class Md2PdfEngine {
      * Use the given CSS string for styling.
      *
      * @param css the CSS content
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job css(String css) {
+    public Renderer css(String css) {
       this.css = css;
       return this;
     }
@@ -354,10 +354,10 @@ public class Md2PdfEngine {
      * Read CSS from the given file.
      *
      * @param file the CSS file
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the file cannot be read
      */
-    public Job css(File file) throws Md2PdfException {
+    public Renderer css(File file) throws Md2PdfException {
       this.css = readString(file);
       return this;
     }
@@ -366,10 +366,10 @@ public class Md2PdfEngine {
      * Read CSS from the given path.
      *
      * @param path the path to the CSS file
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the file cannot be read
      */
-    public Job css(Path path) throws Md2PdfException {
+    public Renderer css(Path path) throws Md2PdfException {
       return css(path.toFile());
     }
 
@@ -377,10 +377,10 @@ public class Md2PdfEngine {
      * Read CSS from the given URL.
      *
      * @param url the URL pointing to CSS content
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the URL cannot be read
      */
-    public Job css(URL url) throws Md2PdfException {
+    public Renderer css(URL url) throws Md2PdfException {
       this.css = readString(url);
       return this;
     }
@@ -389,10 +389,10 @@ public class Md2PdfEngine {
      * Read CSS from the given input stream.
      *
      * @param inputStream the input stream containing CSS
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the stream cannot be read
      */
-    public Job css(InputStream inputStream) throws Md2PdfException {
+    public Renderer css(InputStream inputStream) throws Md2PdfException {
       this.css = readString(inputStream);
       return this;
     }
@@ -401,9 +401,9 @@ public class Md2PdfEngine {
      * Add CSS after the default or replacement stylesheet.
      *
      * @param css the CSS content to append
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job addCss(String css) {
+    public Renderer addCss(String css) {
       additionalCss.add(css);
       return this;
     }
@@ -412,10 +412,10 @@ public class Md2PdfEngine {
      * Read additional CSS from the given file.
      *
      * @param file the CSS file
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the file cannot be read
      */
-    public Job addCss(File file) throws Md2PdfException {
+    public Renderer addCss(File file) throws Md2PdfException {
       return addCss(readString(file));
     }
 
@@ -423,10 +423,10 @@ public class Md2PdfEngine {
      * Read additional CSS from the given path.
      *
      * @param path the path to the CSS file
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the file cannot be read
      */
-    public Job addCss(Path path) throws Md2PdfException {
+    public Renderer addCss(Path path) throws Md2PdfException {
       return addCss(path.toFile());
     }
 
@@ -434,10 +434,10 @@ public class Md2PdfEngine {
      * Read additional CSS from the given URL.
      *
      * @param url the URL pointing to CSS content
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the URL cannot be read
      */
-    public Job addCss(URL url) throws Md2PdfException {
+    public Renderer addCss(URL url) throws Md2PdfException {
       return addCss(readString(url));
     }
 
@@ -445,10 +445,10 @@ public class Md2PdfEngine {
      * Read additional CSS from the given input stream.
      *
      * @param inputStream the input stream containing CSS
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the stream cannot be read
      */
-    public Job addCss(InputStream inputStream) throws Md2PdfException {
+    public Renderer addCss(InputStream inputStream) throws Md2PdfException {
       return addCss(readString(inputStream));
     }
 
@@ -459,9 +459,9 @@ public class Md2PdfEngine {
      *
      * @param file the font file
      * @param family the font family name
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job font(File file, String family) {
+    public Renderer font(File file, String family) {
       fonts.add(FontSpec.of(file, family));
       return this;
     }
@@ -473,9 +473,9 @@ public class Md2PdfEngine {
      *
      * @param path the path to the font file
      * @param family the font family name
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job font(Path path, String family) {
+    public Renderer font(Path path, String family) {
       return font(path.toFile(), family);
     }
 
@@ -486,10 +486,10 @@ public class Md2PdfEngine {
      *
      * @param url the URL pointing to font content
      * @param family the font family name
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the URL cannot be read
      */
-    public Job font(URL url, String family) throws Md2PdfException {
+    public Renderer font(URL url, String family) throws Md2PdfException {
       fonts.add(FontSpec.of(readBytes(url), family));
       return this;
     }
@@ -501,10 +501,10 @@ public class Md2PdfEngine {
      *
      * @param inputStream the input stream containing font content
      * @param family the font family name
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      * @throws Md2PdfException if the stream cannot be read
      */
-    public Job font(InputStream inputStream, String family) throws Md2PdfException {
+    public Renderer font(InputStream inputStream, String family) throws Md2PdfException {
       fonts.add(FontSpec.of(readBytes(inputStream), family));
       return this;
     }
@@ -517,9 +517,9 @@ public class Md2PdfEngine {
      * counters.
      *
      * @param html the header HTML fragment
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job pageHeader(String html) {
+    public Renderer pageHeader(String html) {
       this.pageHeader = html;
       return this;
     }
@@ -532,9 +532,9 @@ public class Md2PdfEngine {
      * counters.
      *
      * @param html the footer HTML fragment
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job pageFooter(String html) {
+    public Renderer pageFooter(String html) {
       this.pageFooter = html;
       return this;
     }
@@ -543,9 +543,9 @@ public class Md2PdfEngine {
      * Set page margins using a CSS margin shorthand value.
      *
      * @param margin the CSS margin value, e.g. {@code 1in} or {@code 0.5in 0.75in}
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job pageMargins(String margin) {
+    public Renderer pageMargins(String margin) {
       this.pageMarginCss = Objects.requireNonNull(margin, "margin");
       return this;
     }
@@ -557,9 +557,9 @@ public class Md2PdfEngine {
      * @param right the right margin
      * @param bottom the bottom margin
      * @param left the left margin
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job pageMargins(String top, String right, String bottom, String left) {
+    public Renderer pageMargins(String top, String right, String bottom, String left) {
       return pageMargins(String.join(" ", top, right, bottom, left));
     }
 
@@ -567,9 +567,9 @@ public class Md2PdfEngine {
      * Set the PDF document title.
      *
      * @param title the PDF title
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job title(String title) {
+    public Renderer title(String title) {
       metadata().title = title;
       return this;
     }
@@ -578,9 +578,9 @@ public class Md2PdfEngine {
      * Set the PDF document author.
      *
      * @param author the PDF author
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job author(String author) {
+    public Renderer author(String author) {
       metadata().author = author;
       return this;
     }
@@ -589,9 +589,9 @@ public class Md2PdfEngine {
      * Set the PDF document subject.
      *
      * @param subject the PDF subject
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job subject(String subject) {
+    public Renderer subject(String subject) {
       metadata().subject = subject;
       return this;
     }
@@ -600,9 +600,9 @@ public class Md2PdfEngine {
      * Set the PDF producer.
      *
      * @param producer the PDF producer
-     * @return this Job for chaining
+     * @return this Renderer for chaining
      */
-    public Job producer(String producer) {
+    public Renderer producer(String producer) {
       metadata().producer = producer;
       return this;
     }
@@ -615,8 +615,8 @@ public class Md2PdfEngine {
     }
 
     private String buildHtml() {
-      org.commonmark.node.Node document = parser.parse(markdown);
-      String bodyHtml = renderer.render(document);
+      org.commonmark.node.Node document = markdownParser.parse(markdown);
+      String bodyHtml = htmlRenderer.render(document);
       String effectiveCss = buildCss();
       String headerHtml =
           pageHeader != null ? "<div class=\"md2pdf-page-header\">" + pageHeader + "</div>\n" : "";
