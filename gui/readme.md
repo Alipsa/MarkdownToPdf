@@ -1,7 +1,7 @@
-# MarkdownToPdf
+# MarkdownToPdf Desktop Application
 
-MarkdownToPdf is a JavaFX desktop application for editing Markdown documents and
-exporting them to PDF (or HTML). It provides a live preview, a visual style editor
+MarkdownToPdf is a JavaFX desktop application for editing Markdown documents
+and exporting them to PDF (or HTML). It provides a live preview, a visual style editor
 with named style profiles, and a CSS power-user mode.
 
 ## Features
@@ -21,19 +21,59 @@ with named style profiles, and a CSS power-user mode.
 
 ## Requirements
 
-MarkdownToPdf requires **Java 21 or later** with **JavaFX bundled**.
-Standard OpenJDK distributions do not include JavaFX; use one of:
+MarkdownToPdf requires **Java 21 or later** with **JavaFX bundled**. Standard OpenJDK
+distributions do not include JavaFX; use one of:
 
 - [Liberica Full JDK](https://bell-sw.com/pages/downloads/) (recommended)
-- [Azul Zulu with JavaFX](https://www.azul.com/downloads/)
-- [GraalVM](https://www.graalvm.org/) (includes JavaFX on some distributions)
+- [Azul Zulu FX](https://www.azul.com/downloads/)
+- [Amazon Corretto with JavaFX](https://aws.amazon.com/corretto/)
 
-## Building
+## Download and install from a release
+
+The easiest way to get started is the bundled installer script
+(`md2pdf-install.sh`) that ships at the root of every release zip.
+
+### macOS / Linux (terminal)
+
+```bash
+$ bash md2pdf-install.sh
+[INSTALL] Found MarkdownToPdf.app in current directory – using local copy.
+[INSTALL] Java 23 OK – checking for JavaFX …
+[INSTALL] JavaFX detected on this JDK.
+[INSTALL] Installing to /Users/you/Applications/MarkdownToPdf.app ...
+```
+
+The script will:
+
+1. Download the latest release from GitHub and unpack it (if you haven't already).
+2. Verify that a suitable Java ≥ 21 + JavaFX is available. If not, it offers to
+   install a [BellSoft Full JDK](https://bell-sw.com/pages/downloads/) or prompts
+   you for the path to an existing JDK.
+3. Copy the application bundle to the standard location (`~/Applications/` on macOS,
+   `~/.local/share/MarkdownToPdf` on Linux). Creates launchers / shortcuts automatically.
+
+If a previous installation already exists at the target path you are asked whether to
+remove the old one, keep both (the old one is renamed …-old), or abort.
+
+### Windows (Git Bash)
+
+Open **Git Bash** and run:
+
+```bash
+$ bash md2pdf-install.sh
+```
+
+The same flow applies. On Windows BellSoft distributes the JDK as an
+interactive installer (`.exe`), so the script will prompt you with a download link if
+no suitable Java is found. After installing manually, re-run the script with
+`JAVA_HOME` pointed at the JDK directory.
+
+## Building from source
 
 Prerequisites: JDK 21+, Maven 3.9.9+.
 
 ```bash
-# Standard build (compile + test + install)
+# Standard build (compile + test)
 mvn install
 
 # Build a standalone fat-jar (includes all dependencies except JavaFX)
@@ -120,4 +160,4 @@ A project file (`.jpr`) is a standard Java properties file that records:
 
 ## License
 
-MIT — see [LICENSE](https://github.com/Alipsa/MarkdownToPdf/blob/main/LICENSE).
+MIT — see [LICENSE](../LICENSE).

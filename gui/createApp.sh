@@ -29,6 +29,9 @@ cp src/main/assembly/linux/* "$targetDir"/
 cp src/main/resources/MarkdownToPdf-rounded.* "$targetDir"/
 cp src/main/assembly/win/* "$targetDir"/
 
+# Bundle install.sh one level above the .app so users can run it from the zip root
+cp "src/main/assembly/install.sh" "./md2pdf-install.sh"
+
 chmod +x "${MACOS_DIR}/markdownToPdf"
 chmod +x  "$targetDir"/*.sh
 chmod +x  "$targetDir"/*.zsh
@@ -42,7 +45,7 @@ else
 fi
 
 cd "$DIR/target"
-zip -r md2pdf-gui.zip "${appName}"
+zip -r md2pdf-gui.zip "${appName}" md2pdf-install.sh
 
 echo "Done!"
 if [[ "$skipInstructions" == "false" ]]; then
