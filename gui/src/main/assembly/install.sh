@@ -117,9 +117,11 @@ check_or_install_java() {
 
 _java_major_version() {
     local java_bin="${1:-java}"
-    "$java_bin" -version 2>&1 | head -1 \
-      | sed -E 's/.*["]([0-9]+)\..*/\1/' \
-      | grep -oE '^[0-9]+'
+    local version_line major
+    version_line=$("$java_bin" -version 2>&1 | head -1)
+    major=$(printf '%s\n' "$version_line" | sed -nE 's/.*version "([0-9]+).*/\1/p')
+    die_on_empty "$major" "Could not parse Java version from: $version_line"
+    printf '%s\n' "$major"
 }
 
 _validate_jdk() {
@@ -127,9 +129,8 @@ _validate_jdk() {
     if [ ! -x "$java_bin" ]; then
         die "Java binary not found or not executable: $java_bin"
     fi
-    local jv=$("$java_bin" -version 2>&1 | head -1 \
-               | sed -E 's/.*["]([0-9]+)\..*/\1/' \
-               | grep -oE '^[0-9]+')
+    local jv
+    jv=$(_java_major_version "$java_bin")
     [ "$jv" -ge "$MIN_JAVA_VERSION" ] || die "Java $jv is below required ${MIN_JAVA_VERSION}."
 
     info "Java $jv OK – checking for JavaFX …"
@@ -230,6 +231,9 @@ _resolve_dest() {
                 ;;
             k|K|keep|rename)
                 local old_dest="${default_dest}-old"
+                if [ -d "$old_dest" ]; then
+                    die "Cannot keep both because backup already exists: $old_dest"
+                fi
                 info "Renaming existing to ${old_dest} …"
                 mv "$default_dest" "$old_dest"
                 ;;
@@ -268,7 +272,7 @@ _finalize_mac() {
 _finalize_linux() {
     info "Creating desktop launcher and shortcuts …"
     if [ -x "${INSTALL_DEST}/createLauncher.sh" ]; then
-        bash -c "cd '${INSTALL_DEST}' && bash createLauncher.sh" \
+        (cd "$INSTALL_DEST" && bash createLauncher.sh) \
           || warn "createLauncher.sh failed – you can run it manually."
     fi
 

@@ -68,7 +68,7 @@ import se.alipsa.md2pdf.model.StyleProfileManager;
 public class MarkdownToPdf extends Application {
 
   private static final String JAVA2D_UI_SCALE = "sun.java2d.uiScale";
-  private static JWindow splashWindow;
+  private static volatile JWindow splashWindow;
   private static final int SPLASH_LOGO_SIZE = 96;
 
   private final DateTimeFormatter dateFormat =
