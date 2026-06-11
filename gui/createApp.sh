@@ -30,7 +30,7 @@ cp src/main/resources/MarkdownToPdf-rounded.* "$targetDir"/
 cp src/main/assembly/win/* "$targetDir"/
 
 # Bundle install.sh one level above the .app so users can run it from the zip root
-cp "src/main/assembly/install.sh" "./md2pdf-install.sh"
+cp "src/main/assembly/install.sh" "$DIR/target/md2pdf-install.sh"
 
 chmod +x "${MACOS_DIR}/markdownToPdf"
 chmod +x  "$targetDir"/*.sh
@@ -38,7 +38,7 @@ chmod +x  "$targetDir"/*.zsh
 
 # cd to the target so we dont have to allow full disk access in Settings -> Privacy and Security
 cd "${targetDir}/.."
-if command -v Setfile; then
+if command -v SetFile; then
   SetFile -a B "${appName}"
 else
   echo "Not building from a Mac so cannot set application props with SetFile"

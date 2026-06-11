@@ -41,9 +41,9 @@ ensure_app_bundle() {
 
 _download_release() {
     local token="${GITHUB_TOKEN:-}"
-    local api_headers=""
+    local api_headers=()
     if [ -n "$token" ]; then
-        api_headers="-H \"Authorization: Bearer $token\""
+        api_headers=(-H "Authorization: Bearer $token")
     fi
 
     # Latest release redirect → extract tag
@@ -57,14 +57,9 @@ _download_release() {
     # Find the .zip asset on that release
     local api="https://api.github.com/repos/${REPO}/releases/tags/${tag}"
     local asset_name
-    asset_name=$(curl ${api_headers} -fsSL "$api" 2>/dev/null \
-              | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-for a in data.get('assets', []):
-    if a['name'].endswith('.zip'):
-        print(a['name']); break
-" 2>/dev/null || true)
+    asset_name=$(curl "${api_headers[@]}" -fsSL "$api" 2>/dev/null \
+              | sed -nE 's/.*"name"[[:space:]]*:[[:space:]]*"([^"]+\.zip)".*/\1/p' \
+              | head -n1 || true)
     die_on_empty "$asset_name" "Could not find a .zip asset on the release."
 
     info "Downloading $asset_name …"
@@ -87,10 +82,12 @@ check_or_install_java() {
 
     # 2. Try java on PATH
     if command -v java >/dev/null 2>&1; then
-        local jv
-        jv=$(_java_major_version)
+        local java_bin jv
+        java_bin="$(command -v java)"
+        jv=$(_java_major_version "$java_bin")
         if [ "$jv" -ge "$MIN_JAVA_VERSION" ]; then
-            info "Java $jv found on PATH – suitable."
+            info "Java $jv found on PATH."
+            _validate_jdk "$java_bin"
             return 0
         fi
         warn "Found Java $jv but need >= ${MIN_JAVA_VERSION}."
@@ -119,7 +116,8 @@ check_or_install_java() {
 }
 
 _java_major_version() {
-    java -version 2>&1 | head -1 \
+    local java_bin="${1:-java}"
+    "$java_bin" -version 2>&1 | head -1 \
       | sed -E 's/.*["]([0-9]+)\..*/\1/' \
       | grep -oE '^[0-9]+'
 }
@@ -159,7 +157,8 @@ _install_bellsoft_full_jdk() {
 
     local dl_url
     dl_url=$(curl -fsSL "https://api.bell-sw.com/v1/downloads/jdk?os=${os_ext}&arch=${b_arch}&version=${MIN_JAVA_VERSION}&build=latest&releaseType=jdk&packageType=full" 2>/dev/null \
-          | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['downloadURL'])" 2>/dev/null || true)
+          | sed -nE 's/.*"downloadURL"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' \
+          | head -n1 || true)
     die_on_empty "$dl_url" "Could not resolve a BellSoft Full JDK download URL."
 
     info "Downloading BellSoft Full JDK ${MIN_JAVA_VERSION} …"
@@ -168,6 +167,10 @@ _install_bellsoft_full_jdk() {
     curl -fsSL "$dl_url" -o "/tmp/${dl_name}" || die "BellSoft JDK download failed."
 
     mkdir -p "${HOME}/.jdks"
+    local before_extract
+    before_extract=$(mktemp)
+    find "${HOME}/.jdks" -mindepth 1 -maxdepth 1 -type d -print | sort > "$before_extract"
+
     info "Extracting to ${HOME}/.jdks …"
     case "$dl_name" in
         *.tar.gz) tar -xzf "/tmp/${dl_name}" -C "${HOME}/.jdks";;
@@ -177,15 +180,24 @@ _install_bellsoft_full_jdk() {
             warn "BellSoft Windows JDK is an installer (.exe). Download it manually from:"
             warn "  https://bell-sw.com/pages/downloads/"
             rm -f "/tmp/${dl_name}"
+            rm -f "$before_extract"
             die "Cannot auto-install the Windows BellSoft JDK from script – please run the .exe and retry."
             ;;
         *)  die "Unrecognized archive format: $dl_name" ;;
     esac
     rm -f "/tmp/${dl_name}"
 
-    local jdk_dir
-    jdk_dir=$(find "${HOME}/.jdks" -maxdepth 1 -name "bellsoft-java-${MIN_JAVA_VERSION}-full-*" -type d | head -n1)
-    die_on_empty "$jdk_dir" "Could not locate BellSoft JDK after extraction."
+    local extracted_dir jdk_dir java_bin
+    extracted_dir=$(find "${HOME}/.jdks" -mindepth 1 -maxdepth 1 -type d -print \
+        | sort \
+        | comm -13 "$before_extract" - \
+        | head -n1)
+    rm -f "$before_extract"
+    die_on_empty "$extracted_dir" "Could not locate BellSoft JDK after extraction."
+
+    java_bin=$(find "$extracted_dir" -path "*/bin/java" -type f -perm -u+x | head -n1)
+    die_on_empty "$java_bin" "Could not locate bin/java in extracted BellSoft JDK."
+    jdk_dir="$(cd "$(dirname "$java_bin")/.." && pwd)"
 
     export JAVA_HOME="$jdk_dir"
     info "BellSoft Full JDK installed at ${JAVA_HOME}"

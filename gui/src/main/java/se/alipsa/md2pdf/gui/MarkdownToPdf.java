@@ -1,6 +1,11 @@
 package se.alipsa.md2pdf.gui;
 
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.Desktop;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.Taskbar;
 import java.awt.Toolkit;
 import java.io.*;
@@ -15,6 +20,15 @@ import java.util.*;
 import java.util.List;
 import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JWindow;
+import javax.swing.SwingUtilities;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
@@ -46,7 +60,7 @@ import se.alipsa.md2pdf.model.StyleProfileManager;
  */
 public class MarkdownToPdf extends Application {
 
-  private static final Logger logger = LogManager.getLogger(MarkdownToPdf.class);
+  private static JWindow splashWindow;
 
   private final DateTimeFormatter dateFormat =
       DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
@@ -81,13 +95,104 @@ public class MarkdownToPdf extends Application {
    * @param args command-line arguments (unused)
    */
   public static void main(String[] args) {
-    launch();
+    showStartupSplash();
+    try {
+      launch(args);
+    } finally {
+      hideStartupSplash();
+    }
   }
 
   @Override
   public void start(Stage primaryStage) {
     this.stage = primaryStage;
+    showMainWindow(primaryStage);
+  }
 
+  private static void showStartupSplash() {
+    if (GraphicsEnvironment.isHeadless()) {
+      return;
+    }
+
+    try {
+      SwingUtilities.invokeAndWait(MarkdownToPdf::createAndShowStartupSplash);
+    } catch (Exception ignored) {
+      // Splash is best-effort; JavaFX startup should continue even if Swing is unavailable.
+    }
+  }
+
+  private static void createAndShowStartupSplash() {
+    JPanel content = new JPanel();
+    content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+    content.setBackground(new Color(247, 249, 251));
+    content.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(210, 217, 226)),
+            BorderFactory.createEmptyBorder(28, 36, 28, 36)));
+
+    URL logoUrl = MarkdownToPdf.class.getResource("/MarkdownToPdf-rounded.png");
+    if (logoUrl != null) {
+      ImageIcon icon = new ImageIcon(logoUrl);
+      java.awt.Image scaledImage =
+          icon.getImage().getScaledInstance(96, 96, java.awt.Image.SCALE_SMOOTH);
+      JLabel logoLabel = new JLabel(new ImageIcon(scaledImage));
+      logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+      content.add(logoLabel);
+      content.add(Box.createRigidArea(new Dimension(0, 14)));
+    }
+
+    JLabel title = new JLabel("MarkdownToPdf");
+    title.setAlignmentX(Component.CENTER_ALIGNMENT);
+    title.setFont(title.getFont().deriveFont(Font.BOLD, 24f));
+    title.setForeground(new Color(31, 41, 55));
+
+    JLabel message = new JLabel("Starting editor...");
+    message.setAlignmentX(Component.CENTER_ALIGNMENT);
+    message.setFont(message.getFont().deriveFont(13f));
+    message.setForeground(new Color(75, 85, 99));
+
+    JProgressBar progress = new JProgressBar();
+    progress.setAlignmentX(Component.CENTER_ALIGNMENT);
+    progress.setIndeterminate(true);
+    progress.setMaximumSize(new Dimension(160, 10));
+    progress.setPreferredSize(new Dimension(160, 10));
+
+    content.add(title);
+    content.add(Box.createRigidArea(new Dimension(0, 8)));
+    content.add(message);
+    content.add(Box.createRigidArea(new Dimension(0, 18)));
+    content.add(progress);
+
+    splashWindow = new JWindow();
+    splashWindow.setContentPane(content);
+    splashWindow.pack();
+    splashWindow.setLocationRelativeTo(null);
+    splashWindow.setAlwaysOnTop(true);
+    splashWindow.setVisible(true);
+  }
+
+  private static void hideStartupSplash() {
+    if (splashWindow == null) {
+      return;
+    }
+
+    SwingUtilities.invokeLater(
+        () -> {
+          splashWindow.setVisible(false);
+          splashWindow.dispose();
+          splashWindow = null;
+        });
+  }
+
+  private static Logger logger() {
+    return LoggerHolder.LOGGER;
+  }
+
+  private static class LoggerHolder {
+    private static final Logger LOGGER = LogManager.getLogger(MarkdownToPdf.class);
+  }
+
+  private void showMainWindow(Stage primaryStage) {
     markdownTab = new MarkdownTab(this);
     styleTab = new StyleTab(this, profileManager);
     pdfTab = createPdfTab();
@@ -129,7 +234,9 @@ public class MarkdownToPdf extends Application {
           endProgram();
         });
 
-    if (appIcon != null) primaryStage.getIcons().add(appIcon);
+    if (appIcon != null) {
+      primaryStage.getIcons().add(appIcon);
+    }
     if (Taskbar.isTaskbarSupported()) {
       var taskbar = Taskbar.getTaskbar();
       if (taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
@@ -143,6 +250,7 @@ public class MarkdownToPdf extends Application {
     primaryStage.setTitle("MarkdownToPdf");
     primaryStage.setScene(scene);
     primaryStage.show();
+    hideStartupSplash();
   }
 
   /**
@@ -155,7 +263,7 @@ public class MarkdownToPdf extends Application {
       try (InputStream is = MarkdownToPdf.class.getResourceAsStream("/MarkdownToPdf-rounded.png")) {
         appIcon = is == null ? null : new Image(is);
       } catch (IOException e) {
-        logger.warn("Failed to load app icon", e);
+        logger().warn("Failed to load app icon", e);
       }
     }
     return appIcon;
@@ -474,7 +582,7 @@ public class MarkdownToPdf extends Application {
   }
 
   private void setActiveProject(Project p) {
-    logger.info("Activating project: {}", p.getName());
+    logger().info("Activating project: {}", p.getName());
     markdownTab.loadFile(p.getMarkdownFile());
     String styleName = p.getStyleProfileName();
     if (styleName != null && !styleName.isBlank()) {
@@ -508,7 +616,7 @@ public class MarkdownToPdf extends Application {
           ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
         }
       } else {
-        logger.info("{} does not exist, removing preference", projectFilePath);
+        logger().info("{} does not exist, removing preference", projectFilePath);
         projects.node(name).removeNode();
       }
     }

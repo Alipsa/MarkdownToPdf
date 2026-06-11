@@ -26,7 +26,6 @@ distributions do not include JavaFX; use one of:
 
 - [Liberica Full JDK](https://bell-sw.com/pages/downloads/) (recommended)
 - [Azul Zulu FX](https://www.azul.com/downloads/)
-- [Amazon Corretto with JavaFX](https://aws.amazon.com/corretto/)
 
 ## Download and install from a release
 
