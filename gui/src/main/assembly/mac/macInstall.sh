@@ -15,6 +15,94 @@ if [[ ! -d "$SOURCE_APP" ]]; then
   exit 1
 fi
 
+# ── Java detection ──────────────────────────────────────────────────────────
+
+javaMajorVersion() {
+  java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
+}
+
+javaIsSuitable() {
+  command -v java >/dev/null 2>&1 || return 1
+  local v
+  v=$(javaMajorVersion)
+  [[ -n "$v" && "$v" -ge 21 ]] || return 1
+  java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
+  return 0
+}
+
+installJdkViaPkg() {
+  local arch apiArch apiUrl response url sha1 tmpDir tmpPkg actualSha1
+  arch=$(uname -m)
+  case "$arch" in
+    arm64) apiArch="arm" ;;
+    x86_64) apiArch="x86" ;;
+    *)
+      echo "Unsupported architecture: $arch. Install a JavaFX-bundled JDK manually from https://bell-sw.com/pages/downloads/?version=java"
+      return 1
+      ;;
+  esac
+
+  echo "Looking up the latest Liberica Full JDK 21 for macOS ($apiArch)..."
+  apiUrl="https://api.bell-sw.com/v1/liberica/releases?version-feature=21&os=macos&arch=${apiArch}&bitness=64&package-type=pkg&bundle-type=jdk-full&version-modifier=latest"
+  response=$(curl -fsSL "$apiUrl")
+  if [[ -z "$response" || "$response" == "[]" ]]; then
+    echo "Could not find a Liberica JDK release. Install one manually from https://bell-sw.com/pages/downloads/?version=java"
+    return 1
+  fi
+  url=$(echo "$response" | grep -o '"downloadUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
+  sha1=$(echo "$response" | grep -o '"sha1":"[^"]*"' | head -1 | cut -d'"' -f4)
+  if [[ -z "$url" || -z "$sha1" ]]; then
+    echo "Unexpected response from the BellSoft API. Install a JDK manually from https://bell-sw.com/pages/downloads/?version=java"
+    return 1
+  fi
+
+  tmpDir=$(mktemp -d)
+  tmpPkg="$tmpDir/liberica-jdk21-full.pkg"
+  echo "Downloading $url"
+  if ! curl -fL -o "$tmpPkg" "$url"; then
+    echo "Download failed."
+    rm -rf "$tmpDir"
+    return 1
+  fi
+
+  actualSha1=$(shasum -a 1 "$tmpPkg" | cut -d' ' -f1)
+  if [[ "$actualSha1" != "$sha1" ]]; then
+    echo "Checksum mismatch (expected $sha1, got $actualSha1). Aborting install."
+    rm -rf "$tmpDir"
+    return 1
+  fi
+
+  echo "Installing (you may be asked for your password)..."
+  sudo installer -pkg "$tmpPkg" -target /
+  local installResult=$?
+  rm -rf "$tmpDir"
+  return $installResult
+}
+
+if javaIsSuitable; then
+  echo "Found a suitable JDK: $(javaMajorVersion)"
+else
+  echo "No JavaFX-bundled JDK 21+ was found."
+  read -q "REPLY?Install Liberica Full JDK 21 now? (y/n) "
+  echo
+  if [[ "$REPLY" == "y" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew tap bell-sw/liberica
+      brew install --cask liberica-jdk21-full
+    else
+      installJdkViaPkg
+    fi
+    hash -r
+    if javaIsSuitable; then
+      echo "Java installed successfully: $(javaMajorVersion)"
+    else
+      echo "Java installation did not complete. Open a new terminal and re-run this script, or install manually from https://bell-sw.com/pages/downloads/?version=java"
+    fi
+  else
+    echo "Skipping Java install. Install a JavaFX-bundled JDK 21+ manually before launching MarkdownToPdf: https://bell-sw.com/pages/downloads/?version=java"
+  fi
+fi
+
 mkdir -p "$TARGET_DIR"
 
 if [[ -d "$TARGET_APP" ]]; then
@@ -41,4 +129,9 @@ for f in "$TARGET_APP"/*.sh(N) "$TARGET_APP"/*.zsh(N); do
 done
 
 echo "Installed $APP_NAME to $TARGET_DIR"
+if javaIsSuitable; then
+  echo "Java: OK ($(javaMajorVersion))"
+else
+  echo "Java: not found — install a JavaFX-bundled JDK 21+ before launching MarkdownToPdf."
+fi
 echo "You can now launch it from Applications (or Spotlight)."
