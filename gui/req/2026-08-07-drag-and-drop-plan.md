@@ -8,6 +8,16 @@
 
 **Tech Stack:** Java 21, JavaFX 23 (built-in `Dragboard`/`TransferMode` API — no new dependency), Maven.
 
+> **Amendment (post-Task-4 review):** `javaIsSuitable`'s numeric guard was changed from
+> `[[ -n "$v" && "$v" -ge 21 ]]` to a `case`-based digit check before the `-ge` comparison.
+> macOS ships a root-owned `/usr/bin/java` stub even with no JDK installed, so
+> `command -v java` succeeds but `java -version`'s first line is prose (e.g. "The operation
+> couldn't be completed. Unable to locate a Java Runtime.") rather than a version string —
+> feeding that non-numeric text into zsh's `-ge` operator is a fatal `bad math expression`
+> error, not a false comparison, which killed the entire installer (including the app-copy
+> steps) on precisely the JDK-less Macs it exists to serve. Both occurrences below
+> (Task 4 and Task 5) already reflect the fix.
+
 ## Global Constraints
 
 - Zero new Maven dependencies (see project CLAUDE.md "Key constraints"). Extended for this plan's shell scripts: no new CLI-tool dependencies either — JSON fields are extracted with `grep -o`/`cut`, not `jq`, since `jq` isn't guaranteed to be present on a fresh macOS install.
@@ -478,7 +488,10 @@ javaIsSuitable() {
   command -v java >/dev/null 2>&1 || return 1
   local v
   v=$(javaMajorVersion)
-  [[ -n "$v" && "$v" -ge 21 ]] || return 1
+  case "$v" in
+    (""|*[!0-9]*) return 1 ;;
+  esac
+  [[ "$v" -ge 21 ]] || return 1
   java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
   return 0
 }
@@ -654,7 +667,10 @@ javaIsSuitable() {
   command -v java >/dev/null 2>&1 || return 1
   local v
   v=$(javaMajorVersion)
-  [[ -n "$v" && "$v" -ge 21 ]] || return 1
+  case "$v" in
+    (""|*[!0-9]*) return 1 ;;
+  esac
+  [[ "$v" -ge 21 ]] || return 1
   java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
   return 0
 }
