@@ -5,9 +5,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.SplitPane;
+import javafx.scene.input.DragEvent;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -15,6 +20,7 @@ import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
 import se.alipsa.md2pdf.Md2PdfEngine;
 import se.alipsa.md2pdf.Md2PdfException;
+import se.alipsa.md2pdf.gui.widgets.Alerts;
 import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
 
 /**
@@ -41,6 +47,7 @@ public class MarkdownTab extends BaseTab {
 
     VBox editorBox = new VBox(markdownArea);
     VBox.setVgrow(editorBox, Priority.ALWAYS);
+    wireDragAndDrop(editorBox);
 
     SplitPane splitPane = new SplitPane(editorBox, webView);
     splitPane.setDividerPositions(0.5);
@@ -53,6 +60,54 @@ public class MarkdownTab extends BaseTab {
         .plainTextChanges()
         .successionEnds(Duration.ofMillis(500))
         .subscribe(change -> Platform.runLater(this::refreshPreview));
+  }
+
+  private void wireDragAndDrop(VBox editorBox) {
+    editorBox.setOnDragOver(
+        event -> {
+          if (isSingleMarkdownFile(event.getDragboard())) {
+            event.acceptTransferModes(TransferMode.COPY);
+          }
+          event.consume();
+        });
+    editorBox.setOnDragDropped(this::handleDragDropped);
+  }
+
+  private boolean isSingleMarkdownFile(Dragboard dragboard) {
+    if (!dragboard.hasFiles()) {
+      return false;
+    }
+    List<File> files = dragboard.getFiles();
+    if (files.size() != 1) {
+      return false;
+    }
+    String name = files.get(0).getName().toLowerCase(Locale.ROOT);
+    return name.endsWith(".md") || name.endsWith(".markdown");
+  }
+
+  private void handleDragDropped(DragEvent event) {
+    Dragboard dragboard = event.getDragboard();
+    boolean success = false;
+    if (isSingleMarkdownFile(dragboard)) {
+      File droppedFile = dragboard.getFiles().get(0);
+      boolean canProceed =
+          !isChanged()
+              || Alerts.confirm(
+                  "Unsaved changes",
+                  "The markdown file has unsaved changes.",
+                  "Discard changes and open the dropped file?");
+      if (canProceed) {
+        Path path = droppedFile.toPath();
+        loadFile(path);
+        gui.setProjectMarkdownFile(path);
+        setStatus("Loaded " + path.getFileName());
+        success = true;
+      }
+    } else {
+      setStatus("Drop a single .md file to open it");
+    }
+    event.setDropCompleted(success);
+    event.consume();
   }
 
   /** Re-renders the HTML preview using the active style profile. */
