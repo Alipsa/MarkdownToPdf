@@ -238,7 +238,9 @@ byte[] pdf = engine.markdown("# Sofia font example\n\nHello world")
 ## MarkdownToPdf GUI
 
 A desktop application for interactive Markdown editing and PDF generation is available
-in the [gui module](gui/readme.md).
+in the [gui module](gui/readme.md). On macOS or Linux, `./install.sh` builds and installs
+it in one step — see the [gui readme](gui/readme.md#one-command-build--install-macos--linux)
+for details.
 
 ## License
 

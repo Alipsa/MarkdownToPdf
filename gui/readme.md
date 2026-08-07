@@ -85,6 +85,19 @@ MarkdownToPdf.app/
 The first time you open the app you may need to right-click and choose **Open** to
 mark it as a trusted application.
 
+### One-command build + install (macOS / Linux)
+
+From the repository root, `install.sh` builds the project, packages the app bundle, and
+installs it in one step:
+
+```bash
+./install.sh [installDir]
+```
+
+This runs `mvn install`, builds `MarkdownToPdf.app` (via `gui/createApp.sh`), and unzips it
+into `installDir` — defaulting to `~/Applications` on macOS or `~/.local/share` on Linux.
+On Linux it also runs the installed app's `createLauncher.sh` to create a `.desktop` launcher.
+
 ### Windows
 
 Double-click `run.cmd`, or open a Command Prompt and run:
