@@ -25,7 +25,10 @@ javaIsSuitable() {
   command -v java >/dev/null 2>&1 || return 1
   local v
   v=$(javaMajorVersion)
-  [[ -n "$v" && "$v" -ge 21 ]] || return 1
+  case "$v" in
+    (""|*[!0-9]*) return 1 ;;
+  esac
+  [[ "$v" -ge 21 ]] || return 1
   java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
   return 0
 }
@@ -56,7 +59,7 @@ installJdkViaPkg() {
     return 1
   fi
 
-  tmpDir=$(mktemp -d)
+  tmpDir=$(mktemp -d) || return 1
   tmpPkg="$tmpDir/liberica-jdk21-full.pkg"
   echo "Downloading $url"
   if ! curl -fL -o "$tmpPkg" "$url"; then
@@ -87,8 +90,11 @@ else
   echo
   if [[ "$REPLY" == "y" ]]; then
     if command -v brew >/dev/null 2>&1; then
-      brew tap bell-sw/liberica
-      brew install --cask liberica-jdk21-full
+      if brew tap bell-sw/liberica && brew install --cask liberica-jdk21-full; then
+        :
+      else
+        echo "Homebrew install failed."
+      fi
     else
       installJdkViaPkg
     fi
