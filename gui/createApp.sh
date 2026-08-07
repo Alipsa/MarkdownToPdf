@@ -28,10 +28,12 @@ cp src/main/assembly/mac/run.zsh "$targetDir"/
 cp src/main/assembly/linux/* "$targetDir"/
 cp src/main/resources/MarkdownToPdf-rounded.* "$targetDir"/
 cp src/main/assembly/win/* "$targetDir"/
+cp src/main/assembly/mac/macInstall.sh "$DIR/target/"
 
 chmod +x "${MACOS_DIR}/markdownToPdf"
 chmod +x  "$targetDir"/*.sh
 chmod +x  "$targetDir"/*.zsh
+chmod +x "$DIR/target/macInstall.sh"
 
 # cd to the target so we dont have to allow full disk access in Settings -> Privacy and Security
 cd "${targetDir}/.."
@@ -42,7 +44,7 @@ else
 fi
 
 cd "$DIR/target"
-zip -r md2pdf-gui.zip "${appName}"
+zip -r md2pdf-gui.zip "${appName}" macInstall.sh
 
 echo "Done!"
 if [[ "$skipInstructions" == "false" ]]; then

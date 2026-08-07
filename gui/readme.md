@@ -68,6 +68,11 @@ Double-click `MarkdownToPdf.app`, or from a terminal:
 ./run.zsh
 ```
 
+If you downloaded a release zip rather than building from source, run `./macInstall.sh`
+(included at the root of the zip, next to `MarkdownToPdf.app`) after unzipping. It copies
+the app into `~/Applications`, removes the macOS quarantine attribute so you don't have to
+right-click → Open, and makes sure the bundled scripts are executable.
+
 The `.app` bundle structure expected on disk:
 
 ```
