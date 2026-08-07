@@ -21,20 +21,35 @@ if [[ "${SOURCE_APP:A}" == "${TARGET_APP:A}" ]]; then
 fi
 
 # ── Java detection ──────────────────────────────────────────────────────────
+# MD2PDF_JAVA_HOME, if set to a JDK home containing bin/java, overrides the
+# JDK on PATH — useful when the default JVM isn't JavaFX-bundled but a
+# suitable one is installed elsewhere (e.g. a non-default sdkman candidate).
+
+javaBin() {
+  if [[ -n "$MD2PDF_JAVA_HOME" && -x "$MD2PDF_JAVA_HOME/bin/java" ]]; then
+    echo "$MD2PDF_JAVA_HOME/bin/java"
+  else
+    echo "java"
+  fi
+}
 
 javaMajorVersion() {
-  java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
+  "$(javaBin)" -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
 }
 
 javaIsSuitable() {
-  command -v java >/dev/null 2>&1 || return 1
+  local bin
+  bin=$(javaBin)
+  if [[ "$bin" == "java" ]]; then
+    command -v java >/dev/null 2>&1 || return 1
+  fi
   local v
   v=$(javaMajorVersion)
   case "$v" in
     (""|*[!0-9]*) return 1 ;;
   esac
   [[ "$v" -ge 21 ]] || return 1
-  java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
+  "$bin" --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
   return 0
 }
 
@@ -90,6 +105,10 @@ installJdkViaPkg() {
 if javaIsSuitable; then
   echo "Found a suitable JDK: $(javaMajorVersion)"
 else
+  # A stale/unsuitable MD2PDF_JAVA_HOME would otherwise pin javaBin() to the
+  # same bad path through the install attempt below, masking a successful
+  # install of a working JDK on PATH — drop it for the rest of this run.
+  unset MD2PDF_JAVA_HOME
   echo "No JavaFX-bundled JDK 21+ was found."
   read -q "REPLY?Install Liberica Full JDK 21 now? (y/n) "
   echo

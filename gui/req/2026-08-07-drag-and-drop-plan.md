@@ -713,6 +713,113 @@ git commit -m "feat: show a native dialog instead of crashing when no suitable J
 
 ---
 
+### Task 6: `MD2PDF_JAVA_HOME` manual JDK override (design §8)
+
+**Files:**
+- Modify: `gui/src/main/assembly/mac/macInstall.sh`
+- Modify: `gui/src/main/assembly/mac/markdownToPdf`
+- Modify: `gui/src/main/assembly/mac/run.zsh`
+- Modify: `gui/readme.md`
+
+**Rationale:** the sdkman-candidate loop added for Task 5's startup guard only helps when a
+suitable JDK is sdkman-managed and discoverable through `sdk list java | grep installed`
+parsing. A user with a suitable JDK installed some other way has no way to point the app at
+it. See design §8.
+
+- [x] **Step 1: Add a `javaBin()` helper to `macInstall.sh` and `markdownToPdf`**
+
+Both files' `javaMajorVersion`/`javaIsSuitable` pair is updated identically (same duplication
+pattern as Task 4/5) to resolve `MD2PDF_JAVA_HOME` first:
+
+```zsh
+javaBin() {
+  if [[ -n "$MD2PDF_JAVA_HOME" && -x "$MD2PDF_JAVA_HOME/bin/java" ]]; then
+    echo "$MD2PDF_JAVA_HOME/bin/java"
+  else
+    echo "java"
+  fi
+}
+
+javaMajorVersion() {
+  "$(javaBin)" -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
+}
+
+javaIsSuitable() {
+  local bin
+  bin=$(javaBin)
+  if [[ "$bin" == "java" ]]; then
+    command -v java >/dev/null 2>&1 || return 1
+  fi
+  local v
+  v=$(javaMajorVersion)
+  case "$v" in
+    (""|*[!0-9]*) return 1 ;;
+  esac
+  [[ "$v" -ge 21 ]] || return 1
+  "$bin" --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
+  return 0
+}
+```
+
+- [x] **Step 2: Resolve and use the same override in `run.zsh`'s launch path**
+
+Add near the top (after `JV=21`):
+
+```zsh
+JAVA_BIN="java"
+if [[ -n "$MD2PDF_JAVA_HOME" && -x "$MD2PDF_JAVA_HOME/bin/java" ]]; then
+  JAVA_BIN="$MD2PDF_JAVA_HOME/bin/java"
+fi
+```
+
+Replace the existing `command -v java` / `java -version` calls with `"$JAVA_BIN"`, reset
+`JAVA_BIN="java"` right before the sdkman-switch fallback re-checks version (since `sdk use
+java` changes what bare `java` resolves to on `PATH`), and change the final launch line to:
+
+```zsh
+"$JAVA_BIN" -Xmx8g -Xdock:name=MarkdownToPdf -Xdock:icon=./Contents/Resources/md2pdf.icns -jar "./$JAR"
+```
+
+- [x] **Step 3: Update the `markdownToPdf` failure dialog**
+
+Append a sentence to the existing `osascript` message pointing at `MD2PDF_JAVA_HOME` as a
+remedy for users who already have a suitable JDK installed elsewhere.
+
+- [x] **Step 4: Syntax-check all three scripts**
+
+```bash
+zsh -n gui/src/main/assembly/mac/macInstall.sh
+zsh -n gui/src/main/assembly/mac/markdownToPdf
+zsh -n gui/src/main/assembly/mac/run.zsh
+```
+
+Expected: no output, exit code 0 for all three.
+
+- [x] **Step 5: Functional verification of `javaBin()`/`javaIsSuitable()`**
+
+Verified by extracting the functions into an isolated `zsh -c` invocation with a fake
+`MD2PDF_JAVA_HOME` pointing at a scratch directory containing a stub `bin/java` script that
+prints a fake `-version`/`--list-modules` output — confirms the override is picked up and
+`javaIsSuitable` returns success, and that unsetting the variable falls back to bare `java`.
+No system-modifying commands (`brew`, `sudo installer`) are involved in this task, so no
+further isolation was needed.
+
+- [x] **Step 6: Document `MD2PDF_JAVA_HOME` in `gui/readme.md`**
+
+Add a paragraph in the macOS section explaining the variable, why it must be set in
+`~/.zshrc` (so a double-clicked `.app` picks it up, since `markdownToPdf` sources `.zshrc`
+before checking Java), and a realistic example using an sdkman candidate path.
+
+- [x] **Step 7: Commit**
+
+```bash
+git add gui/src/main/assembly/mac/macInstall.sh gui/src/main/assembly/mac/markdownToPdf \
+  gui/src/main/assembly/mac/run.zsh gui/readme.md
+git commit -m "feat: support MD2PDF_JAVA_HOME to override the JDK used by the mac app and installer"
+```
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage:** Design §1–4 (drop zone, accept condition, drop handling, constraints) → Task 1. Design §5 (install.sh documentation) → Task 2. Design §6 (macInstall.sh) → Task 3. Design §7 (JDK detection/auto-install/startup guard) → Tasks 4–5. All spec items covered.

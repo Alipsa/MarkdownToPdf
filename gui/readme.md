@@ -76,6 +76,20 @@ JavaFX-bundled JDK 21+ and, if none is found and you agree to the prompt, instal
 Full JDK 21 via Homebrew or a checksum-verified download from BellSoft — that step may ask
 for your `sudo` password.
 
+If you already have a JavaFX-bundled JDK installed somewhere that isn't your default `java`
+(e.g. a non-default [sdkman](https://sdkman.io/) candidate), point both `macInstall.sh` and
+the app at it by setting `MD2PDF_JAVA_HOME` in `~/.zshrc` to that JDK's home directory — the
+one containing `bin/java`:
+
+```zsh
+export MD2PDF_JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.5-librca"
+```
+
+It must go in `~/.zshrc` rather than just being exported in your terminal, because
+`markdownToPdf` sources `~/.zshrc` before checking for Java — that's what lets a
+double-clicked `.app` (which doesn't otherwise inherit your shell environment) see the
+override too. `run.zsh` and `macInstall.sh`'s own JDK detection also respect it.
+
 The `.app` bundle structure expected on disk:
 
 ```

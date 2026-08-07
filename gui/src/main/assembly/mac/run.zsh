@@ -2,8 +2,13 @@
 
 JV=21
 
-if command -v java ; then
-	javaVersion=$(java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
+JAVA_BIN="java"
+if [[ -n "$MD2PDF_JAVA_HOME" && -x "$MD2PDF_JAVA_HOME/bin/java" ]]; then
+  JAVA_BIN="$MD2PDF_JAVA_HOME/bin/java"
+fi
+
+if command -v "$JAVA_BIN" ; then
+	javaVersion=$("$JAVA_BIN" -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
 	if [[ (( $javaVersion -ge $JV )) ]]; then
 	  echo "Java $javaVersion OK"
 	else
@@ -13,7 +18,8 @@ if command -v java ; then
       jdk=$(sdk list java | grep installed | grep -E "$JV." | head -n 1 | cut -d '|' -f 6 | sed 's/^ *//g')
       jdk=$(echo "$jdk" | xargs)
       sdk use java "${jdk}"
-      javaVersion=$(java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
+      JAVA_BIN="java"
+      javaVersion=$("$JAVA_BIN" -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
       if [[ (( $javaVersion -ge $JV )) ]]; then
       	  echo "Java $javaVersion OK"
       else
@@ -36,5 +42,5 @@ if [[ -z "$JAR" ]]; then
   echo "No MarkdownToPdf-*-with-dependencies.jar found in $DIR"
   exit 1
 fi
-java -Xmx8g -Xdock:name=MarkdownToPdf -Xdock:icon=./Contents/Resources/md2pdf.icns -jar "./$JAR"
+"$JAVA_BIN" -Xmx8g -Xdock:name=MarkdownToPdf -Xdock:icon=./Contents/Resources/md2pdf.icns -jar "./$JAR"
 
