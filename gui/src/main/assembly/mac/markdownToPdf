@@ -20,6 +20,14 @@ javaIsSuitable() {
   return 0
 }
 
+if ! javaIsSuitable && [[ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
+  source "$HOME/.sdkman/bin/sdkman-init.sh"
+  for candidate in $(sdk list java 2>/dev/null | grep installed | cut -d '|' -f 6 | sed 's/^ *//;s/ *$//'); do
+    sdk use java "$candidate" >/dev/null 2>&1
+    javaIsSuitable && break
+  done
+fi
+
 if ! javaIsSuitable; then
   osascript -e 'display dialog "MarkdownToPdf requires a JavaFX-bundled JDK 21 or later (e.g. Liberica Full JDK), but none was found.\n\nRun macInstall.sh from the folder where you unzipped MarkdownToPdf to install one automatically, or download one manually from https://bell-sw.com/pages/downloads/?version=java" with title "MarkdownToPdf" with icon stop buttons {"OK"} default button "OK"'
   exit 1

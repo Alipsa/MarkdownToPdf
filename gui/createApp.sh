@@ -50,6 +50,6 @@ echo "Done!"
 if [[ "$skipInstructions" == "false" ]]; then
   echo "To install the MarkdownToPdf.zip do the following"
   echo "Linux: Unzip the MarkdownToPdf.zip to your applications folder and run createLauncher.sh to install!"
-  echo "MacOs: Unzip the MarkdownToPdf.zip and drag the $appName to your applications folder to install!"
+  echo "MacOs: Unzip the MarkdownToPdf.zip and run ./macInstall.sh to install!"
   echo "Windows: Unzip the MarkdownToPdf.zip to your applications folder and run createShortcut.ps1 to install!"
 fi

@@ -71,7 +71,10 @@ Double-click `MarkdownToPdf.app`, or from a terminal:
 If you downloaded a release zip rather than building from source, run `./macInstall.sh`
 (included at the root of the zip, next to `MarkdownToPdf.app`) after unzipping. It copies
 the app into `~/Applications`, removes the macOS quarantine attribute so you don't have to
-right-click → Open, and makes sure the bundled scripts are executable.
+right-click → Open, and makes sure the bundled scripts are executable. It also checks for a
+JavaFX-bundled JDK 21+ and, if none is found and you agree to the prompt, installs Liberica
+Full JDK 21 via Homebrew or a checksum-verified download from BellSoft — that step may ask
+for your `sudo` password.
 
 The `.app` bundle structure expected on disk:
 
@@ -87,8 +90,9 @@ MarkdownToPdf.app/
   MarkdownToPdf-<version>-with-dependencies.jar
 ```
 
-The first time you open the app you may need to right-click and choose **Open** to
-mark it as a trusted application.
+If you installed by dragging the app manually rather than running `macInstall.sh`, the first
+time you open the app you may need to right-click and choose **Open** to mark it as a trusted
+application.
 
 ### One-command build + install (macOS / Linux)
 

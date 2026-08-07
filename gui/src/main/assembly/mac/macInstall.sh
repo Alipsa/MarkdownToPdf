@@ -15,6 +15,11 @@ if [[ ! -d "$SOURCE_APP" ]]; then
   exit 1
 fi
 
+if [[ "${SOURCE_APP:A}" == "${TARGET_APP:A}" ]]; then
+  echo "$APP_NAME is already installed at $TARGET_APP (this script is running from there). Nothing to do."
+  exit 0
+fi
+
 # ── Java detection ──────────────────────────────────────────────────────────
 
 javaMajorVersion() {
@@ -109,8 +114,6 @@ else
   fi
 fi
 
-mkdir -p "$TARGET_DIR"
-
 if [[ -d "$TARGET_APP" ]]; then
   echo "$TARGET_APP already exists."
   read -q "REPLY?Replace it? (y/n) "
@@ -122,8 +125,13 @@ if [[ -d "$TARGET_APP" ]]; then
   rm -rf "$TARGET_APP"
 fi
 
+mkdir -p "$TARGET_DIR"
+
 echo "Copying $APP_NAME to $TARGET_DIR"
-cp -R "$SOURCE_APP" "$TARGET_DIR/"
+if ! cp -R "$SOURCE_APP" "$TARGET_DIR/"; then
+  echo "Copy failed."
+  exit 1
+fi
 
 echo "Removing quarantine attribute"
 xattr -dr com.apple.quarantine "$TARGET_APP" 2>/dev/null || true
