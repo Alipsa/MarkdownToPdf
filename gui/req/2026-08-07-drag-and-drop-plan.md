@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let users drop a `.md`/`.markdown` file onto the Markdown editor pane to open it, document the existing (but undocumented) `install.sh` one-command Mac/Linux install script, and add a `macInstall.sh` end-user install script shipped inside the release zip.
+**Goal:** Let users drop a `.md`/`.markdown` file onto the Markdown editor pane to open it, document the existing (but undocumented) `install.sh` one-command Mac/Linux install script, add a `macInstall.sh` end-user install script shipped inside the release zip, and make both the installer and the app's own startup path aware of whether a suitable JDK is present.
 
-**Architecture:** `MarkdownTab`'s editor `VBox` gets `setOnDragOver`/`setOnDragDropped` handlers wired in the constructor. Drop handling reuses the existing `loadFile(Path)` method (already used by project loading) after an unsaved-changes confirmation identical to the one `newDocument()` uses. Separately, `gui/readme.md` and `README.md` get a short addition documenting `install.sh`, and a new `macInstall.sh` (packaged by `gui/createApp.sh` at the root of `md2pdf-gui.zip`) copies the app to `~/Applications`, de-quarantines it, and fixes executable bits for end users who download a pre-built release instead of building from source.
+**Architecture:** `MarkdownTab`'s editor `VBox` gets `setOnDragOver`/`setOnDragDropped` handlers wired in the constructor. Drop handling reuses the existing `loadFile(Path)` method (already used by project loading) after an unsaved-changes confirmation identical to the one `newDocument()` uses. Separately, `gui/readme.md` and `README.md` get a short addition documenting `install.sh`, and a new `macInstall.sh` (packaged by `gui/createApp.sh` at the root of `md2pdf-gui.zip`) copies the app to `~/Applications`, de-quarantines it, fixes executable bits, and — after asking permission — installs a JavaFX-bundled JDK via Homebrew or BellSoft's official release API if none is found. `markdownToPdf` (the actual macOS entry point) runs the same detection at startup and shows a native dialog instead of a cryptic crash if Java is missing, without attempting any install itself.
 
 **Tech Stack:** Java 21, JavaFX 23 (built-in `Dragboard`/`TransferMode` API — no new dependency), Maven.
 
 ## Global Constraints
 
-- Zero new Maven dependencies (see project CLAUDE.md "Key constraints").
+- Zero new Maven dependencies (see project CLAUDE.md "Key constraints"). Extended for this plan's shell scripts: no new CLI-tool dependencies either — JSON fields are extracted with `grep -o`/`cut`, not `jq`, since `jq` isn't guaranteed to be present on a fresh macOS install.
 - All Java formatted with Google Java Format; run `mvn spotless:apply` before verify, never in the same command as `mvn verify`.
 - No automated test coverage for the drag-and-drop behavior itself — this project has no JavaFX/TestFX UI-testing dependency. Verification is by manual run of the GUI (requires a JavaFX-bundled JDK, e.g. Liberica Full JDK).
 
@@ -23,8 +23,9 @@
 | `gui/src/main/java/se/alipsa/md2pdf/gui/MarkdownTab.java` | +imports, +`wireDragAndDrop`, +`isSingleMarkdownFile`, +`handleDragDropped`, constructor wires the editor `VBox` to the new handlers |
 | `gui/readme.md` | +documentation of `install.sh` under a new subsection in **Running**; macOS subsection updated to mention `macInstall.sh` |
 | `README.md` | +one-line pointer to the install script from the GUI section |
-| `gui/src/main/assembly/mac/macInstall.sh` | new script — installs the app bundle from an unzipped release into `~/Applications`, de-quarantines it, fixes executable bits |
+| `gui/src/main/assembly/mac/macInstall.sh` | new script — installs the app bundle from an unzipped release into `~/Applications`, de-quarantines it, fixes executable bits, detects/installs a JDK |
 | `gui/createApp.sh` | copies `macInstall.sh` to the zip root and adds it to the `zip -r` invocation |
+| `gui/src/main/assembly/mac/markdownToPdf` | +Java detection, shows a native dialog and exits if no suitable JDK is found, before sourcing `run.zsh` |
 
 ---
 
@@ -442,8 +443,263 @@ git commit -m "feat: add macInstall.sh to de-quarantine and install the app from
 
 ---
 
+## Task 4: `macInstall.sh` — JDK detection and auto-install
+
+**Files:**
+- Modify: `gui/src/main/assembly/mac/macInstall.sh` (created in Task 3)
+
+**Interfaces:**
+- Consumes: nothing from other tasks.
+- Produces: `javaMajorVersion` / `javaIsSuitable` zsh functions — Task 5 defines its **own** identical copies (not shared code; see design §7 for why), but must stay behaviorally identical. If you change the detection logic here, make the same change in Task 5.
+
+- [ ] **Step 1: Insert Java detection and auto-install logic**
+
+In `gui/src/main/assembly/mac/macInstall.sh`, insert the following block immediately after the
+existing "could not find `$APP_NAME`" guard (i.e., right after this existing block):
+
+```zsh
+if [[ ! -d "$SOURCE_APP" ]]; then
+  echo "Could not find $APP_NAME next to this script ($DIR). Aborting."
+  exit 1
+fi
+```
+
+Insert:
+
+```zsh
+
+# ── Java detection ──────────────────────────────────────────────────────────
+
+javaMajorVersion() {
+  java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
+}
+
+javaIsSuitable() {
+  command -v java >/dev/null 2>&1 || return 1
+  local v
+  v=$(javaMajorVersion)
+  [[ -n "$v" && "$v" -ge 21 ]] || return 1
+  java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
+  return 0
+}
+
+installJdkViaPkg() {
+  local arch apiArch apiUrl response url sha1 tmpDir tmpPkg actualSha1
+  arch=$(uname -m)
+  case "$arch" in
+    arm64) apiArch="arm" ;;
+    x86_64) apiArch="x86" ;;
+    *)
+      echo "Unsupported architecture: $arch. Install a JavaFX-bundled JDK manually from https://bell-sw.com/pages/downloads/?version=java"
+      return 1
+      ;;
+  esac
+
+  echo "Looking up the latest Liberica Full JDK 21 for macOS ($apiArch)..."
+  apiUrl="https://api.bell-sw.com/v1/liberica/releases?version-feature=21&os=macos&arch=${apiArch}&bitness=64&package-type=pkg&bundle-type=jdk-full&version-modifier=latest"
+  response=$(curl -fsSL "$apiUrl")
+  if [[ -z "$response" || "$response" == "[]" ]]; then
+    echo "Could not find a Liberica JDK release. Install one manually from https://bell-sw.com/pages/downloads/?version=java"
+    return 1
+  fi
+  url=$(echo "$response" | grep -o '"downloadUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
+  sha1=$(echo "$response" | grep -o '"sha1":"[^"]*"' | head -1 | cut -d'"' -f4)
+  if [[ -z "$url" || -z "$sha1" ]]; then
+    echo "Unexpected response from the BellSoft API. Install a JDK manually from https://bell-sw.com/pages/downloads/?version=java"
+    return 1
+  fi
+
+  tmpDir=$(mktemp -d)
+  tmpPkg="$tmpDir/liberica-jdk21-full.pkg"
+  echo "Downloading $url"
+  if ! curl -fL -o "$tmpPkg" "$url"; then
+    echo "Download failed."
+    rm -rf "$tmpDir"
+    return 1
+  fi
+
+  actualSha1=$(shasum -a 1 "$tmpPkg" | cut -d' ' -f1)
+  if [[ "$actualSha1" != "$sha1" ]]; then
+    echo "Checksum mismatch (expected $sha1, got $actualSha1). Aborting install."
+    rm -rf "$tmpDir"
+    return 1
+  fi
+
+  echo "Installing (you may be asked for your password)..."
+  sudo installer -pkg "$tmpPkg" -target /
+  local installResult=$?
+  rm -rf "$tmpDir"
+  return $installResult
+}
+
+if javaIsSuitable; then
+  echo "Found a suitable JDK: $(javaMajorVersion)"
+else
+  echo "No JavaFX-bundled JDK 21+ was found."
+  read -q "REPLY?Install Liberica Full JDK 21 now? (y/n) "
+  echo
+  if [[ "$REPLY" == "y" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew tap bell-sw/liberica
+      brew install --cask liberica-jdk21-full
+    else
+      installJdkViaPkg
+    fi
+    hash -r
+    if javaIsSuitable; then
+      echo "Java installed successfully: $(javaMajorVersion)"
+    else
+      echo "Java installation did not complete. Open a new terminal and re-run this script, or install manually from https://bell-sw.com/pages/downloads/?version=java"
+    fi
+  else
+    echo "Skipping Java install. Install a JavaFX-bundled JDK 21+ manually before launching MarkdownToPdf: https://bell-sw.com/pages/downloads/?version=java"
+  fi
+fi
+```
+
+- [ ] **Step 2: Report Java status in the final summary**
+
+Find the last line of the script (from Task 3):
+
+```zsh
+echo "Installed $APP_NAME to $TARGET_DIR"
+echo "You can now launch it from Applications (or Spotlight)."
+```
+
+Replace it with:
+
+```zsh
+echo "Installed $APP_NAME to $TARGET_DIR"
+if javaIsSuitable; then
+  echo "Java: OK ($(javaMajorVersion))"
+else
+  echo "Java: not found — install a JavaFX-bundled JDK 21+ before launching MarkdownToPdf."
+fi
+echo "You can now launch it from Applications (or Spotlight)."
+```
+
+- [ ] **Step 3: Syntax-check**
+
+```bash
+zsh -n gui/src/main/assembly/mac/macInstall.sh
+```
+
+Expected: no output, exit code 0.
+
+- [ ] **Step 4: Manual verification**
+
+Two machines/scenarios to check if available (skip whichever you can't access, but note which
+you skipped):
+
+1. **Suitable JDK already installed:** run `./macInstall.sh` from an unzipped release (per
+   Task 3 Step 7). Expected: prints "Found a suitable JDK: 21" (or higher) and proceeds
+   straight to the app-copy steps — no install prompt.
+2. **No JDK, Homebrew present:** `brew uninstall --cask liberica-jdk21-full 2>/dev/null` (or
+   test in a VM/fresh user account with no JDK), then run `./macInstall.sh`, answer `y`.
+   Expected: `brew install --cask liberica-jdk21-full` runs, and the final summary shows
+   "Java: OK".
+3. **No JDK, no Homebrew:** in an environment without `brew` on `PATH`, run `./macInstall.sh`,
+   answer `y`. Expected: script prints the architecture it detected, downloads the pkg, prints
+   no checksum-mismatch error, prompts for your password via `sudo installer`, and the final
+   summary shows "Java: OK".
+4. Answering `n` to the install prompt in any of the above: expected the script continues to
+   install the app and prints "Java: not found — ..." in the summary, without erroring out.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add gui/src/main/assembly/mac/macInstall.sh
+git commit -m "feat: auto-install a JavaFX-bundled JDK from macInstall.sh when missing"
+```
+
+---
+
+## Task 5: Startup guard for missing Java in `markdownToPdf`
+
+**Files:**
+- Modify: `gui/src/main/assembly/mac/markdownToPdf`
+
+**Interfaces:**
+- Consumes: nothing from other tasks (this file's own copy of the detection functions — see
+  design §7 for why it's not shared with Task 4's copy in `macInstall.sh`).
+- Produces: nothing consumed elsewhere.
+
+- [ ] **Step 1: Add the startup guard**
+
+Replace the full contents of `gui/src/main/assembly/mac/markdownToPdf` (currently):
+
+```zsh
+#!/usr/bin/env zsh
+# This script goes into the Contents/MacOS folder
+DIR="${0:A:h}"
+
+source "$HOME/.zshrc"
+source "$DIR/../../run.zsh"
+```
+
+with:
+
+```zsh
+#!/usr/bin/env zsh
+# This script goes into the Contents/MacOS folder
+DIR="${0:A:h}"
+
+source "$HOME/.zshrc"
+
+javaMajorVersion() {
+  java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
+}
+
+javaIsSuitable() {
+  command -v java >/dev/null 2>&1 || return 1
+  local v
+  v=$(javaMajorVersion)
+  [[ -n "$v" && "$v" -ge 21 ]] || return 1
+  java --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
+  return 0
+}
+
+if ! javaIsSuitable; then
+  osascript -e 'display dialog "MarkdownToPdf requires a JavaFX-bundled JDK 21 or later (e.g. Liberica Full JDK), but none was found.\n\nRun macInstall.sh from the folder where you unzipped MarkdownToPdf to install one automatically, or download one manually from https://bell-sw.com/pages/downloads/?version=java" with title "MarkdownToPdf" with icon stop buttons {"OK"} default button "OK"'
+  exit 1
+fi
+
+source "$DIR/../../run.zsh"
+```
+
+- [ ] **Step 2: Syntax-check**
+
+```bash
+zsh -n gui/src/main/assembly/mac/markdownToPdf
+```
+
+Expected: no output, exit code 0.
+
+- [ ] **Step 3: Manual verification**
+
+After rebuilding and installing (Task 3 Step 6 rebuild, then `./macInstall.sh` or a manual
+drag-install):
+
+1. With a suitable JDK on `PATH`, double-click the installed `MarkdownToPdf.app`. Expected:
+   app launches normally, same as before this change.
+2. Temporarily rename/hide the JDK (e.g. `sudo mv "$(which java)" "$(which java).bak"`, or test
+   in an account/VM with no JDK installed), then double-click the app. Expected: a native
+   dialog titled "MarkdownToPdf" appears with the "requires a JavaFX-bundled JDK" message and
+   an OK button; the app does not otherwise launch or show a stack trace. Restore the JDK
+   afterward (`sudo mv "$(which java).bak" "$(which java)"`, adjusting for the actual path).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add gui/src/main/assembly/mac/markdownToPdf
+git commit -m "feat: show a native dialog instead of crashing when no suitable JDK is found at launch"
+```
+
+---
+
 ## Self-Review Notes
 
-- **Spec coverage:** Design §1–4 (drop zone, accept condition, drop handling, constraints) → Task 1. Design §5 (install.sh documentation) → Task 2. Design §6 (macInstall.sh) → Task 3. All spec items covered.
-- **No automated tests:** intentional per spec §4 — no TestFX dependency exists in this project; Task 1 Step 6 and Task 3 Step 7 are the manual equivalent of a test cycle for their respective UI/shell behaviors.
-- **Type/signature consistency:** `isSingleMarkdownFile(Dragboard)` and `handleDragDropped(DragEvent)` are used consistently between Steps 2 and 3 of Task 1; `Alerts.confirm(String, String, String)` matches the real signature read from `gui/src/main/java/se/alipsa/md2pdf/gui/widgets/Alerts.java`. Task 3's `macInstall.sh` path (`gui/src/main/assembly/mac/macInstall.sh`) and its packaged destination (zip root, alongside `MarkdownToPdf.app`) are consistent between Task 3 Steps 1, 4, and 6.
+- **Spec coverage:** Design §1–4 (drop zone, accept condition, drop handling, constraints) → Task 1. Design §5 (install.sh documentation) → Task 2. Design §6 (macInstall.sh) → Task 3. Design §7 (JDK detection/auto-install/startup guard) → Tasks 4–5. All spec items covered.
+- **No automated tests:** intentional per spec §4 — no TestFX dependency exists in this project; Task 1 Step 6, Task 3 Step 7, Task 4 Step 4, and Task 5 Step 3 are the manual equivalent of a test cycle for their respective UI/shell behaviors.
+- **Type/signature consistency:** `isSingleMarkdownFile(Dragboard)` and `handleDragDropped(DragEvent)` are used consistently between Steps 2 and 3 of Task 1; `Alerts.confirm(String, String, String)` matches the real signature read from `gui/src/main/java/se/alipsa/md2pdf/gui/widgets/Alerts.java`. Task 3's `macInstall.sh` path (`gui/src/main/assembly/mac/macInstall.sh`) and its packaged destination (zip root, alongside `MarkdownToPdf.app`) are consistent between Task 3 Steps 1, 4, and 6. `javaMajorVersion`/`javaIsSuitable` are defined identically (verbatim) in both Task 4 and Task 5 — intentional duplication per design §7, not a naming drift.
+- **API verified live:** the BellSoft endpoint, its query parameters (`version-feature`, `os`, `arch`, `bitness`, `package-type`, `bundle-type`, `version-modifier`), and the `downloadUrl`/`sha1` response fields were confirmed against the real `api.bell-sw.com` during design, not assumed from documentation alone.

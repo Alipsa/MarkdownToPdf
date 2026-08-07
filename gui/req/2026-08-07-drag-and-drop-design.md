@@ -54,3 +54,20 @@ Accept the drag with `TransferMode.COPY` only when the dragboard has files and i
 **Packaging:** `gui/createApp.sh` copies `gui/src/main/assembly/mac/macInstall.sh` into `gui/target/` (the zip root, alongside the `MarkdownToPdf.app` directory it already builds there) and adds it to the existing `zip -r md2pdf-gui.zip` invocation, so it ships at the top level of the release zip next to the `.app`.
 
 **Shell:** zsh, matching the existing mac-specific assembly scripts (`run.zsh`, `mkicns.zsh`) rather than bash (used by the dev-facing root `install.sh`).
+
+## 7. JDK detection, auto-install, and a startup guard
+
+The GUI requires a JavaFX-bundled JDK (README: Liberica Full JDK, Zulu+FX, or GraalVM), which standard OpenJDK distributions don't provide — but nothing today checks for this before trying to run `java`, so a missing/wrong JDK currently fails with a confusing module-not-found stack trace (or, from a double-clicked `.app`, fails silently with no visible terminal at all).
+
+**Detection** (a small `javaIsSuitable`/`javaMajorVersion` zsh function pair, duplicated identically in both `macInstall.sh` and `markdownToPdf` rather than factored into a shared sourced file — the two scripts run from different locations after install, one at the zip root, one inside the app bundle, so cross-sourcing between them would be fragile): suitable means `java` is on `PATH`, `javaMajorVersion` (parsed the same way the existing root `install.sh` already does: `java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1`) is `>= 21`, and `java --list-modules` includes a line starting `javafx.controls`.
+
+**`macInstall.sh` — ask permission, install on yes:**
+1. Run the detection. If suitable, print the version found and skip straight to the app-copy steps (§6).
+2. If not suitable, print why and prompt `Install Liberica Full JDK 21 now? (y/n)` via `read -q`.
+3. On **y**:
+   - If `brew` is on `PATH`: `brew tap bell-sw/liberica && brew install --cask liberica-jdk21-full`.
+   - Else: map `uname -m` (`arm64`→`arm`, `x86_64`→`x86`; anything else prints a manual-install pointer and stops) to BellSoft's Product Discovery API (`https://api.bell-sw.com/v1/liberica/releases?version-feature=21&os=macos&arch=<arch>&bitness=64&package-type=pkg&bundle-type=jdk-full&version-modifier=latest`, verified live against the real endpoint — no hardcoded version-pinned URL, since BellSoft's build numbers change frequently), extract `downloadUrl` and `sha1` from the JSON with `grep -o`/`cut` (no `jq` dependency), download to a `mktemp -d` scratch dir, verify the SHA1 with `shasum -a 1` before doing anything else (abort on mismatch — this is the one step running downloaded code with `sudo`, so it gets checksum-verified first), then `sudo installer -pkg <file> -target /`.
+   - Re-run the detection (`hash -r` first, to refresh zsh's command lookup cache) and report the result.
+4. On **n**, or if the install path fails: print a manual-install pointer (`https://bell-sw.com/pages/downloads/?version=java`) and continue anyway — copying/de-quarantining the app doesn't depend on Java being present. The final summary line reports Java found/installed/still-missing either way.
+
+**Startup guard, in `markdownToPdf`** (the actual entry point macOS invokes on double-click, before it currently does `source "$DIR/../../run.zsh"`): run the same detection. If it fails, show a blocking native dialog via `osascript -e 'display dialog "..." with icon stop'` naming `macInstall.sh` and the BellSoft downloads page, then `exit 1` **without** sourcing `run.zsh` / invoking `java` at all. This path never attempts to install anything — a double-clicked `.app` has no interactive terminal to run a `sudo` prompt in, so it only informs.
