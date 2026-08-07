@@ -1,8 +1,19 @@
 package se.alipsa.md2pdf.gui;
 
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.Desktop;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.Taskbar;
 import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
 import java.nio.file.Files;
@@ -30,6 +41,16 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.Icon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JWindow;
+import javax.swing.SwingUtilities;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
@@ -46,7 +67,9 @@ import se.alipsa.md2pdf.model.StyleProfileManager;
  */
 public class MarkdownToPdf extends Application {
 
-  private static final Logger logger = LogManager.getLogger(MarkdownToPdf.class);
+  private static final String JAVA2D_UI_SCALE = "sun.java2d.uiScale";
+  private static volatile JWindow splashWindow;
+  private static final int SPLASH_LOGO_SIZE = 96;
 
   private final DateTimeFormatter dateFormat =
       DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
@@ -81,13 +104,283 @@ public class MarkdownToPdf extends Application {
    * @param args command-line arguments (unused)
    */
   public static void main(String[] args) {
-    launch();
+    configureJava2dUiScale();
+    showStartupSplash();
+    try {
+      launch(args);
+    } finally {
+      hideStartupSplash();
+    }
   }
 
   @Override
   public void start(Stage primaryStage) {
     this.stage = primaryStage;
+    showMainWindow(primaryStage);
+  }
 
+  private static void configureJava2dUiScale() {
+    if (System.getProperty(JAVA2D_UI_SCALE) != null) {
+      return;
+    }
+
+    Optional<Double> scale =
+        firstScale(
+            parseScale(System.getenv("MARKDOWN_TO_PDF_UI_SCALE")),
+            parseScale(System.getenv("GDK_SCALE")),
+            parseScale(System.getenv("QT_SCALE_FACTOR")),
+            parseMaxScale(System.getenv("KDE_SCREEN_SCALE_FACTORS")),
+            parseDpiScale(System.getenv("XFT_DPI")));
+    scale.ifPresent(value -> System.setProperty(JAVA2D_UI_SCALE, formatScale(value)));
+  }
+
+  @SafeVarargs
+  private static Optional<Double> firstScale(Optional<Double>... scales) {
+    for (Optional<Double> scale : scales) {
+      if (scale.isPresent()) {
+        return scale;
+      }
+    }
+    return Optional.empty();
+  }
+
+  private static Optional<Double> parseScale(String value) {
+    if (value == null || value.isBlank()) {
+      return Optional.empty();
+    }
+
+    try {
+      double scale = Double.parseDouble(value.trim());
+      return scale >= 1.5 ? Optional.of(scale) : Optional.empty();
+    } catch (NumberFormatException e) {
+      return Optional.empty();
+    }
+  }
+
+  private static Optional<Double> parseMaxScale(String value) {
+    if (value == null || value.isBlank()) {
+      return Optional.empty();
+    }
+
+    double maxScale = 1;
+    for (String token : value.split("[;,:=]")) {
+      Optional<Double> scale = parseScale(token);
+      if (scale.isPresent()) {
+        maxScale = Math.max(maxScale, scale.get());
+      }
+    }
+    return maxScale >= 1.5 ? Optional.of(maxScale) : Optional.empty();
+  }
+
+  private static Optional<Double> parseDpiScale(String value) {
+    if (value == null || value.isBlank()) {
+      return Optional.empty();
+    }
+
+    try {
+      double dpi = Double.parseDouble(value.trim());
+      if (dpi > 1000) {
+        dpi = dpi / 1024;
+      }
+      double scale = dpi / 96;
+      return scale >= 1.5 ? Optional.of(scale) : Optional.empty();
+    } catch (NumberFormatException e) {
+      return Optional.empty();
+    }
+  }
+
+  private static String formatScale(double scale) {
+    double rounded = Math.rint(scale);
+    if (Math.abs(scale - rounded) < 0.05) {
+      return Integer.toString((int) rounded);
+    }
+    return String.format(Locale.ROOT, "%.2f", scale);
+  }
+
+  private static void showStartupSplash() {
+    if (GraphicsEnvironment.isHeadless()) {
+      return;
+    }
+
+    try {
+      SwingUtilities.invokeAndWait(MarkdownToPdf::createAndShowStartupSplash);
+    } catch (Exception ignored) {
+      // Splash is best-effort; JavaFX startup should continue even if Swing is unavailable.
+    }
+  }
+
+  private static void createAndShowStartupSplash() {
+    double splashScale = splashScale();
+    JPanel content = new JPanel();
+    content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+    content.setBackground(new Color(247, 249, 251));
+    content.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(210, 217, 226)),
+            BorderFactory.createEmptyBorder(
+                scaled(28, splashScale),
+                scaled(36, splashScale),
+                scaled(28, splashScale),
+                scaled(36, splashScale))));
+
+    URL logoUrl = MarkdownToPdf.class.getResource("/MarkdownToPdf-rounded.png");
+    if (logoUrl != null) {
+      try {
+        BufferedImage logo = ImageIO.read(logoUrl);
+        int logoSize = scaled(SPLASH_LOGO_SIZE, splashScale);
+        JLabel logoLabel = new JLabel(new HiDpiImageIcon(logo, logoSize, logoSize));
+        logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        content.add(logoLabel);
+        content.add(Box.createRigidArea(new Dimension(0, scaled(14, splashScale))));
+      } catch (IOException ignored) {
+        // The text splash is still useful if the optional logo cannot be read.
+      }
+    }
+
+    JLabel title = new JLabel("MarkdownToPdf");
+    title.setAlignmentX(Component.CENTER_ALIGNMENT);
+    title.setFont(title.getFont().deriveFont(Font.BOLD, scaled(24f, splashScale)));
+    title.setForeground(new Color(31, 41, 55));
+
+    JLabel message = new JLabel("Starting editor...");
+    message.setAlignmentX(Component.CENTER_ALIGNMENT);
+    message.setFont(message.getFont().deriveFont(scaled(13f, splashScale)));
+    message.setForeground(new Color(75, 85, 99));
+
+    JProgressBar progress = new JProgressBar();
+    progress.setAlignmentX(Component.CENTER_ALIGNMENT);
+    progress.setIndeterminate(true);
+    progress.setMaximumSize(new Dimension(scaled(160, splashScale), scaled(10, splashScale)));
+    progress.setPreferredSize(new Dimension(scaled(160, splashScale), scaled(10, splashScale)));
+
+    content.add(title);
+    content.add(Box.createRigidArea(new Dimension(0, scaled(8, splashScale))));
+    content.add(message);
+    content.add(Box.createRigidArea(new Dimension(0, scaled(18, splashScale))));
+    content.add(progress);
+
+    splashWindow = new JWindow();
+    splashWindow.setContentPane(content);
+    splashWindow.pack();
+    splashWindow.setLocationRelativeTo(null);
+    splashWindow.setAlwaysOnTop(true);
+    splashWindow.setVisible(true);
+  }
+
+  private static double splashScale() {
+    double java2dScale = defaultGraphicsScale();
+    if (java2dScale >= 1.5) {
+      return 1;
+    }
+
+    return firstScale(
+            parseScale(System.getProperty(JAVA2D_UI_SCALE)),
+            parseScale(System.getenv("MARKDOWN_TO_PDF_UI_SCALE")),
+            parseScale(System.getenv("GDK_SCALE")),
+            parseScale(System.getenv("QT_SCALE_FACTOR")),
+            parseMaxScale(System.getenv("KDE_SCREEN_SCALE_FACTORS")),
+            parseDpiScale(System.getenv("XFT_DPI")),
+            screenSizeScale())
+        .orElse(1d);
+  }
+
+  private static double defaultGraphicsScale() {
+    try {
+      GraphicsConfiguration config =
+          GraphicsEnvironment.getLocalGraphicsEnvironment()
+              .getDefaultScreenDevice()
+              .getDefaultConfiguration();
+      return Math.max(
+          config.getDefaultTransform().getScaleX(), config.getDefaultTransform().getScaleY());
+    } catch (RuntimeException e) {
+      return 1;
+    }
+  }
+
+  private static Optional<Double> screenSizeScale() {
+    try {
+      Rectangle bounds =
+          GraphicsEnvironment.getLocalGraphicsEnvironment()
+              .getDefaultScreenDevice()
+              .getDefaultConfiguration()
+              .getBounds();
+      int longEdge = Math.max(bounds.width, bounds.height);
+      int shortEdge = Math.min(bounds.width, bounds.height);
+      if (longEdge >= 3400 || shortEdge >= 1900) {
+        return Optional.of(2d);
+      }
+    } catch (RuntimeException e) {
+      return Optional.empty();
+    }
+    return Optional.empty();
+  }
+
+  private static int scaled(int value, double scale) {
+    return (int) Math.round(value * scale);
+  }
+
+  private static float scaled(float value, double scale) {
+    return (float) (value * scale);
+  }
+
+  private static void hideStartupSplash() {
+    if (splashWindow == null) {
+      return;
+    }
+
+    SwingUtilities.invokeLater(
+        () -> {
+          splashWindow.setVisible(false);
+          splashWindow.dispose();
+          splashWindow = null;
+        });
+  }
+
+  private static Logger logger() {
+    return LoggerHolder.LOGGER;
+  }
+
+  private static class LoggerHolder {
+    private static final Logger LOGGER = LogManager.getLogger(MarkdownToPdf.class);
+  }
+
+  private static class HiDpiImageIcon implements Icon {
+    private final BufferedImage image;
+    private final int width;
+    private final int height;
+
+    HiDpiImageIcon(BufferedImage image, int width, int height) {
+      this.image = image;
+      this.width = width;
+      this.height = height;
+    }
+
+    @Override
+    public int getIconWidth() {
+      return width;
+    }
+
+    @Override
+    public int getIconHeight() {
+      return height;
+    }
+
+    @Override
+    public void paintIcon(Component component, Graphics graphics, int x, int y) {
+      Graphics2D g2 = (Graphics2D) graphics.create();
+      try {
+        g2.setRenderingHint(
+            RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.drawImage(image, x, y, width, height, null);
+      } finally {
+        g2.dispose();
+      }
+    }
+  }
+
+  private void showMainWindow(Stage primaryStage) {
     markdownTab = new MarkdownTab(this);
     styleTab = new StyleTab(this, profileManager);
     pdfTab = createPdfTab();
@@ -129,7 +422,9 @@ public class MarkdownToPdf extends Application {
           endProgram();
         });
 
-    if (appIcon != null) primaryStage.getIcons().add(appIcon);
+    if (appIcon != null) {
+      primaryStage.getIcons().add(appIcon);
+    }
     if (Taskbar.isTaskbarSupported()) {
       var taskbar = Taskbar.getTaskbar();
       if (taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
@@ -143,6 +438,7 @@ public class MarkdownToPdf extends Application {
     primaryStage.setTitle("MarkdownToPdf");
     primaryStage.setScene(scene);
     primaryStage.show();
+    hideStartupSplash();
   }
 
   /**
@@ -155,7 +451,7 @@ public class MarkdownToPdf extends Application {
       try (InputStream is = MarkdownToPdf.class.getResourceAsStream("/MarkdownToPdf-rounded.png")) {
         appIcon = is == null ? null : new Image(is);
       } catch (IOException e) {
-        logger.warn("Failed to load app icon", e);
+        logger().warn("Failed to load app icon", e);
       }
     }
     return appIcon;
@@ -474,7 +770,7 @@ public class MarkdownToPdf extends Application {
   }
 
   private void setActiveProject(Project p) {
-    logger.info("Activating project: {}", p.getName());
+    logger().info("Activating project: {}", p.getName());
     markdownTab.loadFile(p.getMarkdownFile());
     String styleName = p.getStyleProfileName();
     if (styleName != null && !styleName.isBlank()) {
@@ -508,7 +804,7 @@ public class MarkdownToPdf extends Application {
           ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
         }
       } else {
-        logger.info("{} does not exist, removing preference", projectFilePath);
+        logger().info("{} does not exist, removing preference", projectFilePath);
         projects.node(name).removeNode();
       }
     }

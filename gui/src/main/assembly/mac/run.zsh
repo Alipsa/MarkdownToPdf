@@ -2,6 +2,18 @@
 
 JV=21
 
+DIR="${0:A:h}"
+cd "$DIR" || exit
+
+# MD2PDF_JAVA_HOME, if set to a JDK home containing bin/java, overrides the JDK
+# on PATH — useful when the default JVM isn't JavaFX-bundled but a suitable one
+# is installed elsewhere (e.g. a non-default sdkman candidate). md2pdf-install.sh
+# records the JDK it validated in md2pdf.env; an MD2PDF_JAVA_HOME already set in
+# the environment (e.g. exported from ~/.zshrc) wins over it.
+if [[ -z "$MD2PDF_JAVA_HOME" && -f "$DIR/md2pdf.env" ]]; then
+  source "$DIR/md2pdf.env"
+fi
+
 JAVA_BIN="java"
 if [[ -n "$MD2PDF_JAVA_HOME" && -x "$MD2PDF_JAVA_HOME/bin/java" ]]; then
   JAVA_BIN="$MD2PDF_JAVA_HOME/bin/java"
@@ -33,9 +45,6 @@ else
   read -r
   exit 1
 fi
-
-DIR="${0:A:h}"
-cd "$DIR" || exit
 
 JAR=$(ls -1 -t MarkdownToPdf-*-with-dependencies.jar 2>/dev/null | head -1)
 if [[ -z "$JAR" ]]; then

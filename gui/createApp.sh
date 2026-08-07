@@ -28,28 +28,30 @@ cp src/main/assembly/mac/run.zsh "$targetDir"/
 cp src/main/assembly/linux/* "$targetDir"/
 cp src/main/resources/MarkdownToPdf-rounded.* "$targetDir"/
 cp src/main/assembly/win/* "$targetDir"/
-cp src/main/assembly/mac/macInstall.sh "$DIR/target/"
+
+# Bundle install.sh one level above the .app so users can run it from the zip root
+cp "src/main/assembly/install.sh" "$DIR/target/md2pdf-install.sh"
 
 chmod +x "${MACOS_DIR}/markdownToPdf"
 chmod +x  "$targetDir"/*.sh
 chmod +x  "$targetDir"/*.zsh
-chmod +x "$DIR/target/macInstall.sh"
+chmod +x "$DIR/target/md2pdf-install.sh"
 
 # cd to the target so we dont have to allow full disk access in Settings -> Privacy and Security
 cd "${targetDir}/.."
-if command -v Setfile; then
+if command -v SetFile; then
   SetFile -a B "${appName}"
 else
   echo "Not building from a Mac so cannot set application props with SetFile"
 fi
 
 cd "$DIR/target"
-zip -r md2pdf-gui.zip "${appName}" macInstall.sh
+zip -r md2pdf-gui.zip "${appName}" md2pdf-install.sh
 
 echo "Done!"
 if [[ "$skipInstructions" == "false" ]]; then
   echo "To install the MarkdownToPdf.zip do the following"
-  echo "Linux: Unzip the MarkdownToPdf.zip to your applications folder and run createLauncher.sh to install!"
-  echo "MacOs: Unzip the MarkdownToPdf.zip and run ./macInstall.sh to install!"
-  echo "Windows: Unzip the MarkdownToPdf.zip to your applications folder and run createShortcut.ps1 to install!"
+  echo "All platforms: Unzip the MarkdownToPdf.zip and run 'bash md2pdf-install.sh' from the unzipped folder."
+  echo "(On Windows, run it from Git Bash. It installs $appName, checks for a JavaFX-bundled"
+  echo " JDK 21+, and creates the launcher/shortcut for you.)"
 fi

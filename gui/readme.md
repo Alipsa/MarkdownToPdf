@@ -1,7 +1,7 @@
-# MarkdownToPdf
+# MarkdownToPdf Desktop Application
 
-MarkdownToPdf is a JavaFX desktop application for editing Markdown documents and
-exporting them to PDF (or HTML). It provides a live preview, a visual style editor
+MarkdownToPdf is a JavaFX desktop application for editing Markdown documents
+and exporting them to PDF (or HTML). It provides a live preview, a visual style editor
 with named style profiles, and a CSS power-user mode.
 
 ## Features
@@ -21,19 +21,72 @@ with named style profiles, and a CSS power-user mode.
 
 ## Requirements
 
-MarkdownToPdf requires **Java 21 or later** with **JavaFX bundled**.
-Standard OpenJDK distributions do not include JavaFX; use one of:
+MarkdownToPdf requires **Java 21 or later** with **JavaFX bundled**. Standard OpenJDK
+distributions do not include JavaFX; use one of:
 
 - [Liberica Full JDK](https://bell-sw.com/pages/downloads/) (recommended)
-- [Azul Zulu with JavaFX](https://www.azul.com/downloads/)
-- [GraalVM](https://www.graalvm.org/) (includes JavaFX on some distributions)
+- [Azul Zulu FX](https://www.azul.com/downloads/)
 
-## Building
+## Download and install from a release
+
+The easiest way to get started is the bundled installer script
+(`md2pdf-install.sh`) that ships at the root of every release zip. It is the single
+installer for all three platforms — on Windows run it from **Git Bash**.
+
+```bash
+$ bash md2pdf-install.sh
+[INSTALL] Found MarkdownToPdf.app in current directory – using local copy.
+[INSTALL] Java 23 with JavaFX OK (/usr/bin/java)
+[INSTALL] Installing to /Users/you/Applications/MarkdownToPdf.app ...
+```
+
+The script will:
+
+1. Download the latest release from GitHub and unpack it (if you haven't already).
+2. Verify that a JavaFX-bundled Java ≥ 21 is available. If not, it offers to install
+   [Liberica Full JDK 21](https://bell-sw.com/pages/downloads/?version=java) — via
+   Homebrew on macOS when available, otherwise a checksum-verified download from
+   BellSoft — or prompts you for the path to an existing JDK.
+3. Copy the application bundle to the standard location: `~/Applications/` on macOS,
+   `~/.local/share/MarkdownToPdf` on Linux, `~/MarkdownToPdf` on Windows.
+4. Create the launcher / shortcut for the platform (`.desktop` entry on Linux, a
+   Desktop shortcut on Windows).
+5. On macOS, remove the Gatekeeper quarantine attribute, so you do **not** have to
+   right-click → **Open** the first time.
+
+If a previous installation already exists at the target path you are asked whether to
+remove the old one, keep both (the old one is renamed …-old), or abort.
+
+### Which JDK the installed app launches with
+
+If the `java` on your `PATH` is already a JavaFX-bundled JDK 21+, the launchers just
+use it. Otherwise the installer records the JDK it validated (or installed) in a
+`md2pdf.env` file at the root of the installation:
+
+```
+MD2PDF_JAVA_HOME="/Users/you/.sdkman/candidates/java/21.0.5-librca"
+```
+
+All launchers — `run.sh`, `run.zsh`, `run.cmd`, and the macOS `.app` entry point —
+read that file, so the app starts with the same JDK the installer checked. Delete the
+file to fall back to `PATH`, or edit it to point somewhere else.
+
+You can also override it yourself by exporting `MD2PDF_JAVA_HOME` (pointing at a JDK
+home directory, the one containing `bin/java`); an environment variable always wins
+over `md2pdf.env`. On macOS, set it in `~/.zshrc` rather than only in your terminal —
+the `.app` entry point sources `~/.zshrc` before checking for Java, which is what lets
+a double-clicked app see the override:
+
+```zsh
+export MD2PDF_JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.5-librca"
+```
+
+## Building from source
 
 Prerequisites: JDK 21+, Maven 3.9.9+.
 
 ```bash
-# Standard build (compile + test + install)
+# Standard build (compile + test)
 mvn install
 
 # Build a standalone fat-jar (includes all dependencies except JavaFX)
@@ -42,6 +95,23 @@ mvn install && mvn package -P fatjar -pl gui
 
 The fat-jar is created in `gui/target/` and named
 `MarkdownToPdf-<version>-jar-with-dependencies.jar`.
+
+### One-command build + install (macOS / Linux)
+
+From the repository root, `install.sh` builds the project, packages the app bundle, and
+installs it in one step:
+
+```bash
+./install.sh [installDir]
+```
+
+This runs `mvn install`, builds `MarkdownToPdf.app` (via `gui/createApp.sh`), and unzips it
+into `installDir` — defaulting to `~/Applications` on macOS or `~/.local/share` on Linux.
+On Linux it also runs the installed app's `createLauncher.sh` to create a `.desktop` launcher.
+
+This is the source-checkout path. If you are installing a downloaded release zip instead,
+use `md2pdf-install.sh` from the zip, described
+[above](#download-and-install-from-a-release).
 
 ## Running
 
@@ -68,27 +138,10 @@ Double-click `MarkdownToPdf.app`, or from a terminal:
 ./run.zsh
 ```
 
-If you downloaded a release zip rather than building from source, run `./macInstall.sh`
-(included at the root of the zip, next to `MarkdownToPdf.app`) after unzipping. It copies
-the app into `~/Applications`, removes the macOS quarantine attribute so you don't have to
-right-click → Open, and makes sure the bundled scripts are executable. It also checks for a
-JavaFX-bundled JDK 21+ and, if none is found and you agree to the prompt, installs Liberica
-Full JDK 21 via Homebrew or a checksum-verified download from BellSoft — that step may ask
-for your `sudo` password.
-
-If you already have a JavaFX-bundled JDK installed somewhere that isn't your default `java`
-(e.g. a non-default [sdkman](https://sdkman.io/) candidate), point both `macInstall.sh` and
-the app at it by setting `MD2PDF_JAVA_HOME` in `~/.zshrc` to that JDK's home directory — the
-one containing `bin/java`:
-
-```zsh
-export MD2PDF_JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.5-librca"
-```
-
-It must go in `~/.zshrc` rather than just being exported in your terminal, because
-`markdownToPdf` sources `~/.zshrc` before checking for Java — that's what lets a
-double-clicked `.app` (which doesn't otherwise inherit your shell environment) see the
-override too. `run.zsh` and `macInstall.sh`'s own JDK detection also respect it.
+If you downloaded a release zip rather than building from source, run
+`bash md2pdf-install.sh` (at the root of the zip, next to `MarkdownToPdf.app`) after
+unzipping — see [Download and install from a release](#download-and-install-from-a-release)
+above. It handles the quarantine attribute, the JDK check and the install location for you.
 
 The `.app` bundle structure expected on disk:
 
@@ -104,22 +157,9 @@ MarkdownToPdf.app/
   MarkdownToPdf-<version>-with-dependencies.jar
 ```
 
-If you installed by dragging the app manually rather than running `macInstall.sh`, the first
-time you open the app you may need to right-click and choose **Open** to mark it as a trusted
-application.
-
-### One-command build + install (macOS / Linux)
-
-From the repository root, `install.sh` builds the project, packages the app bundle, and
-installs it in one step:
-
-```bash
-./install.sh [installDir]
-```
-
-This runs `mvn install`, builds `MarkdownToPdf.app` (via `gui/createApp.sh`), and unzips it
-into `installDir` — defaulting to `~/Applications` on macOS or `~/.local/share` on Linux.
-On Linux it also runs the installed app's `createLauncher.sh` to create a `.desktop` launcher.
+If you installed by dragging the app manually rather than running `md2pdf-install.sh`, the
+first time you open the app you may need to right-click and choose **Open** to mark it as a
+trusted application.
 
 ### Windows
 
@@ -156,4 +196,4 @@ A project file (`.jpr`) is a standard Java properties file that records:
 
 ## License
 
-MIT — see [LICENSE](https://github.com/Alipsa/MarkdownToPdf/blob/main/LICENSE).
+MIT — see [LICENSE](../LICENSE).

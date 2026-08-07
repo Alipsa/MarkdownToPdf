@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded in part (2026-08-07).** Tasks 3–6 built `macInstall.sh`. PR #1 landed a
+> cross-platform end-user installer (`gui/src/main/assembly/install.sh`, shipped as
+> `md2pdf-install.sh`), so `macInstall.sh` was deleted and its behaviour folded into
+> that script. Tasks 1–2 (drag-and-drop, `install.sh` documentation) are unaffected.
+> Treat the `macInstall.sh` tasks below as historical record.
+
 **Goal:** Let users drop a `.md`/`.markdown` file onto the Markdown editor pane to open it, document the existing (but undocumented) `install.sh` one-command Mac/Linux install script, add a `macInstall.sh` end-user install script shipped inside the release zip, and make both the installer and the app's own startup path aware of whether a suitable JDK is present.
 
 **Architecture:** `MarkdownTab`'s editor `VBox` gets `setOnDragOver`/`setOnDragDropped` handlers wired in the constructor. Drop handling reuses the existing `loadFile(Path)` method (already used by project loading) after an unsaved-changes confirmation identical to the one `newDocument()` uses. Separately, `gui/readme.md` and `README.md` get a short addition documenting `install.sh`, and a new `macInstall.sh` (packaged by `gui/createApp.sh` at the root of `md2pdf-gui.zip`) copies the app to `~/Applications`, de-quarantines it, fixes executable bits, and — after asking permission — installs a JavaFX-bundled JDK via Homebrew or BellSoft's official release API if none is found. `markdownToPdf` (the actual macOS entry point) runs the same detection at startup and shows a native dialog instead of a cryptic crash if Java is missing, without attempting any install itself.

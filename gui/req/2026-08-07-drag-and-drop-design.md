@@ -41,6 +41,14 @@ Accept the drag with `TransferMode.COPY` only when the dragboard has files and i
 
 ## 6. `macInstall.sh` — end-user install script shipped inside the release zip
 
+> **Superseded (2026-08-07).** PR #1 landed `gui/src/main/assembly/install.sh`, a
+> cross-platform end-user installer shipped as `md2pdf-install.sh` at the release-zip
+> root, which covers the same need for macOS, Linux and Windows. `macInstall.sh` was
+> therefore removed and everything below — quarantine removal, the Homebrew /
+> checksum-verified BellSoft JDK install, and `MD2PDF_JAVA_HOME` — was folded into
+> `md2pdf-install.sh`. Read §6–§7 as the rationale for those behaviours, not as a
+> description of the files on disk.
+
 `install.sh` is a *developer* script: it builds from source. There is no equivalent for someone who just downloads the pre-built `md2pdf-gui.zip` release asset — today they must manually drag `MarkdownToPdf.app` into Applications and right-click → Open to bypass Gatekeeper quarantine. Add `macInstall.sh`, shipped at the root of the zip (a sibling of `MarkdownToPdf.app`, not inside the `.app` bundle), that:
 
 1. Locates `MarkdownToPdf.app` next to itself (via `${0:A:h}`, zsh idiom for the script's own directory); aborts with an error if not found.
