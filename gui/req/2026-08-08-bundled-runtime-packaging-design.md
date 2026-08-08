@@ -625,22 +625,41 @@ stating, since the old flow could only run on a Mac.
    `install-failures` are separate gates, and a release that proceeds with failing tests or
    a broken installer-failure check defeats the point of running them. Abort if the commit
    has no run.
-3. Download the five release assets from that run into one flat staging directory, **one
-   `gh run download -n <name> -D "$STAGING"` call per artifact** — see below.
-4. Sanity-check the staging directory: all five assets present, non-trivial size, expected
-   top-level entries.
-5. Generate `SHA256SUMS` into the staging directory, hashing the five assets. Every asset is
-   already present, so the checksums cover the exact set that gets uploaded. Run the hashing
-   command with the staging directory as the working directory so the file records bare
-   basenames — see below.
+3. Create the staging directory **empty**, deleting any previous one, then download the five
+   release assets from that run into it, **one `gh run download -n <name> -D "$STAGING"`
+   call per artifact** — see below.
+4. Sanity-check the staging directory: it contains **exactly five regular files**, they are
+   exactly the five expected names, each is of non-trivial size, and the zips list the
+   expected top-level entries. Not "the five are present" — exactly five, nothing else.
+5. Generate `SHA256SUMS` into the staging directory, hashing **the five assets by name**
+   rather than a glob. Run the hashing command with the staging directory as the working
+   directory so the file records bare basenames — see "Checksums".
 6. `mvn -Prelease -pl lib -am clean site deploy` — the Maven Central publication of `lib`
    and the parent POM, and nothing else.
 7. Tag `v<version>` and push it.
-8. `gh release create v<version> "$STAGING"/*` — six files: the five assets and
-   `SHA256SUMS`. Its synopsis is
-   `gh release create [<tag>] [<filename>... | <pattern>...]`; it takes filenames or globs,
-   never a directory, so the glob must be expanded by the shell. The upload is therefore
-   only as complete as the staging directory, which is what step 4 exists to check.
+8. Assert the staging directory now holds **exactly six regular files**, then
+   `gh release create v<version> "$STAGING"/*` — the five assets and `SHA256SUMS`. Its
+   synopsis is `gh release create [<tag>] [<filename>... | <pattern>...]`; it takes
+   filenames or globs, never a directory, so the glob must be expanded by the shell.
+
+### Why the staging directory is emptied and counted twice
+
+The upload in step 8 is a glob, so it publishes whatever is in the directory — while
+`SHA256SUMS` covers only the five names step 5 was given. Any file that arrives in between
+ships unhashed, under a checksum file that appears to account for the release.
+
+This is not hypothetical: the documented `--skip-deploy` recovery re-runs steps 3–5 in a
+directory a previous attempt already populated. Without the delete in step 3, the stale
+`SHA256SUMS` from that attempt is still present when step 5 runs, and a glob-based hash
+would checksum the old checksum file. Hashing five explicit names instead of a glob makes
+step 5 immune to that on its own; the delete and the two counts make the whole sequence
+immune.
+
+The counts are exact rather than "at least", because every failure here is one of *extra*
+files — a leftover asset from a different version, a partially-downloaded artifact, an
+editor backup. A presence check passes on all of them. Five before hashing and six before
+upload are cheap, and they are the assertions that make "`SHA256SUMS` covers the exact set
+that gets uploaded" a fact rather than an intention.
 
 ### Downloading the assets
 
@@ -732,8 +751,8 @@ after a late failure then skips step 6 rather than attempting a second deploy, w
 would fail anyway and obscure the real problem.
 
 Recovery works from a clean checkout because steps 3–5 are pure downloads and hashing: a
-re-run rebuilds the staging directory from the same CI run, byte for byte, with no local
-build of any kind.
+re-run discards the previous staging directory and rebuilds it from the same CI run, byte
+for byte, with no local build of any kind.
 
 The tag and the GitHub release are both reversible by hand, so the documented recovery is:
 delete the tag and any partial release, then re-run with `--skip-deploy`. This is recorded
