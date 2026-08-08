@@ -149,13 +149,31 @@ launcher and the key from one variable so they cannot diverge again.
 substituted at package time, and the "bump here too" comment in the root `pom.xml` is
 removed along with the manual step it describes.
 
+**`${revision}` cannot be substituted verbatim.** Apple specifies both version keys as one
+to three period-separated integers, so `0.1.1-SNAPSHOT` is invalid — and CI runs on
+branches and pull requests where `${revision}` is exactly that. Packaging therefore
+normalises rather than copies:
+
+```
+BUNDLE_VERSION = ${revision} with any -qualifier suffix removed
+```
+
+`0.1.1-SNAPSHOT` → `0.1.1`; a release version passes through unchanged. Both keys take
+`BUNDLE_VERSION`, and packaging fails if the result does not match
+`^[0-9]+(\.[0-9]+){0,2}$`, so a future version scheme cannot silently produce an invalid
+bundle.
+
+Snapshot-ness is not lost, only moved somewhere the format allows: `CFBundleGetInfoString`
+is free-form text and carries the full `${revision}` plus the commit SHA, so a CI-built
+`.app` remains identifiable as such.
+
 **There is no `CFBundleIdentifier`.** `codesign` requires a bundle identifier to sign a
 bundle, so this blocks the signing step outright — it is not merely a metadata omission.
 `se.alipsa.md2pdf` is added, along with `CFBundlePackageType` (`APPL`) and `CFBundleName`,
 which are conventional and required for correct Finder and Launch Services behaviour.
 
 A CI assertion checks that `CFBundleExecutable` names a file that exists and is executable,
-and that the version keys match `${revision}`.
+and that the version keys equal `BUNDLE_VERSION`.
 
 Expect each zip to be roughly 80–110 MB against 13.7 MB today. `javafx.web` carries the
 WebKit native library, which dominates the image and does not compress.
@@ -224,6 +242,14 @@ runtime dependencies into `lib/` unmodified, beside `MarkdownToPdf.jar`.
 
 The manifest `Class-Path` is used rather than `-cp "lib/*"` because the JVM leaves
 wildcard expansion order unspecified, while the manifest order is deterministic.
+
+**Packaging renames the application jar.** Maven produces
+`MarkdownToPdf-<version>.jar`; packaging copies it into the zip as `MarkdownToPdf.jar`, so
+launchers, `.desktop` entries and Windows shortcuts can reference a fixed path that does not
+change on every version bump. Dependency jars in `lib/` keep their Maven names — they stay
+identifiable, and the manifest `Class-Path` names them explicitly. The version remains
+available from the jar manifest's `Implementation-Version`, which
+`addDefaultImplementationEntries` already writes.
 
 Three reasons beyond "the runtime is bundled so a single file buys nothing":
 
@@ -416,7 +442,19 @@ alongside the packaging script even while unused.
 | `install-failures` | `ubuntu-latest` | assert failure paths fail loudly |
 
 All jobs use `actions/setup-java` with `distribution: liberica` and
-`java-package: jdk+fx` at Java 21.
+`java-package: jdk+fx`.
+
+**The JDK is pinned to an exact Liberica version, not to `21`.** `java-version: 21`
+resolves the newest available 21.x, so a BellSoft patch release would change the bundled
+JavaFX underneath us and start failing the alignment assertion on an unrelated commit —
+turning a routine upstream release into a red build on a branch nobody touched. The exact
+version lives in `.github/versions.env` as `LIBERICA_VERSION`, sourced by every job.
+
+That file holds only the Liberica version. `javafx.version` stays in `gui/pom.xml` as the
+single source of truth for the compile-time API, and the existing assertion — the runtime's
+`javafx.controls` module version must equal the `javafx.version` property — is what keeps
+the two files honest. Bumping Liberica therefore fails CI until `javafx.version` is bumped
+to match, which is the intended workflow rather than an obstacle.
 
 **Runner labels are pinned, not `-latest`.** The macOS target is specifically
 `macos-aarch64`, and `macos-latest` is a moving alias whose architecture GitHub has already
@@ -454,9 +492,9 @@ Assertions:
   `Contents/MacOS/markdownToPdf` on macOS, a `.lnk` or stub on Windows
 - the runtime's `javafx.controls` module version equals the `javafx.version` property
 - the runner architecture matches the artifact name
-- macOS only: `CFBundleExecutable` names an existing executable file, the version keys
-  match `${revision}`, `CFBundleIdentifier` is present, and
-  `codesign --verify --deep --strict` passes
+- macOS only: `CFBundleExecutable` names an existing executable file, both version keys
+  equal `BUNDLE_VERSION` and match `^[0-9]+(\.[0-9]+){0,2}$`, `CFBundleIdentifier` is
+  present, and `codesign --verify --deep --strict` passes
 
 ### Smoke tests
 
@@ -493,16 +531,25 @@ or Windows runtimes — and becomes a release driver:
 
 1. Preconditions: clean tree, on `main`, `${revision}` is not a `-SNAPSHOT`, `gh`
    authenticated, `HEAD` pushed.
-2. Locate the CI run for `HEAD` and `gh run watch` it until all three `build` jobs pass.
-   Abort if the commit has no run — releasing an untested commit is the failure mode this
-   ordering exists to prevent.
-3. `gh run download` the three platform zips from that run.
-4. Sanity-check them: all three present, non-trivial size, expected top-level entries,
-   `SHA256SUMS` generated over the assets.
+2. Locate the CI run for `HEAD` and `gh run watch` it until **the whole run concludes
+   successfully** — not just the three `build` jobs. `verify`, `lint-scripts` and
+   `install-failures` are separate gates, and a release that proceeds with failing tests or
+   a broken installer-failure check defeats the point of running them. Abort if the commit
+   has no run.
+3. `gh run download` all four zips from that run: the three platform zips and
+   `md2pdf-<version>-no-jdk.zip`.
+4. Sanity-check them: all four present, non-trivial size, expected top-level entries.
 5. `mvn -Prelease clean site deploy` — the Maven Central publication of `lib`.
-6. Tag `v<version>` and push it.
-7. `gh release create v<version>` with the three zips, `md2pdf-<version>-no-jdk.zip`, the
-   checksums, and `lib`'s javadoc jar.
+6. Stage the complete asset set into one directory: the four zips from step 3 and
+   `lib/target/md2pdf-<version>-javadoc.jar` produced by step 5.
+7. Generate `SHA256SUMS` over the staged directory — after every asset is present, so the
+   checksums cover the exact set that gets uploaded.
+8. Tag `v<version>` and push it.
+9. `gh release create v<version>` with the staged directory and `SHA256SUMS`.
+
+Checksums are generated in step 7 rather than alongside the download, because the javadoc
+jar does not exist until step 5. Checksumming early would produce a `SHA256SUMS` covering
+only part of the release — worse than none, since it looks authoritative.
 
 **The ordering is the point.** Deploying to Maven Central before the platform artifacts
 exist and have been verified means a failed macOS signing or Windows packaging step leaves
