@@ -255,6 +255,24 @@ thing that catches it.
 The manifest `Class-Path` is used rather than `-cp "lib/*"` because the JVM leaves
 wildcard expansion order unspecified, while the manifest order is deterministic.
 
+**Flat copying can collide, so the collision is checked for rather than designed around.**
+`copy-dependencies` names each file `artifactId-version[-classifier].jar` and writes them
+all into one directory, so two dependencies from different groups sharing an artifactId and
+version overwrite each other — last one wins, silently. The obvious fix, `prependGroupId`,
+is not available: `maven-jar-plugin` generates `Class-Path` entries with the same `simple`
+layout, and there is no matching option on the archiver side, so renaming the files would
+desynchronise them from the manifest that references them.
+
+The check instead compares the two directly, in the `build` job:
+
+- every `Class-Path` entry in the manifest resolves to an existing file in `lib/`
+- the entries are unique — a duplicate name is exactly what a collision produces
+- the number of files in `lib/` equals the number of entries
+
+A collision fails all three at once: two artifacts yield two identical `Class-Path` entries
+but one file. This subsumes the file-count check above and is the assertion that actually
+runs.
+
 **Packaging renames the application jar.** Maven produces
 `MarkdownToPdf-<version>.jar`; packaging copies it into the zip as `MarkdownToPdf.jar`, so
 launchers, `.desktop` entries and Windows shortcuts can reference a fixed path that does not
@@ -510,17 +528,33 @@ Per platform: `setup-java` → `mvn install` and `copy-dependencies` → `create
 zip as an artifact → unzip to a temp directory → run the platform's installer
 non-interactively → run the verification script.
 
+**The Linux job also uploads `lib/target/md2pdf-<version>-javadoc.jar`** as an artifact. It
+is a release asset, and building it in CI is what lets `release.sh` assemble the complete
+asset set before the irreversible Maven deploy rather than after it — see "release.sh". The
+`verify` job already runs `mvn verify`; producing the javadoc jar needs only
+`maven-javadoc-plugin:jar` in the same invocation, and a javadoc error is worth failing on
+in its own right.
+
 **The Linux job additionally produces `md2pdf-<version>-no-jdk.zip`**, since it is
 platform-independent and building it three times would upload three artifacts under one
 name. It is assembled from the same `MarkdownToPdf.jar` and `lib/` as the Linux zip, with
 no `runtime/`, no launchers and no installer, plus `README.txt`.
 
-It gets its own verification, and deliberately a different one: unzip it and run the engine
-smoke test with `java -jar MarkdownToPdf.jar` on **the runner's `setup-java` JDK**, not on a
-bundled runtime. That is precisely how its users will run it, and it is the only check that
-the manifest `Class-Path` resolves `lib/` correctly without a runtime beside it. It is also
-asserted to contain no `runtime/` directory — an assembly slip that added one would produce
-a 100 MB "no-jdk" download.
+It gets its own verification, and deliberately a different one: unzip it and run **both**
+smoke tests on **the runner's `setup-java` JDK** — Liberica Full 21, i.e. `jdk+fx` — rather
+than on a bundled runtime. That is precisely how its users will run it, and it is the only
+check that the manifest `Class-Path` resolves `lib/` correctly without a runtime beside it.
+
+Both tests are needed here, and the toolkit smoke is the important one. The engine smoke
+touches no JavaFX at all, so it would pass on a plain OpenJDK and prove nothing about the
+archive's actual requirement. The toolkit smoke starting a `WebView` is what demonstrates
+that this archive plus a JavaFX-bundled JDK is a working installation — and, equally, that
+the archive supplies no JavaFX of its own, since `lib/` is asserted to contain no `javafx-*`
+jar and the JavaFX modules therefore have to come from the JDK. That is the module
+resolution the archive depends on, so it is asserted rather than assumed.
+
+The archive is also asserted to contain no `runtime/` directory — an assembly slip that
+added one would produce a 100 MB "no-jdk" download.
 
 Building and testing in one job is sound only if the test cannot lean on the runner's
 JDK — which is the property being asserted. The verification step **scrubs `JAVA_HOME` and
@@ -587,31 +621,42 @@ or Windows runtimes — and becomes a release driver:
    `install-failures` are separate gates, and a release that proceeds with failing tests or
    a broken installer-failure check defeats the point of running them. Abort if the commit
    has no run.
-3. `gh run download` all four zips from that run: the three platform zips and
-   `md2pdf-<version>-no-jdk.zip`.
-4. Sanity-check them: all four present, non-trivial size, expected top-level entries.
-5. `mvn -Prelease clean site deploy` — the Maven Central publication of `lib`.
-6. Stage the complete asset set into one directory: the four zips from step 3 and
-   `lib/target/md2pdf-<version>-javadoc.jar` produced by step 5.
-7. Generate `SHA256SUMS` over the staged directory — after every asset is present, so the
+3. `gh run download` every release asset from that run into one staging directory: the three
+   platform zips, `md2pdf-<version>-no-jdk.zip`, and `md2pdf-<version>-javadoc.jar`.
+4. Sanity-check the staging directory: all five assets present, non-trivial size, expected
+   top-level entries.
+5. Generate `SHA256SUMS` over the staging directory. Every asset is already present, so the
    checksums cover the exact set that gets uploaded.
-8. Tag `v<version>` and push it.
-9. `gh release create v<version>` with the staged directory and `SHA256SUMS`.
+6. `mvn -Prelease clean site deploy` — the Maven Central publication of `lib`.
+7. Tag `v<version>` and push it.
+8. `gh release create v<version>` with the staging directory and `SHA256SUMS`.
 
-Checksums are generated in step 7 rather than alongside the download, because the javadoc
-jar does not exist until step 5. Checksumming early would produce a `SHA256SUMS` covering
-only part of the release — worse than none, since it looks authoritative.
+**No asset is built locally.** An earlier draft rebuilt the javadoc jar as a side effect of
+step 6, which forced staging and checksumming to happen after the irreversible deploy and
+made `--skip-deploy` recovery impossible from a clean checkout — the jar simply would not
+exist. Downloading it from CI with everything else removes both problems and shortens the
+irreversible tail to three steps.
+
+Maven Central receives its own javadoc jar, built and signed by the `deploy` in step 6. That
+copy is not the release asset and the two are not compared; requiring them to be identical
+would mean either uploading an unsigned jar to Central or signing a CI artifact locally,
+both worse than tolerating two builds of the same generated documentation.
 
 ### Recovery after a partial release
 
-Step 5 is the point of no return: Maven Central publication cannot be undone or
+Step 6 is the point of no return: Maven Central publication cannot be undone or
 overwritten. The preflight in step 1 exists to move every foreseeable failure ahead of it,
-but steps 6–9 can still fail on something unforeseeable — a GitHub outage, a revoked token.
+and staging and checksumming now precede it as well, but steps 7–8 can still fail on
+something unforeseeable — a GitHub outage, a revoked token.
 
 `release.sh` therefore takes `--skip-deploy`, and detects on start-up that `${revision}` is
 already published to Maven Central, reporting it and requiring the flag to continue. Re-running
-after a late failure then resumes from step 6 rather than attempting a second deploy, which
+after a late failure then skips step 6 rather than attempting a second deploy, which
 would fail anyway and obscure the real problem.
+
+Recovery works from a clean checkout because steps 3–5 are pure downloads and hashing: a
+re-run rebuilds the staging directory from the same CI run, byte for byte, with no local
+build of any kind.
 
 The tag and the GitHub release are both reversible by hand, so the documented recovery is:
 delete the tag and any partial release, then re-run with `--skip-deploy`. This is recorded
@@ -622,8 +667,8 @@ when nobody wants to reason it out from first principles.
 exist and have been verified means a failed macOS signing or Windows packaging step leaves
 the library published, and possibly a tag pushed, with no complete set of GUI downloads —
 and Maven Central publication cannot be undone. Every fallible and reversible step
-therefore runs first; the irreversible one runs only once all three artifacts are in hand
-and checked.
+therefore runs first; the irreversible one runs only once all five assets are in hand,
+checked and checksummed.
 
 `md2pdf-<version>-no-jdk.zip` is deliberate. Removing bring-your-own-JDK from the platform
 zips leaves users who already have a JavaFX-bundled JDK with no small download — roughly
@@ -653,8 +698,10 @@ platform zips, which need no JDK at all.
 Being platform-independent, it is assembled once — in the Linux `build` job — rather than
 three times.
 
-Because the assets come from CI rather than from a local build, what ships is
-byte-identical to what was tested — which the current manual flow cannot promise.
+Because every release asset comes from CI rather than from a local build, what ships is
+byte-identical to what was tested — which the current manual flow cannot promise. The claim
+covers all five assets, including the javadoc jar, which is why it is a CI artifact rather
+than a by-product of the deploy.
 
 `release.sh` does no signing of its own. Signing happens in the macOS `build` job, so the
 downloaded artifact is already signed and re-signing would break the byte-identical
@@ -700,7 +747,9 @@ gives up that guarantee.
    the design needs revisiting before any packaging work is done.
 3. Replace the shade fat-jar with `copy-dependencies` into `lib/` and a manifest
    `Class-Path`. Independent of the runtime work and verifiable on its own — the app should
-   still start from `java -jar` on the system JDK.
+   still start from `java -jar MarkdownToPdf.jar` on a **JavaFX-bundled JDK 21** (the
+   maintainer's `21.0.12.fx-librca` is one). Not on a plain OpenJDK: JavaFX is `provided`
+   scope and deliberately absent from `lib/`, so the JavaFX modules must come from the JDK.
 4. `jlink` and the new layout on Linux only; get both smoke tests green locally.
 5. Linux installer and launcher, including the host-library preflight; failure tests green
    locally.
