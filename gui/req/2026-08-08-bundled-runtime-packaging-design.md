@@ -23,8 +23,10 @@ runtime is platform-specific, so each platform must build its own artifact.
 
 ## Goals
 
-- Ship a self-contained application per platform: no JDK required, nothing to install
-  beyond unzipping.
+- Ship a self-contained application per platform: no JDK required. On Windows and macOS
+  nothing further is needed. On Linux the JavaFX host libraries are still required — see
+  "Linux host prerequisites"; the claim "nothing to install beyond unzipping" is false
+  there and must not appear in user-facing documentation.
 - Delete the JDK detection and download machinery, and the defects living in it.
 - Build, package, install and verify each platform's artifact on that platform in CI.
 - Turn `release.sh` into a driver that publishes exactly the artifacts CI tested.
@@ -50,6 +52,8 @@ runtime is platform-specific, so each platform must build its own artifact.
 | Installers | Three separate: bash / zsh / cmd |
 | Windows shortcut | `createShortcut.ps1`, falling back to a generated stub |
 | macOS signing | Ad-hoc now; Developer ID when the account lands |
+| JavaFX version | Pinned to the version inside the runtime, asserted in CI |
+| Compression | `--compress=2` — the only ZIP level JDK 21 accepts |
 
 ### Why bring-your-own-JDK is removed rather than kept as a fallback
 
@@ -125,6 +129,29 @@ root, outside `Contents/`, which works only because nothing enforces it. Everyth
 under `Contents/`, and `run.zsh` is deleted: `Contents/MacOS/markdownToPdf` becomes the
 single entry point and execs the bundled runtime directly.
 
+### Info.plist
+
+The current `Info.plist` has three defects that must be fixed as part of this work:
+
+**`CFBundleExecutable` is `MarkdownToPdf`; the file is `markdownToPdf`.** Finder launches
+the executable named by the key, so the declared name must match the file on disk exactly.
+This currently appears to work only because APFS is case-insensitive by default — on a
+case-sensitive volume the app does not launch at all. The packaging script writes the
+launcher and the key from one variable so they cannot diverge again.
+
+**`CFBundleVersion` and `CFBundleShortVersionString` are hardcoded to `0.1.0`** while
+`${revision}` is `0.1.1-SNAPSHOT`. `Info.plist` becomes a template with the version
+substituted at package time, and the "bump here too" comment in the root `pom.xml` is
+removed along with the manual step it describes.
+
+**There is no `CFBundleIdentifier`.** `codesign` requires a bundle identifier to sign a
+bundle, so this blocks the signing step outright — it is not merely a metadata omission.
+`se.alipsa.md2pdf` is added, along with `CFBundlePackageType` (`APPL`) and `CFBundleName`,
+which are conventional and required for correct Finder and Launch Services behaviour.
+
+A CI assertion checks that `CFBundleExecutable` names a file that exists and is executable,
+and that the version keys match `${revision}`.
+
 Expect each zip to be roughly 80–110 MB against 13.7 MB today. `javafx.web` carries the
 WebKit native library, which dominates the image and does not compress.
 
@@ -152,9 +179,55 @@ carries only root/English locale data, so any locale-dependent date or number fo
 renders in English regardless of system settings. Reversible with
 `--include-locales=en,sv` if it ever matters.
 
-Flags: `--strip-debug --no-header-files --no-man-pages --compress=zip-6`.
+Flags: `--strip-debug --no-header-files --no-man-pages --compress=2`.
 `--strip-debug` affects only JDK classes; application code lives in the fat-jar, so
 application stack traces keep their line numbers.
+
+`--compress=2` is ZIP compression and is the strongest level JDK 21's `jlink` accepts —
+its documented values are `0` (none), `1` (constant string sharing) and `2` (ZIP). The
+newer `zip-<n>` syntax arrived in JDK 22 and makes JDK 21 `jlink` fail rather than fall
+back, so it cannot be used here.
+
+## JavaFX version alignment
+
+The GUI compiles against JavaFX 23.0.2 (`gui/pom.xml`), while Liberica Full JDK 21 bundles
+JavaFX 21.x. Compiling against a newer API than the runtime provides is a
+`NoSuchMethodError` waiting for whichever user first reaches the affected call — and
+nothing in the build catches it today, because JavaFX is `provided` scope and never runs
+during `mvn test`.
+
+`javafx.version` is therefore pinned to the JavaFX version inside the chosen Liberica
+build, and the GUI is compiled against exactly that. Any API used from a later JavaFX
+release must be found and replaced during implementation; this is a compile-time failure,
+so it surfaces immediately rather than in the field.
+
+CI asserts the alignment so it cannot silently drift when either version is bumped:
+`runtime/bin/java --list-modules` reports `javafx.controls@<version>`, which must equal the
+`javafx.version` property. A mismatch fails the `build` job.
+
+The stale comment at `gui/pom.xml:24` ("don't forget to update run.sh / run.zsh / run.cmd
+if javafx version is changed") is removed — the launchers no longer reference JavaFX at
+all.
+
+## Linux host prerequisites
+
+The bundled runtime removes the JDK dependency but not JavaFX's dependency on host
+libraries. JavaFX on Linux requires GTK 3, and `javafx.web`'s WebKit library pulls further
+shared libraries still. A `jlink` image cannot contain these; they are the user's
+responsibility.
+
+Two consequences:
+
+- Both READMEs state the Linux prerequisites explicitly, with the install command for the
+  common distribution families. "No JDK required" is accurate; "nothing to install" is not.
+- `md2pdf-install.sh` runs a preflight check and reports missing libraries by name with a
+  suggested install command. It warns rather than aborting — the libraries may be present
+  under names the check does not recognise, and a wrong guess must not block a working
+  install.
+
+The Linux `build` job's toolkit smoke test covers this implicitly: the GitHub runner image
+is a known baseline, so a missing library there is a packaging bug rather than a user
+environment problem.
 
 `jlink` runs from the platform's packaging script rather than from Maven, keeping the
 build shell-driven and the "zero new Maven dependencies" constraint intact.
@@ -217,6 +290,13 @@ by Group Policy, and under AppLocker's Constrained Language Mode PowerShell runs
 script but fails at `New-Object -ComObject WScript.Shell`. Checking for the artifact covers
 those, plus `powershell.exe` being absent.
 
+**Any existing shortcut is deleted before `createShortcut.ps1` runs.** Otherwise a
+shortcut left by an earlier install — pointing at a path that has since moved, or at the
+old `cmd.exe /c run.cmd` target — satisfies the existence test and the installer reports
+success while the user's shortcut is broken. Deleting first makes the test mean "this run
+created a working shortcut" rather than "a file with this name exists", and is more robust
+than parsing a `.lnk` to validate its target, which `cmd` cannot do anyway.
+
 On failure the installer writes a stub to the Desktop and the Start Menu:
 
 ```cmd
@@ -252,8 +332,26 @@ secrets to workflow runs from forked pull requests, so fork builds always take t
 path, correctly.
 
 The two branches are not one command with a swapped argument. Ad-hoc signing may use
-`--deep`; Developer ID signing must not, because Apple discourages it for distribution —
-nested code (the runtime's `.dylib`s and `bin/java`) is signed first, then the bundle.
+`--deep`; Developer ID signing must not, because Apple discourages it for distribution.
+Apple requires nested code to be signed inside-out: every Mach-O file within the bundle
+individually, deepest first, and the bundle itself last.
+
+"Nested code" is not only the `.dylib`s and `bin/java`. A `jlink` image also contains
+`bin/keytool`, `bin/jrunscript` and any other launchers the module set brings in, plus
+`lib/jspawnhelper` — which is not in `bin/` and is the one most often missed. The signing
+step therefore enumerates Mach-O files rather than signing a fixed list:
+
+```
+find MarkdownToPdf.app -type f -perm -u+x -o -name '*.dylib'
+```
+
+filtered to actual Mach-O binaries via `file`, sorted deepest-first, each signed
+individually before the bundle. A hardcoded list silently stops being correct the next time
+the module set changes, which is exactly the kind of drift that surfaces as a rejected
+notarization months later.
+
+`codesign --verify --deep --strict` on the finished bundle is run as an assertion in the
+macOS `build` job, so incomplete signing fails CI rather than reaching a user.
 
 Signing is not notarization. Users still see the unidentified-developer warning, which is
 why the installer continues to strip the quarantine attribute.
@@ -273,11 +371,20 @@ alongside the packaging script even while unused.
 |---|---|---|
 | `verify` | `ubuntu-latest` | `mvn verify` — tests, `spotless:check`, SpotBugs |
 | `lint-scripts` | `ubuntu-latest` | `shellcheck` on bash, `zsh -n` on zsh |
-| `build` | ubuntu / macos / windows | `jlink`, package, install, verify, upload zip |
+| `build` | see below | `jlink`, package, install, verify, upload zip |
 | `install-failures` | `ubuntu-latest` | assert failure paths fail loudly |
 
 All jobs use `actions/setup-java` with `distribution: liberica` and
 `java-package: jdk+fx` at Java 21.
+
+**Runner labels are pinned, not `-latest`.** The macOS target is specifically
+`macos-aarch64`, and `macos-latest` is a moving alias whose architecture GitHub has already
+changed once — a future migration could silently start producing an x64 runtime under an
+`aarch64` filename. The `build` matrix pins explicit versioned labels for all three
+platforms, and each job asserts its architecture before packaging (`uname -m` on Linux and
+macOS, `PROCESSOR_ARCHITECTURE` on Windows), failing if it does not match the artifact name
+it is about to produce. Pinned labels are reviewed when GitHub deprecates an image, which
+is a deliberate, visible action rather than a silent change.
 
 `shellcheck` refuses zsh and is not a zsh linter, so `md2pdf-install.zsh`,
 `markdownToPdf` and `mkicns.zsh` get `zsh -n`, a syntax check only. `md2pdf-install.cmd`
@@ -304,6 +411,11 @@ Assertions:
 - the fat-jar is present
 - the launcher exists: `.desktop` on Linux, an executable
   `Contents/MacOS/markdownToPdf` on macOS, a `.lnk` or stub on Windows
+- the runtime's `javafx.controls` module version equals the `javafx.version` property
+- the runner architecture matches the artifact name
+- macOS only: `CFBundleExecutable` names an existing executable file, the version keys
+  match `${revision}`, `CFBundleIdentifier` is present, and
+  `codesign --verify --deep --strict` passes
 
 ### Smoke tests
 
@@ -338,15 +450,24 @@ Much smaller now that there is no JDK detection:
 or Windows runtimes — and becomes a release driver:
 
 1. Preconditions: clean tree, on `main`, `${revision}` is not a `-SNAPSHOT`, `gh`
-   authenticated.
-2. `mvn -Prelease clean site deploy` — the Maven Central publication of `lib`, unchanged.
-3. Tag `v<version>` and push it.
-4. `gh run watch` the CI run for that commit until the three `build` jobs pass.
-5. `gh run download` the three platform zips from that run.
-6. Sanity-check them: all three present, non-trivial size, expected top-level entries.
-7. Generate `SHA256SUMS` over the assets.
-8. `gh release create v<version>` with the three zips, the checksums, `lib`'s javadoc jar,
+   authenticated, `HEAD` pushed.
+2. Locate the CI run for `HEAD` and `gh run watch` it until all three `build` jobs pass.
+   Abort if the commit has no run — releasing an untested commit is the failure mode this
+   ordering exists to prevent.
+3. `gh run download` the three platform zips from that run.
+4. Sanity-check them: all three present, non-trivial size, expected top-level entries,
+   `SHA256SUMS` generated over the assets.
+5. `mvn -Prelease clean site deploy` — the Maven Central publication of `lib`.
+6. Tag `v<version>` and push it.
+7. `gh release create v<version>` with the three zips, the checksums, `lib`'s javadoc jar,
    and the bare fat-jar.
+
+**The ordering is the point.** Deploying to Maven Central before the platform artifacts
+exist and have been verified means a failed macOS signing or Windows packaging step leaves
+the library published, and possibly a tag pushed, with no complete set of GUI downloads —
+and Maven Central publication cannot be undone. Every fallible and reversible step
+therefore runs first; the irreversible one runs only once all three artifacts are in hand
+and checked.
 
 Publishing the bare `MarkdownToPdf-<ver>-jar-with-dependencies.jar` is deliberate. Removing
 bring-your-own-JDK from the zips leaves users who already have a Liberica Full JDK with no
@@ -366,6 +487,14 @@ gives up that guarantee.
 
 - **Liberica Full may not ship `jmods/`.** Everything rests on it and `jlink` cannot work
   without it. Verifying this is implementation step one.
+- **Downgrading JavaFX 23.0.2 → 21.x may break compilation.** The extent is unknown until
+  the version is changed and the GUI recompiled. If the code turns out to depend
+  substantially on post-21 JavaFX APIs, the alternative is a Liberica Full JDK whose
+  bundled JavaFX is new enough — which changes the runtime baseline this design is built
+  on. Establishing this early is why it precedes the packaging work.
+- **Linux host libraries are outside our control.** GTK 3 and the WebKit dependencies must
+  be present on the user's machine. The preflight check reports them but cannot install
+  them, so some Linux users will still hit a failure the zip cannot prevent.
 - **The curated module set may be incomplete.** A missing module surfaces only when a user
   reaches the feature that needs it. The two smoke tests are the mitigation; anything they
   miss is found by use.
@@ -384,14 +513,20 @@ gives up that guarantee.
 
 ## Implementation order
 
-1. Verify Liberica Full ships `jmods/`.
-2. `jlink` and the new layout on Linux only; get both smoke tests green locally.
-3. Linux installer and launcher; failure tests green locally.
-4. macOS and Windows packaging and installers.
-5. The CI workflow.
-6. `release.sh`.
-7. Documentation — both READMEs currently document JDK requirements that will cease to
-   exist.
+1. Verify Liberica Full ships `jmods/`, and record the JavaFX version it bundles.
+2. Pin `javafx.version` to that version and recompile the GUI. Resolve any post-21 API
+   usage. This gates everything else: if it cannot be resolved, the runtime baseline
+   changes and the design needs revisiting before any packaging work is done.
+3. `jlink` and the new layout on Linux only; get both smoke tests green locally.
+4. Linux installer and launcher, including the host-library preflight; failure tests green
+   locally.
+5. macOS packaging: bundle layout, the `Info.plist` fixes, and signing.
+6. Windows packaging and installer.
+7. The CI workflow.
+8. `release.sh`.
+9. Documentation — both READMEs currently document JDK requirements that will cease to
+   exist, and must gain the Linux prerequisites.
 
-Steps 1–3 are the risky ones and are all verifiable on a Linux workstation, which keeps
-the push-and-pray CI cycles for the end.
+Steps 1–4 are the risky ones and are all verifiable on a Linux workstation, which keeps the
+push-and-pray CI cycles for the end. Steps 1–2 are cheap and can invalidate the rest, so
+they come first.
