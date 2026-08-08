@@ -46,8 +46,21 @@ check_host_libraries() {
 
 # ── existing installation ───────────────────────────────────────────
 resolve_dest() {
-  if [ -d "$DEST" ] && [ "$(cd "$SRC" && pwd -P)" = "$(cd "$DEST" && pwd -P)" ]; then
-    die "$APP_NAME is already installed at $DEST and this script is running from there — nothing to do."
+  local source_real destination_real destination_parent
+  source_real="$(cd "$SRC" && pwd -P)"
+  if [ -d "$DEST" ]; then
+    destination_real="$(cd "$DEST" && pwd -P)"
+  else
+    if ! destination_parent="$(cd -- "$(dirname -- "$DEST")" 2>/dev/null && pwd -P)"; then
+      die "Cannot resolve the parent directory of destination $DEST."
+    fi
+    destination_real="$destination_parent/$(basename -- "$DEST")"
+  fi
+
+  # Refuse both installing onto the source and installing across either side of it. In
+  # particular, an existing ancestor would be removed by rm -rf before the copy starts.
+  if [[ "$source_real/" == "$destination_real/"* || "$destination_real/" == "$source_real/"* ]]; then
+    die "Source $source_real and destination $DEST overlap — refusing to remove or copy recursively."
   fi
   [ -d "$DEST" ] || return 0
 

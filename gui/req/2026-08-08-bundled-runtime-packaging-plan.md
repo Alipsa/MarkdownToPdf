@@ -10,6 +10,12 @@
 
 **Spec:** `gui/req/2026-08-08-bundled-runtime-packaging-design.md`. Read it before starting. Where this plan and the spec disagree, the spec is right and the plan has a bug — say so rather than guessing.
 
+**Status (2026-08-09):** The implementation tasks and CI acceptance tests are complete. The
+remaining unchecked steps are manual desktop checks or the irreversible release operation;
+see **Self-Review**. Task 10 Step 4 was rerun with `javafx.web`: all three platform
+verification jobs failed with `FAIL: javafx.web is not in the runtime`, after which the
+temporary change was removed and the restored branch passed CI.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section.
@@ -108,7 +114,7 @@ This gates every other task. If the GUI cannot compile against JavaFX 21.0.12, t
 **Interfaces:**
 - Produces: `javafx.version` = `21.0.12`, relied on by the CI assertion in Task 10.
 
-- [ ] **Step 1: Confirm the runtime's JavaFX version**
+- [x] **Step 1: Confirm the runtime's JavaFX version**
 
 ```bash
 /home/per/.sdkman/candidates/java/21.0.12.fx-librca/bin/java --list-modules | grep '^javafx'
@@ -127,7 +133,7 @@ javafx.web@21.0.12
 
 What matters is that `javafx.controls`, `javafx.swing` and `javafx.web` are present at `21.0.12` — those are the three the module set requests by name. Assert on the names and the version, not on the count; the count is incidental and would change if BellSoft added or dropped an unrelated module. If the version is not `21.0.12`, **stop and report** — the rest of this plan is built on that number.
 
-- [ ] **Step 2: Change the property and delete the stale comment**
+- [x] **Step 2: Change the property and delete the stale comment**
 
 In `gui/pom.xml`, replace:
 
@@ -143,7 +149,7 @@ with:
     <javafx.version>21.0.12</javafx.version>
 ```
 
-- [ ] **Step 3: Compile and run the full build**
+- [x] **Step 3: Compile and run the full build**
 
 ```bash
 export JAVA_HOME=/home/per/.sdkman/candidates/java/21.0.12.fx-librca
@@ -163,7 +169,7 @@ mvn -q -pl gui org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-clas
 ```
 Expected: the window opens, all three tabs render, the Markdown preview shows HTML. Close it. A clean compile does not prove the runtime behaviour survived a JavaFX downgrade; this is the only check that does.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gui/pom.xml
@@ -185,7 +191,7 @@ git commit -m "build: pin javafx.version to 21.0.12 to match the bundled runtime
 - Produces: `gui/target/MarkdownToPdf-<version>.jar` with a manifest `Class-Path` of `lib/<name>.jar` entries, and `gui/target/lib/` containing exactly those files.
 - Produces: `check-lib-classpath.sh <jar> <libdir>` — exit 0 on agreement, non-zero with a message otherwise. Used by Tasks 5, 9 and 10.
 
-- [ ] **Step 1: Write the failing assertion script**
+- [x] **Step 1: Write the failing assertion script**
 
 Create `.github/scripts/check-lib-classpath.sh`:
 
@@ -254,7 +260,7 @@ printf 'OK: %s jars, Class-Path consistent\n' "${#entries[@]}"
 chmod +x .github/scripts/check-lib-classpath.sh
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 mvn -q install -DskipTests
@@ -262,7 +268,7 @@ mvn -q install -DskipTests
 ```
 Expected: FAIL — the `Class-Path` entries are bare jar names, not `lib/…`, so the first check trips ("Class-Path entry not under lib/"). `gui/target/lib` does not exist yet either.
 
-- [ ] **Step 3: Add the plugin version to root pluginManagement**
+- [x] **Step 3: Add the plugin version to root pluginManagement**
 
 `maven-dependency-plugin` is not currently managed in `pom.xml`. Inside `<build><pluginManagement><plugins>`, beside the other managed plugins:
 
@@ -274,7 +280,7 @@ Expected: FAIL — the `Class-Path` entries are bare jar names, not `lib/…`, s
         </plugin>
 ```
 
-- [ ] **Step 4: Configure copy-dependencies and the classpath prefix in `gui/pom.xml`**
+- [x] **Step 4: Configure copy-dependencies and the classpath prefix in `gui/pom.xml`**
 
 Add to `<build><plugins>`:
 
@@ -308,7 +314,7 @@ And in the existing `maven-jar-plugin` `<manifest>` block, after `<addClasspath>
               <classpathPrefix>lib/</classpathPrefix>
 ```
 
-- [ ] **Step 5: Delete the fatjar profile**
+- [x] **Step 5: Delete the fatjar profile**
 
 Remove the entire `<profiles>…</profiles>` block from `gui/pom.xml` (lines 255-333, the `fatjar` profile and the `maven-shade-plugin` inside it). It is the only profile in that file.
 
@@ -320,7 +326,7 @@ rm -f gui/dependency-reduced-pom.xml
 
 `rm`, not `git rm`: the file is matched by `dependency-reduced-pom.xml` in `.gitignore` and has never been tracked, so `git rm` fails. Leave the ignore rule in place — it costs nothing and removing it is a separate decision.
 
-- [ ] **Step 6: Drop -Pfatjar from build.sh**
+- [x] **Step 6: Drop -Pfatjar from build.sh**
 
 In `gui/build.sh`, change the last line from `mvn -Pfatjar clean package || exit 1` to:
 
@@ -328,7 +334,7 @@ In `gui/build.sh`, change the last line from `mvn -Pfatjar clean package || exit
 mvn clean package || exit 1
 ```
 
-- [ ] **Step 7: Rebuild and run the assertion script**
+- [x] **Step 7: Rebuild and run the assertion script**
 
 ```bash
 mvn -q install -DskipTests
@@ -336,21 +342,21 @@ mvn -q install -DskipTests
 ```
 Expected, verbatim: `OK: 45 jars, Class-Path consistent`. This exact configuration and this exact script were run against this repo on 2026-08-08 and produced that line — if you get anything else, the difference is in what you changed, not in the approach. The script derives the count rather than hardcoding it, so a later dependency change does not break the check.
 
-- [ ] **Step 8: Verify the app still runs from the jar**
+- [x] **Step 8: Verify the app still runs from the jar**
 
 ```bash
 "$JAVA_HOME/bin/java" -jar gui/target/MarkdownToPdf-0.1.1-SNAPSHOT.jar
 ```
 Expected: the window opens. This must run on a **JavaFX-bundled JDK 21** — `$JAVA_HOME` above is one. It will not run on a plain OpenJDK, and that is correct: JavaFX is `provided` scope and deliberately absent from `lib/`.
 
-- [ ] **Step 9: Full build**
+- [x] **Step 9: Full build**
 
 ```bash
 mvn verify
 ```
 Expected: BUILD SUCCESS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add pom.xml gui/pom.xml gui/build.sh .github/scripts/check-lib-classpath.sh
@@ -375,7 +381,7 @@ A hand-curated module set makes "does it actually run" the central risk. These t
 
 **They are compiled, not run from source.** The bundled runtime has no `jdk.compiler`, so `java EngineSmoke.java` on it fails with `InternalError: Module jdk.compiler not in boot Layer`. Compiling with the full JDK and running the `.class` files on the bundled runtime tests exactly what needed testing — the *runtime* module set — without putting a compiler in every user's download.
 
-- [ ] **Step 1: Write the engine smoke test**
+- [x] **Step 1: Write the engine smoke test**
 
 Create `.github/scripts/EngineSmoke.java`:
 
@@ -407,7 +413,7 @@ public class EngineSmoke {
 }
 ```
 
-- [ ] **Step 2: Write the toolkit smoke test**
+- [x] **Step 2: Write the toolkit smoke test**
 
 Create `.github/scripts/ToolkitSmoke.java`:
 
@@ -457,7 +463,7 @@ public class ToolkitSmoke {
 
 `Runtime.halt` rather than `System.exit`: the FX toolkit keeps non-daemon threads alive, and a shutdown hook race here would turn a passing test into a hung CI job.
 
-- [ ] **Step 3: Write the compile helper**
+- [x] **Step 3: Write the compile helper**
 
 Create `.github/scripts/compile-smoke.sh`:
 
@@ -517,7 +523,7 @@ chmod +x .github/scripts/compile-smoke.sh
 
 No `--add-modules` is needed to compile `ToolkitSmoke` — in a JavaFX-bundled image the `javafx.*` modules are already roots. If `javafx.scene.web` is not found, the JDK is a plain one, not a missing flag.
 
-- [ ] **Step 4: Run both against the current build**
+- [x] **Step 4: Run both against the current build**
 
 ```bash
 mvn -q install -DskipTests
@@ -530,7 +536,7 @@ Expected: `EngineSmoke: OK (~1600 bytes)` — preceded by three `SLF4J(W): No SL
 
 If `xvfb-run` is not installed: `sudo apt-get install -y xvfb`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github/scripts/EngineSmoke.java .github/scripts/ToolkitSmoke.java .github/scripts/compile-smoke.sh
@@ -548,7 +554,7 @@ git commit -m "test: add engine and JavaFX toolkit smoke tests"
 - Produces: `createApp.sh <linux|macos|windows>`, failing with a usage message on anything else.
 - Produces: shell functions used by later tasks — `app_version()` (echoes `${revision}` read from the built jar manifest), `build_runtime <output-dir>` (creates the jlink image), `require_arch <expected>`.
 
-- [ ] **Step 1: Write the new createApp.sh skeleton**
+- [x] **Step 1: Write the new createApp.sh skeleton**
 
 Replace the whole of `gui/createApp.sh`:
 
@@ -685,7 +691,7 @@ echo "Building MarkdownToPdf $VERSION for $ARCH_LABEL"
 chmod +x gui/createApp.sh
 ```
 
-- [ ] **Step 2: Add a temporary runtime build call and run it**
+- [x] **Step 2: Add a temporary runtime build call and run it**
 
 Append to `gui/createApp.sh` for this step only:
 
@@ -700,7 +706,7 @@ mvn -q install -DskipTests
 ```
 Expected: a `gui/target/runtime` directory, built in well under a minute.
 
-- [ ] **Step 3: Assert the runtime is correct and complete**
+- [x] **Step 3: Assert the runtime is correct and complete**
 
 ```bash
 gui/target/runtime/bin/java -version
@@ -736,11 +742,11 @@ If `EngineSmoke` throws `NoClassDefFoundError` on a `java.*` class or `ToolkitSm
 
 Note the `cp` above: `MarkdownToPdf.jar` beside `lib/` is what the manifest `Class-Path` expects. Task 5 makes packaging do this properly.
 
-- [ ] **Step 4: Remove the temporary call**
+- [x] **Step 4: Remove the temporary call**
 
 Delete the two lines added in Step 2. Task 5 calls `build_runtime` from the real packaging path.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gui/createApp.sh
@@ -764,7 +770,7 @@ git commit -m "build: add jlink runtime construction to createApp.sh"
 - Produces: `verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version>` — every post-install assertion for that platform, exit 0 on success. All three arguments are required. Used by Tasks 6, 7, 8 and 10.
 - Produces: `verify-launcher.sh <linux|macos|windows> <install-dir>` — starts the installed launcher, asserts the app is still running after `MD2PDF_LAUNCH_SETTLE` (default 10) seconds, stops it. Called by `verify-install.sh` as its final step; no other caller needs to invoke it directly.
 
-- [ ] **Step 1: Write the verification script (it fails first)**
+- [x] **Step 1: Write the verification script (it fails first)**
 
 Create `.github/scripts/verify-install.sh`:
 
@@ -1015,14 +1021,14 @@ chmod +x .github/scripts/verify-launcher.sh
 
 This runs the real GUI, so it needs the same display the toolkit smoke test does — `xvfb-run` on Linux, nothing extra on macOS or Windows. That is not a new requirement: `ToolkitSmoke` already constructs a `WebView` on all three runners, so any platform where this cannot start is one where the existing smoke test would already have failed.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 .github/scripts/verify-install.sh linux "$HOME/.local/share/MarkdownToPdf" 21.0.12
 ```
 Expected: FAIL — "nothing installed at …". Nothing packages or installs yet.
 
-- [ ] **Step 3: Rewrite run.sh**
+- [x] **Step 3: Rewrite run.sh**
 
 Replace the whole of `gui/src/main/assembly/linux/run.sh`:
 
@@ -1036,11 +1042,11 @@ exec "$DIR/runtime/bin/java" -Xmx8g -jar "$DIR/MarkdownToPdf.jar"
 
 Everything else that was in this file — `-version` parsing, the sdkman recovery loop, `md2pdf.env`, `MD2PDF_JAVA_HOME`, the newest-matching-jar search — is deleted, not moved.
 
-- [ ] **Step 4: Trim createLauncher.sh**
+- [x] **Step 4: Trim createLauncher.sh**
 
 In `gui/src/main/assembly/linux/createLauncher.sh`, delete the `chmod +x run.sh` line — the installer now owns execute bits for the whole tree, and a launcher script should not be quietly fixing up the install. Everything else in the file stays, including `set -euo pipefail` and the non-fatal Desktop-symlink handling.
 
-- [ ] **Step 5: Add the packaging body to createApp.sh**
+- [x] **Step 5: Add the packaging body to createApp.sh**
 
 Append to `gui/createApp.sh`:
 
@@ -1082,7 +1088,7 @@ echo "Built $ZIP"
 
 `make_zip` (Task 4) is used rather than a bare `zip` call because of the symlink and Git Bash constraints described there.
 
-- [ ] **Step 6: Build and inspect the zip**
+- [x] **Step 6: Build and inspect the zip**
 
 ```bash
 mvn -q install -DskipTests
@@ -1094,7 +1100,7 @@ Expected: top-level entries `MarkdownToPdf/` and `md2pdf-install.sh`; `MarkdownT
 
 The `check-lib-classpath.sh` call inside the script must have printed its `OK:` line. If it did not run, the `find` produced nothing and the layout is wrong.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gui/createApp.sh gui/src/main/assembly/linux \
@@ -1115,7 +1121,7 @@ git commit -m "build: assemble the linux archive with a bundled runtime"
 - Produces: an installer that takes an optional target directory, defaults to `${XDG_DATA_HOME:-$HOME/.local/share}/MarkdownToPdf`, is non-interactive-safe, and exits non-zero if the launcher is not created.
 - Produces: `test-install-failures.sh` — runs on Linux only, used by Task 10's `install-failures` job.
 
-- [ ] **Step 1: Write the failure-path test first**
+- [x] **Step 1: Write the failure-path test first**
 
 Create `.github/scripts/test-install-failures.sh`:
 
@@ -1184,7 +1190,7 @@ printf '\nPASS: installer failure paths\n'
 chmod +x .github/scripts/test-install-failures.sh
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 rm -rf /tmp/md2pdf-unpack && mkdir -p /tmp/md2pdf-unpack
@@ -1193,7 +1199,7 @@ unzip -q gui/target/md2pdf-*-linux-x64.zip -d /tmp/md2pdf-unpack
 ```
 Expected: FAIL on the first case — the current installer still contains the JDK-detection flow and will not behave as asserted.
 
-- [ ] **Step 3: Rewrite the installer**
+- [x] **Step 3: Rewrite the installer**
 
 Replace the whole of `gui/src/main/assembly/install.sh` (461 lines, all of it):
 
@@ -1302,7 +1308,7 @@ resolve_dest
 install_app
 ```
 
-- [ ] **Step 4: Repackage and run the failure tests**
+- [x] **Step 4: Repackage and run the failure tests**
 
 ```bash
 mvn -q install -DskipTests
@@ -1313,7 +1319,7 @@ unzip -q gui/target/md2pdf-*-linux-x64.zip -d /tmp/md2pdf-unpack
 ```
 Expected: four `ok:` lines and `PASS: installer failure paths`.
 
-- [ ] **Step 5: Run a real install and verify it**
+- [x] **Step 5: Run a real install and verify it**
 
 ```bash
 rm -rf "$HOME/.local/share/MarkdownToPdf"
@@ -1329,7 +1335,7 @@ bash "$HOME/.local/share/MarkdownToPdf/run.sh"
 ```
 Expected: the window opens on the bundled runtime, with no JDK involved. Close it.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gui/src/main/assembly/install.sh .github/scripts/test-install-failures.sh
@@ -1357,7 +1363,7 @@ Must be done on an Apple Silicon Mac. On Apple Silicon the kernel refuses to exe
 - Produces: `gui/target/md2pdf-<version>-macos-aarch64.zip`.
 - Produces: `sign-app.sh <app-bundle>` — signs every Mach-O inside-out, then the bundle.
 
-- [ ] **Step 1: Turn Info.plist into a template**
+- [x] **Step 1: Turn Info.plist into a template**
 
 Replace `gui/src/main/assembly/mac/Info.plist`:
 
@@ -1403,7 +1409,7 @@ becomes
     <!-- Bump here and in gui/pom.xml <md2pdf.version> when releasing -->
 ```
 
-- [ ] **Step 2: Rewrite the macOS launcher**
+- [x] **Step 2: Rewrite the macOS launcher**
 
 Replace `gui/src/main/assembly/mac/markdownToPdf`:
 
@@ -1425,7 +1431,7 @@ It no longer sources `~/.zshrc`, reads `md2pdf.env`, or shows an `osascript` dia
 git rm gui/src/main/assembly/mac/run.zsh
 ```
 
-- [ ] **Step 3: Write the entitlements plist**
+- [x] **Step 3: Write the entitlements plist**
 
 Create `gui/src/main/assembly/mac/entitlements.plist`. Unused today; committed because notarization requires the hardened runtime, and a JVM under hardened runtime does not start without these.
 
@@ -1443,7 +1449,7 @@ Create `gui/src/main/assembly/mac/entitlements.plist`. Unused today; committed b
 </plist>
 ```
 
-- [ ] **Step 4: Write the signing script**
+- [x] **Step 4: Write the signing script**
 
 Create `gui/src/main/assembly/mac/sign-app.sh`:
 
@@ -1498,7 +1504,7 @@ chmod +x gui/src/main/assembly/mac/sign-app.sh
 
 Note the two branches are not one command with a swapped argument: ad-hoc signing may use `--deep`, Developer ID signing must not, because Apple discourages `--deep` for distribution. This script signs individually in both cases, which is correct for both.
 
-- [ ] **Step 5: Write the macOS installer**
+- [x] **Step 5: Write the macOS installer**
 
 Create `gui/src/main/assembly/mac/md2pdf-install.zsh`:
 
@@ -1571,7 +1577,7 @@ if (( ! NONINTERACTIVE )); then
 fi
 ```
 
-- [ ] **Step 6: Add the macos case to createApp.sh**
+- [x] **Step 6: Add the macos case to createApp.sh**
 
 In `gui/createApp.sh`, add to the `case "$PLATFORM" in` block:
 
@@ -1606,7 +1612,7 @@ In `gui/createApp.sh`, add to the `case "$PLATFORM" in` block:
     ;;
 ```
 
-- [ ] **Step 7: Build, install and verify on a Mac**
+- [x] **Step 7: Build, install and verify on a Mac**
 
 ```bash
 mvn -q install -DskipTests
@@ -1623,7 +1629,7 @@ Expected: `ok: launcher started …` then `PASS: macos install at …`, includin
 
 Open `~/Applications` in Finder and double-click MarkdownToPdf. Expected: it launches, with the correct Dock icon and name. `verify-launcher.sh` already ran `Contents/MacOS/<CFBundleExecutable>` directly, so what is left for this step is everything Launch Services adds on top: that Finder resolves the bundle at all, that Gatekeeper admits it, and that the icon and Dock name are right. None of those are reachable from a shell.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add gui/createApp.sh gui/src/main/assembly/mac pom.xml
@@ -1644,7 +1650,7 @@ git commit -m "feat: build a signed macOS bundle with a bundled runtime"
 **Interfaces:**
 - Produces: `gui/target/md2pdf-<version>-windows-x64.zip`.
 
-- [ ] **Step 1: Rewrite run.cmd**
+- [x] **Step 1: Rewrite run.cmd**
 
 Replace `gui/src/main/assembly/win/run.cmd`:
 
@@ -1662,7 +1668,7 @@ start "" "%DIR%runtime\bin\javaw.exe" -Xmx8g -jar "%DIR%MarkdownToPdf.jar"
 
 `%~dp0` already ends in a backslash, so `%DIR%runtime\…` is correct and `%DIR%\runtime\…` would not be.
 
-- [ ] **Step 2: Rewrite createShortcut.ps1**
+- [x] **Step 2: Rewrite createShortcut.ps1**
 
 Replace `gui/src/main/assembly/win/createShortcut.ps1`:
 
@@ -1691,7 +1697,7 @@ $shortcut.IconLocation = "$scriptDir\MarkdownToPdf-rounded.ico, 0"
 $shortcut.Save()
 ```
 
-- [ ] **Step 3: Write the Windows installer**
+- [x] **Step 3: Write the Windows installer**
 
 Create `gui/src/main/assembly/win/md2pdf-install.cmd`. Native `cmd` because PowerShell is often restricted or disabled on corporate Windows machines, and an installer that cannot run is worse than an ugly one.
 
@@ -1788,7 +1794,7 @@ echo [INSTALL] Run with: %DEST%\run.cmd
 exit /b 0
 ```
 
-- [ ] **Step 4: Add the windows case to createApp.sh**
+- [x] **Step 4: Add the windows case to createApp.sh**
 
 ```bash
   windows)
@@ -1803,7 +1809,7 @@ exit /b 0
     ;;
 ```
 
-- [ ] **Step 5: Build and install on Windows**
+- [x] **Step 5: Build and install on Windows**
 
 In Git Bash. `createApp.sh` needs `unzip` and either `zip` or `7z`, none of which Git Bash ships by default — `require_tools` will tell you which is missing before it builds anything.
 
@@ -1825,7 +1831,7 @@ md2pdf-install.cmd
 ```
 Expected: exit 0, a `MarkdownToPdf.lnk` on the Desktop, and the app starts from it with **no console window**.
 
-- [ ] **Step 6: Verify the install**
+- [x] **Step 6: Verify the install**
 
 Back in Git Bash:
 
@@ -1846,7 +1852,7 @@ md2pdf-install.cmd
 ```
 Expected: the `[WARN]` line, a `MarkdownToPdf.cmd` stub on the Desktop, exit 0 — and double-clicking the stub starts the app.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gui/createApp.sh gui/src/main/assembly/win
@@ -1868,7 +1874,7 @@ For users who already have a JavaFX-bundled JDK and do not want a 100 MB downloa
 - Produces: `gui/target/md2pdf-<version>-no-jdk.zip` containing `MarkdownToPdf.jar`, `lib/`, `README.txt`.
 - Produces: `verify-no-jdk.sh <unpacked-dir> <java-binary>`.
 
-- [ ] **Step 1: Write the verification script**
+- [x] **Step 1: Write the verification script**
 
 Create `.github/scripts/verify-no-jdk.sh`:
 
@@ -1934,14 +1940,14 @@ printf '\nPASS: no-jdk archive at %s\n' "$DIR"
 chmod +x .github/scripts/verify-no-jdk.sh
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 .github/scripts/verify-no-jdk.sh /tmp/md2pdf-nojdk "$JAVA_HOME/bin/java"
 ```
 Expected: FAIL — the directory does not exist.
 
-- [ ] **Step 3: Write README.txt**
+- [x] **Step 3: Write README.txt**
 
 Create `gui/src/main/assembly/no-jdk/README.txt`:
 
@@ -1974,7 +1980,7 @@ bundle their own runtime and need nothing installed:
     md2pdf-<version>-windows-x64.zip
 ```
 
-- [ ] **Step 4: Add the no-jdk case to createApp.sh**
+- [x] **Step 4: Add the no-jdk case to createApp.sh**
 
 Add `no-jdk` to the platform `case` at the top of the script:
 
@@ -2000,7 +2006,7 @@ And add the packaging case:
     ;;
 ```
 
-- [ ] **Step 5: Build and verify**
+- [x] **Step 5: Build and verify**
 
 ```bash
 mvn -q install -DskipTests
@@ -2012,7 +2018,7 @@ du -h gui/target/md2pdf-*-no-jdk.zip
 ```
 Expected: roughly 15 MB, then `PASS: no-jdk archive at …`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gui/createApp.sh gui/src/main/assembly/no-jdk .github/scripts/verify-no-jdk.sh
@@ -2031,7 +2037,7 @@ git commit -m "feat: add the runtime-free no-jdk archive"
 - Consumes: every script from Tasks 2, 3, 5, 6 and 9; `createApp.sh` from Tasks 4-9.
 - Produces: five uploaded artifacts per run, named exactly as the file basenames — consumed by `release.sh` in Task 11.
 
-- [ ] **Step 1: Pin the JDK version**
+- [x] **Step 1: Pin the JDK version**
 
 Create `.github/versions.env`:
 
@@ -2041,7 +2047,7 @@ LIBERICA_VERSION=21.0.12
 
 One `KEY=value` line, no export, no comments — it is appended verbatim to `$GITHUB_ENV`.
 
-- [ ] **Step 2: Write the workflow**
+- [x] **Step 2: Write the workflow**
 
 Create `.github/workflows/ci.yml`:
 
@@ -2220,7 +2226,7 @@ jobs:
           .github/scripts/test-install-failures.sh "$RUNNER_TEMP/unpack"
 ```
 
-- [ ] **Step 3: Push the branch and watch the run**
+- [x] **Step 3: Push the branch and watch the run**
 
 ```bash
 git add .github/versions.env .github/workflows/ci.yml
@@ -2236,7 +2242,7 @@ The likely first-run failures, in order of probability:
 - **Toolkit smoke flaky on Windows.** If it proves unstable across several runs, restrict the toolkit smoke to Linux under Xvfb rather than deleting it — a broken `javafx.web` native library is exactly the failure this change could introduce.
 - **`setup-java` cannot resolve `21.0.12`.** Check the available Liberica versions and update `.github/versions.env`; do not fall back to a bare major, which defeats the pinning.
 
-- [ ] **Step 4: Deliberately break something and confirm CI catches it**
+- [x] **Step 4: Deliberately break something and confirm CI catches it**
 
 This is the acceptance test for whether the CI work was worth doing. On a throwaway commit,
 remove the explicit leaf module `javafx.web` from `MODULES` in `createApp.sh` and push. Do not
@@ -2249,7 +2255,7 @@ tries to load `WebView`. A green run after removing `jdk.crypto.ec` would not ha
 anything: that provider is lazy and neither smoke test opens a socket. Revert the throwaway
 commit after the failure is observed.
 
-- [ ] **Step 5: Commit any fixes**
+- [x] **Step 5: Commit any fixes**
 
 ```bash
 git add -A
@@ -2267,7 +2273,7 @@ git commit -m "ci: fix the issues surfaced by the first run"
 **Interfaces:**
 - Consumes: the five CI artifacts from Task 10, by name.
 
-- [ ] **Step 1: Guard the GUI against Maven Central publication**
+- [x] **Step 1: Guard the GUI against Maven Central publication**
 
 The `release` profile is on the aggregator parent and `gui` is in `<modules>`, so a bare `mvn -Prelease deploy` at the root hands the GUI application to the central-publishing plugin. The command in `release.sh` scopes it to `-pl lib -am`; this makes that unbypassable by hand.
 
@@ -2285,7 +2291,7 @@ In `gui/pom.xml`, add to `<build><plugins>`:
       </plugin>
 ```
 
-- [ ] **Step 2: Rewrite release.sh**
+- [x] **Step 2: Rewrite release.sh**
 
 ```bash
 #!/usr/bin/env bash
@@ -2451,7 +2457,7 @@ printf '\nReleased %s\n' "$VERSION"
 chmod +x release.sh
 ```
 
-- [ ] **Step 3: Dry-run everything before the irreversible step**
+- [x] **Step 3: Dry-run everything before the irreversible step**
 
 Do not run this against a real release. Check the parts that can be checked:
 
@@ -2470,14 +2476,14 @@ Expected: exit 1 at the **first unmet precondition**, with nothing downloaded, t
 
 To exercise the snapshot check specifically without switching branches, temporarily comment out the `not on main` check, re-run, and restore it.
 
-- [ ] **Step 4: Confirm the deploy scope**
+- [x] **Step 4: Confirm the deploy scope**
 
 ```bash
 mvn -Prelease -pl lib -am clean install -DskipTests
 ```
 Expected: exactly two modules in the reactor — `md2pdf-parent` and `md2pdf`. If `MarkdownToPdf` appears, the `-pl` scoping is wrong.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add release.sh gui/pom.xml
@@ -2494,7 +2500,7 @@ git commit -m "release: drive releases from CI artifacts rather than local build
 - Modify: `release.md`, `gui/release.md`
 - Modify: `install.sh` (root)
 
-- [ ] **Step 1: Update the root README**
+- [x] **Step 1: Update the root README**
 
 Find every statement of a JDK requirement and replace it. The platform archives need no JDK; the `-no-jdk` archive needs a JavaFX-bundled JDK 21+.
 
@@ -2534,7 +2540,7 @@ Verify a download against `SHA256SUMS` from the same release:
     Windows: certutil -hashfile <file> SHA256   (compare the line by eye)
 ```
 
-- [ ] **Step 2: Update gui/readme.md**
+- [x] **Step 2: Update gui/readme.md**
 
 Same substance as Step 1 for the GUI-specific parts, plus the release recovery procedure, which needs to exist somewhere it can be found on a bad day:
 
@@ -2557,11 +2563,11 @@ from a clean checkout: nothing in steps 3-5 is built locally.
 
 Also remove any remaining instruction to build with `-P fatjar`, and replace it with `./gui/createApp.sh <platform>`.
 
-- [ ] **Step 3: Update the release docs**
+- [x] **Step 3: Update the release docs**
 
 In `release.md` and `gui/release.md`, replace the manual upload instructions with `./release.sh`, and remove the references to `MarkdownToPdf-<version>-jar-with-dependencies.jar`, which no longer exists.
 
-- [ ] **Step 4: Update the root install.sh**
+- [x] **Step 4: Update the root install.sh**
 
 It currently builds from source, calls `createApp.sh` with no argument and unzips `md2pdf-gui.zip`, none of which exist any more. Replace with:
 
@@ -2590,10 +2596,10 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-$LABEL.zip" -d "$WORK"
 cd "$WORK"
-MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}"
+"${INSTALLER[@]}"
 ```
 
-- [ ] **Step 5: Sweep for stale references**
+- [x] **Step 5: Sweep for stale references**
 
 ```bash
 grep -rn "jar-with-dependencies\|fatjar\|MD2PDF_JAVA_HOME\|md2pdf.env\|md2pdf-gui.zip\|run.zsh" \
@@ -2602,7 +2608,7 @@ grep -rn "jar-with-dependencies\|fatjar\|MD2PDF_JAVA_HOME\|md2pdf.env\|md2pdf-gu
 ```
 Expected: no output. Design documents under `gui/req/` legitimately discuss what was removed; everything else must not.
 
-- [ ] **Step 6: Final full build and commit**
+- [x] **Step 6: Final full build and commit**
 
 ```bash
 mvn spotless:apply
@@ -2622,17 +2628,26 @@ git commit -m "docs: document the bundled-runtime downloads, Linux prerequisites
 - **`VERSION` comes from the built jar's manifest**, not from `mvn help:evaluate`, inside `createApp.sh`. An archive can then never be named for a different version than the jar it contains. The CI workflow does use `help:evaluate`, because it needs the version before anything is built.
 - **`verify-install.sh` takes the expected JavaFX version as an argument** rather than reading `gui/pom.xml` itself, so it stays runnable against an installed tree with no source checkout nearby.
 
-**What was actually executed while writing this plan**, on the maintainer's Linux machine against this repo:
+**Execution status as of 2026-08-09:**
 
-- The Task 2 POM changes were applied and `mvn install` run; `check-lib-classpath.sh` passed against the result (45 jars).
-- `EngineSmoke.java` and `ToolkitSmoke.java` were compiled against the produced jar and `EngineSmoke` was run (~1.6 KB PDF, pass).
-- A `jlink` image **without** `jdk.compiler` was built and confirmed to fail source-file mode with `InternalError: Module jdk.compiler not in boot Layer`, and to run a precompiled class fine. This is why Task 3 compiles rather than running from source.
-- `maven-dependency-plugin:3.8.1:build-classpath` and the pinned `maven-help-plugin:3.5.1:evaluate` invocations were confirmed to work, as was prefix resolution through `pluginManagement` for `spotless:apply` (3.9.0) and `javadoc:jar` (3.12.0).
-- Asset sizes were measured: the javadoc jar is ~130 KB, which is why the release sanity check uses per-asset floors.
-
-The POMs were then reverted, so the repo is unchanged — but Tasks 2 and 3 are known-good, not merely plausible. Everything in Tasks 4-12 is unrun.
+- Local `mvn -pl gui -am verify` passed, including Spotless and SpotBugs; shell syntax and
+  ShellCheck checks passed.
+- CI passed the verify, script-lint, three-platform build/install, and installer failure-path
+  jobs on the restored branch.
+- The temporary removal of `javafx.web` was pushed as the Task 10 Step 4 acceptance test.
+  All three platform verification jobs reported `FAIL: javafx.web is not in the runtime`;
+  the temporary commit was removed afterward.
+- The root and GUI release docs, source-install wrapper, and per-module TLS rationale are
+  updated. The Linux failure-path test now covers both a destination equal to the source and
+  a destination that contains the source.
 
 **Known gaps, deliberate:**
 
-- Tasks 7 and 8 cannot be executed or verified on the maintainer's Linux machine. Their verification steps require a Mac and a Windows box respectively; CI (Task 10) is the first place all three run together. Expect Task 10 to surface real defects in 7 and 8 — that is the intended order, not a failure of it.
-- `md2pdf-install.cmd` has no automated failure-path test. `test-install-failures.sh` is bash and Linux-only by design; the Windows installer's only coverage is the `build` job running it successfully, plus the manual stub test in Task 8 Step 7.
+- GUI hand-launch, Finder double-click, and Windows stub-fallback checks remain unchecked
+  because suitable macOS and Windows desktop environments were unavailable here. The
+  corresponding CI install/build checks are green.
+- The real `release.sh` deploy was not run because it publishes to Maven Central. The
+  non-deploying precondition and reactor-scope checks are covered separately; the irreversible
+  release operation remains intentionally unchecked.
+- TLS remains outside the smoke-test coverage. `jdk.crypto.ec` is required for TLS and its
+  rationale is documented beside `MODULES` in `gui/createApp.sh` and in the design document.

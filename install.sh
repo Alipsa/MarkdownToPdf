@@ -3,6 +3,7 @@
 # For a normal install, download a release archive instead — this is a developer
 # convenience and requires a JavaFX-bundled JDK 21 to build with.
 set -euo pipefail
+CALLER_DIR="$(pwd -P)"
 BASEDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 cd "$BASEDIR"
 
@@ -17,7 +18,7 @@ esac
 [ "$#" -le 1 ] || { echo "usage: $0 [installDir]" >&2; exit 2; }
 INSTALL_DIR="${1:-}"
 if [ -n "$INSTALL_DIR" ] && [[ "$INSTALL_DIR" != /* ]]; then
-  INSTALL_DIR="$BASEDIR/$INSTALL_DIR"
+  INSTALL_DIR="$CALLER_DIR/$INSTALL_DIR"
 fi
 
 mvn install -DskipTests
@@ -29,7 +30,7 @@ trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-$LABEL.zip" -d "$WORK"
 cd "$WORK"
 if [ -n "$INSTALL_DIR" ]; then
-  MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}" "$INSTALL_DIR"
+  "${INSTALLER[@]}" "$INSTALL_DIR"
 else
-  MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}"
+  "${INSTALLER[@]}"
 fi

@@ -778,7 +778,10 @@ public class MarkdownToPdf extends Application {
 
   private void setActiveProject(Project p) {
     logger().info("Activating project: {}", p.getName());
-    markdownTab.loadFile(p.getMarkdownFile());
+    if (!markdownTab.loadFile(p.getMarkdownFile())) {
+      logger().warn("Could not load Markdown file for project {}", p.getName());
+      return;
+    }
     String styleName = p.getStyleProfileName();
     if (styleName != null && !styleName.isBlank()) {
       if (styleCombo != null) styleCombo.setValue(styleName);

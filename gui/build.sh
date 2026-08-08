@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1091
 # (jdk21 / jdk23 are optional local helpers, not part of the repo.)
+set -euo pipefail
+
+DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 
 if command -v java ; then
 	javaVersion=$(java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
@@ -20,5 +23,5 @@ else
   exit 1
 fi
 
-cd "$DIR" || exit 1
-mvn clean package || exit 1
+cd "$DIR/.."
+mvn clean package

@@ -55,4 +55,16 @@ fi
   || fail "installing a directory onto itself destroyed it"
 ok "self-install refused"
 
+# 5. A destination containing the source must also be refused. Checking only for equal
+#    paths is not enough: rm -rf would otherwise delete the source before the copy.
+ancestor="$WORK/ancestor"
+mkdir -p "$ancestor"
+cp -R "$SRC/." "$ancestor/"
+if (cd "$ancestor" && bash md2pdf-install.sh "$ancestor" < /dev/null); then
+  fail "installing into an ancestor of the source exited 0"
+fi
+[ -f "$ancestor/MarkdownToPdf/MarkdownToPdf.jar" ] \
+  || fail "installing into an ancestor of the source destroyed it"
+ok "ancestor install refused"
+
 printf '\nPASS: installer failure paths\n'
