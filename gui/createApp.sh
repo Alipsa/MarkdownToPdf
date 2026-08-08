@@ -18,7 +18,7 @@ case "$PLATFORM" in
   linux)   ARCH_LABEL="linux-x64"      ; EXPECTED_ARCH="x86_64" ;;
   macos)   ARCH_LABEL="macos-aarch64"  ; EXPECTED_ARCH="arm64"  ;;
   windows) ARCH_LABEL="windows-x64"    ; EXPECTED_ARCH="x86_64" ;;
-  no-jdk)  ARCH_LABEL="no-jdk"         ; EXPECTED_ARCH=""       ;;
+  no-jdk)  ARCH_LABEL="no-jdk"           ; EXPECTED_ARCH=""       ;;
   *) echo "usage: $0 <linux|macos|windows|no-jdk>" >&2; exit 2 ;;
 esac
 
@@ -194,6 +194,12 @@ case "$PLATFORM" in
     cp "$DIR/src/main/assembly/win/md2pdf-install.cmd" "$STAGE/"
     CHECK_JAR="$APPDIR/MarkdownToPdf.jar"
     CHECK_LIB="$APPDIR/lib"
+    ;;
+  no-jdk)
+    stage_app "$STAGE"
+    cp "$DIR/src/main/assembly/no-jdk/README.txt" "$STAGE/"
+    CHECK_JAR="$STAGE/MarkdownToPdf.jar"
+    CHECK_LIB="$STAGE/lib"
     ;;
   *) die "$PLATFORM packaging is not implemented yet" ;;
 esac
