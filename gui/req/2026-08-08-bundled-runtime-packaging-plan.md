@@ -937,20 +937,46 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 # slow machine does not need a code change.
 SETTLE="${MD2PDF_LAUNCH_SETTLE:-10}"
 LOG="$(mktemp)"
-trap 'rm -f "$LOG"' EXIT
+WORK="$(mktemp -d)"
+trap 'rm -f "$LOG"; rm -rf "$WORK"' EXIT
+
+# Nothing below identifies a process by image name. This script runs on a developer's own
+# machine in Tasks 6-8, not only on a disposable runner, so "kill every java" is not an
+# option — and an unrelated Java process must never be able to stand in as proof that this
+# launcher worked.
 
 case "$PLATFORM" in
   windows)
     # run.cmd uses `start`, so it returns at once and the JVM is not its child. Two
     # separate signals are needed: its exit status catches a wrong or badly quoted
-    # javaw.exe path, and tasklist catches a JVM that started and then died.
-    taskkill //F //IM javaw.exe > /dev/null 2>&1 || true   # no pre-existing process to mistake for ours
+    # javaw.exe path, and a process lookup catches a JVM that started and then died.
+    #
+    # The lookup matches this installation's own directory in the process command line.
+    # PowerShell is used because reading a command line is the only way to do that and
+    # wmic is gone from current Windows images. This is CI and developer tooling, so it
+    # carries none of the shipped installer's no-PowerShell constraint.
+    cat > "$WORK/find-app.ps1" <<'PS'
+$path = $env:MD2PDF_DEST_W
+Get-CimInstance Win32_Process -Filter "Name = 'javaw.exe'" |
+  Where-Object { $_.CommandLine -and $_.CommandLine.Contains($path) } |
+  ForEach-Object { $_.ProcessId }
+PS
+    app_pids() {
+      MD2PDF_DEST_W="$(cygpath -w "$DEST")" powershell -NoProfile -NonInteractive \
+        -ExecutionPolicy Bypass -File "$(cygpath -w "$WORK/find-app.ps1")" | tr -d '\r'
+    }
+    kill_app() {
+      local p
+      for p in $(app_pids); do taskkill //F //PID "$p" > /dev/null 2>&1 || true; done
+    }
+
+    kill_app          # a leftover from an earlier run must not be counted as a pass
     ( cd "$DEST" && cmd //c run.cmd ) > "$LOG" 2>&1 \
       || { cat "$LOG" >&2; fail "run.cmd exited non-zero"; }
     sleep "$SETTLE"
-    tasklist //FI "IMAGENAME eq javaw.exe" | grep -qi 'javaw.exe' \
-      || { cat "$LOG" >&2; fail "run.cmd left no javaw.exe running — the app died on startup"; }
-    taskkill //F //IM javaw.exe > /dev/null 2>&1 || true
+    [ -n "$(app_pids)" ] || { cat "$LOG" >&2
+      fail "no javaw.exe is running from $DEST — the app died on startup, or find-app.ps1 failed; run it by hand to tell those apart"; }
+    kill_app
     ;;
   *)
     case "$PLATFORM" in
@@ -961,17 +987,21 @@ case "$PLATFORM" in
       linux) launcher=(xvfb-run -a "$DEST/run.sh") ;;
       *) fail "unknown platform: $PLATFORM" ;;
     esac
+    # Job control makes the background job a process-group leader, which is what lets the
+    # cleanup below name exactly what this script started and nothing else.
+    set -m
     "${launcher[@]}" > "$LOG" 2>&1 &
     pid=$!
+    set +m          # the group is fixed at fork; this only silences job-control notices
     sleep "$SETTLE"
     if ! kill -0 "$pid" 2> /dev/null; then
       cat "$LOG" >&2
       fail "the launcher exited within ${SETTLE}s instead of running the app"
     fi
-    kill "$pid" 2> /dev/null || true
-    # Backstop: on Linux the killed process is xvfb-run, and the JVM under it can outlive
-    # the wrapper. A leaked JVM would hold the runner until the job times out.
-    pkill -f 'MarkdownToPdf\.jar' 2> /dev/null || true
+    # A negative PID signals the whole process group. On Linux $pid is xvfb-run, with the
+    # JVM as its child and an Xvfb alongside; on macOS the launcher execs the JVM directly.
+    # Either way this reaches every descendant and nothing outside the group.
+    kill -- -"$pid" 2> /dev/null || true
     wait "$pid" 2> /dev/null || true
     ;;
 esac
@@ -1620,7 +1650,9 @@ Replace `gui/src/main/assembly/win/run.cmd`:
 
 ```cmd
 @echo off
-setlocal
+rem See md2pdf-install.cmd for why this is spelled out: a bare `setlocal` inherits delayed
+rem expansion from a parent `cmd /V:ON`, and that would corrupt an install path containing !.
+setlocal DisableDelayedExpansion
 rem The quotes around the whole assignment are required, not style: without them cmd.exe
 rem parses &, ^, ( and ) in the install path as syntax. C:\Users\A & B\... is a legal
 rem Windows path and would break the launcher.
@@ -1665,7 +1697,11 @@ Create `gui/src/main/assembly/win/md2pdf-install.cmd`. Native `cmd` because Powe
 
 ```cmd
 @echo off
-setlocal EnableDelayedExpansion
+rem Delayed expansion is disabled explicitly, not merely left off: with it on, cmd.exe
+rem re-parses ! in every expanded value, so an install path or a %USERPROFILE% containing
+rem one would be silently corrupted. A bare `setlocal` would inherit it from a parent
+rem started as `cmd /V:ON`. Nothing here uses !VAR!, so there is nothing to give up.
+setlocal DisableDelayedExpansion
 rem MarkdownToPdf installer for Windows.
 rem
 rem   md2pdf-install.cmd [target-directory]
