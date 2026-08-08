@@ -235,7 +235,19 @@ all.
 ## Application assembly
 
 The shade fat-jar is dropped. `maven-dependency-plugin:copy-dependencies` writes the
-runtime dependencies into `lib/` unmodified, beside `MarkdownToPdf.jar`.
+dependencies into `lib/` unmodified, beside `MarkdownToPdf.jar`.
+
+**`includeScope=runtime` is mandatory, not a default.** `copy-dependencies` otherwise
+copies every scope, including `provided` and `test` — which would put the JavaFX jars into
+`lib/` alongside a runtime that already contains the JavaFX modules. Two copies of JavaFX,
+one on the classpath and one in the module path, is not merely wasteful: it is the kind of
+split that produces `LinkageError` or silently loads the wrong classes. JUnit and the test
+tree would come along too.
+
+CI asserts the resulting file set rather than trusting the configuration: no `javafx-*`
+jar, no `junit`/`opentest4j`/`apiguardian` jar in `lib/`, and the file count matches the
+runtime dependency list. A scope regression is invisible by inspection and this is the only
+thing that catches it.
 `maven-jar-plugin` already sets `addClasspath=true`; adding
 `<classpathPrefix>lib/</classpathPrefix>` puts a `Class-Path` in the manifest so
 `java -jar MarkdownToPdf.jar` works unchanged.
@@ -447,8 +459,31 @@ All jobs use `actions/setup-java` with `distribution: liberica` and
 **The JDK is pinned to an exact Liberica version, not to `21`.** `java-version: 21`
 resolves the newest available 21.x, so a BellSoft patch release would change the bundled
 JavaFX underneath us and start failing the alignment assertion on an unrelated commit —
-turning a routine upstream release into a red build on a branch nobody touched. The exact
-version lives in `.github/versions.env` as `LIBERICA_VERSION`, sourced by every job.
+turning a routine upstream release into a red build on a branch nobody touched.
+
+The exact version lives in `.github/versions.env` as a single line:
+
+```
+LIBERICA_VERSION=21.0.12
+```
+
+Shell-sourcing a file does not populate a later action's inputs, so each job's first step
+appends the file to `$GITHUB_ENV`, and `setup-java` then reads it:
+
+```yaml
+- run: cat .github/versions.env >> "$GITHUB_ENV"
+- uses: actions/setup-java@v4
+  with:
+    java-version: ${{ env.LIBERICA_VERSION }}
+    distribution: liberica
+    java-package: jdk+fx
+```
+
+`$GITHUB_ENV` is visible to all subsequent steps, which is what makes the value reach the
+`with:` block. The value must be a version `setup-java` resolves exactly — a full
+`major.minor.patch`, optionally with a build (`21.0.12+10`) — never a bare major, which
+would defeat the pinning. Implementation confirms the pinned version resolves on all three
+runners before anything else depends on it.
 
 That file holds only the Liberica version. `javafx.version` stays in `gui/pom.xml` as the
 single source of truth for the compile-time API, and the existing assertion — the runtime's
@@ -474,6 +509,18 @@ has no linter; its only safety net is the `build` job running it.
 Per platform: `setup-java` → `mvn install` and `copy-dependencies` → `createApp.sh` → upload the
 zip as an artifact → unzip to a temp directory → run the platform's installer
 non-interactively → run the verification script.
+
+**The Linux job additionally produces `md2pdf-<version>-no-jdk.zip`**, since it is
+platform-independent and building it three times would upload three artifacts under one
+name. It is assembled from the same `MarkdownToPdf.jar` and `lib/` as the Linux zip, with
+no `runtime/`, no launchers and no installer, plus `README.txt`.
+
+It gets its own verification, and deliberately a different one: unzip it and run the engine
+smoke test with `java -jar MarkdownToPdf.jar` on **the runner's `setup-java` JDK**, not on a
+bundled runtime. That is precisely how its users will run it, and it is the only check that
+the manifest `Class-Path` resolves `lib/` correctly without a runtime beside it. It is also
+asserted to contain no `runtime/` directory — an assembly slip that added one would produce
+a 100 MB "no-jdk" download.
 
 Building and testing in one job is sound only if the test cannot lean on the runner's
 JDK — which is the property being asserted. The verification step **scrubs `JAVA_HOME` and
@@ -530,7 +577,11 @@ Much smaller now that there is no JDK detection:
 or Windows runtimes — and becomes a release driver:
 
 1. Preconditions: clean tree, on `main`, `${revision}` is not a `-SNAPSHOT`, `gh`
-   authenticated, `HEAD` pushed.
+   authenticated, `HEAD` pushed. Also, everything that would fail *after* the irreversible
+   step, checked *before* it: `v<version>` must not already exist locally or on the remote,
+   `git push --dry-run` must succeed, and the version must not already be present on Maven
+   Central. A tag collision discovered after deploying is unrecoverable in the sense that
+   matters — the deploy cannot be taken back.
 2. Locate the CI run for `HEAD` and `gh run watch` it until **the whole run concludes
    successfully** — not just the three `build` jobs. `verify`, `lint-scripts` and
    `install-failures` are separate gates, and a release that proceeds with failing tests or
@@ -551,6 +602,22 @@ Checksums are generated in step 7 rather than alongside the download, because th
 jar does not exist until step 5. Checksumming early would produce a `SHA256SUMS` covering
 only part of the release — worse than none, since it looks authoritative.
 
+### Recovery after a partial release
+
+Step 5 is the point of no return: Maven Central publication cannot be undone or
+overwritten. The preflight in step 1 exists to move every foreseeable failure ahead of it,
+but steps 6–9 can still fail on something unforeseeable — a GitHub outage, a revoked token.
+
+`release.sh` therefore takes `--skip-deploy`, and detects on start-up that `${revision}` is
+already published to Maven Central, reporting it and requiring the flag to continue. Re-running
+after a late failure then resumes from step 6 rather than attempting a second deploy, which
+would fail anyway and obscure the real problem.
+
+The tag and the GitHub release are both reversible by hand, so the documented recovery is:
+delete the tag and any partial release, then re-run with `--skip-deploy`. This is recorded
+in `gui/readme.md` alongside the release instructions, because it will be needed on a day
+when nobody wants to reason it out from first principles.
+
 **The ordering is the point.** Deploying to Maven Central before the platform artifacts
 exist and have been verified means a failed macOS signing or Windows packaging step leaves
 the library published, and possibly a tag pushed, with no complete set of GUI downloads —
@@ -559,12 +626,31 @@ therefore runs first; the irreversible one runs only once all three artifacts ar
 and checked.
 
 `md2pdf-<version>-no-jdk.zip` is deliberate. Removing bring-your-own-JDK from the platform
-zips leaves users who already have a JavaFX-bundled JDK with no small download, so this
-asset carries `MarkdownToPdf.jar`, `lib/` and the launchers without a runtime — roughly
-15 MB against 80–110 MB. It is produced by the same assembly step as the platform zips,
-minus the `jlink` output, so it needs no separate packaging mechanism.
+zips leaves users who already have a JavaFX-bundled JDK with no small download — roughly
+15 MB against 80–110 MB.
 
-Being platform-independent, it is built once — in the Linux `build` job — rather than
+**It contains no launchers and no installer**: `MarkdownToPdf.jar`, `lib/`, and a
+`README.txt` giving the one command that runs it and the JDK it needs.
+
+```
+md2pdf-<version>-no-jdk.zip
+  MarkdownToPdf.jar
+  lib/
+  README.txt          → java -jar MarkdownToPdf.jar (needs a JavaFX-bundled JDK 21+)
+```
+
+The platform launchers cannot be reused: they exec `./runtime/bin/java`, which this archive
+does not contain. The alternative — PATH-based launchers that validate the JDK version and
+check for `javafx.controls` — would reintroduce a second copy of exactly the detection logic
+this design deletes, and that logic is where two of the three PR #1 defects lived. It is not
+worth carrying for an audience that, by definition, already has a working JavaFX JDK and
+can run `java -jar`. The manifest `Class-Path` makes that single command sufficient.
+
+The cost is honest: a user with an unsuitable JDK gets a Java module error rather than a
+friendly message. `README.txt` and the release notes state the requirement and point at the
+platform zips, which need no JDK at all.
+
+Being platform-independent, it is assembled once — in the Linux `build` job — rather than
 three times.
 
 Because the assets come from CI rather than from a local build, what ships is
