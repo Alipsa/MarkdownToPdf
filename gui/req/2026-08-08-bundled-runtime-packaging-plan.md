@@ -29,7 +29,7 @@ Every task's requirements implicitly include this section.
   `javafx.controls, javafx.swing, javafx.web, java.desktop, java.logging, java.management, java.naming, java.net.http, java.prefs, java.scripting, java.sql, java.xml, jdk.charsets, jdk.crypto.ec, jdk.unsupported, jdk.zipfs`
 - **No `--add-modules` is needed to run the app.** In a custom `jlink` image (and in Liberica Full), every non-`java.*` module present is a root module, so `javafx.*` resolves for classpath code automatically. Adding `--add-modules` at launch is a sign something else is wrong.
 - **The bundled runtime has no `jdk.compiler`, so `java Foo.java` source-file mode does not work on it** — it fails with `InternalError: Module jdk.compiler not in boot Layer`. The smoke tests are compiled with the full JDK on `$JAVA_HOME` and run as `.class` files. Do not add `jdk.compiler` to the module set to make source mode work; it is ~20 MB of compiler in every user's download to save one `javac` call in CI.
-- **Nothing reads or writes `md2pdf.env`, `MD2PDF_JAVA_HOME`, or parses `java -version` any more.** If you find yourself writing JDK detection, stop — that code is what this work deletes.
+- **No shipped script reads or writes `md2pdf.env` or `MD2PDF_JAVA_HOME`, or parses `java -version` to decide what to launch.** The rule is about the launchers and installers — the JDK-detection logic this work deletes. `verify-install.sh` does parse `java -version`, but it is a CI assertion checking that the bundled runtime is the version it should be, not a script choosing a JDK. If you find yourself writing JDK *selection* into anything that ships, stop.
 - **`0.1.1-SNAPSHOT` in the command examples is today's `${revision}`.** If it has been bumped, substitute. Scripts must never hardcode it; examples may.
 - **Maven plugin invocations from the command line are pinned**, e.g. `mvn org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate …`. An unqualified `mvn help:evaluate` resolves whatever version is newest on Central, which makes the build depend on the day it runs. (Verified working at 3.5.1.)
 - **Command-line tools the packaging needs:** `unzip`, `find`, `awk`, `sed`, and an archiver. On Linux and macOS the archiver must be `zip` — a `jlink` image contains symlinks, and `zip -y` is what stores them rather than following them. On Windows there are no symlinks in the image, so `7z` is an acceptable fallback. **Git Bash does not ship `zip` or `unzip` by default**; on a developer Windows machine install them (e.g. via MSYS2 or the Git for Windows SDK) before running `createApp.sh`. `createApp.sh` checks for them and fails with a clear message rather than half-building an archive.
@@ -355,7 +355,7 @@ git commit -m "build: replace the shade fat-jar with a lib/ directory and manife
 
 ### Task 3: Smoke tests
 
-A hand-curated module set makes "does it actually run" the central risk. These two programs are how every later task checks a runtime. JDK 21 runs a single source file directly, so they are never compiled or shipped.
+A hand-curated module set makes "does it actually run" the central risk. These two programs are how every later task checks a runtime. They live in `.github/scripts/`, are compiled to a temporary directory on demand, and are never shipped in any archive.
 
 **Files:**
 - Create: `.github/scripts/EngineSmoke.java`
@@ -363,8 +363,8 @@ A hand-curated module set makes "does it actually run" the central risk. These t
 - Create: `.github/scripts/compile-smoke.sh`
 
 **Interfaces:**
-- Produces: `compile-smoke.sh <app-jar> <output-dir>` — compiles both tests with the JDK on `$JAVA_HOME` into `<output-dir>`.
-- Produces: `EngineSmoke` — run as `<java> -cp <MarkdownToPdf.jar><sep><output-dir> EngineSmoke`; exit 0 on success. Resolves dependencies through the jar's manifest `Class-Path`, so it also proves `lib/` is complete.
+- Produces: `compile-smoke.sh <app-jar> <output-dir> [jdk-home]` — compiles both tests into `<output-dir>` with `[jdk-home]`, defaulting to `$JAVA_HOME`, and **prints the classpath to run them with** on stdout (native paths and `;` on Windows, POSIX and `:` elsewhere). Diagnostics go to stderr.
+- Produces: `EngineSmoke` — run as `<java> -cp "$(compile-smoke.sh …)" EngineSmoke`; exit 0 on success. Resolves dependencies through the jar's manifest `Class-Path`, so it also proves `lib/` is complete.
 - Produces: `ToolkitSmoke` — same invocation; exit 0 on success. Needs a display (`xvfb-run` on Linux).
 
 **They are compiled, not run from source.** The bundled runtime has no `jdk.compiler`, so `java EngineSmoke.java` on it fails with `InternalError: Module jdk.compiler not in boot Layer`. Compiling with the full JDK and running the `.class` files on the bundled runtime tests exactly what needed testing — the *runtime* module set — without putting a compiler in every user's download.
@@ -457,46 +457,68 @@ Create `.github/scripts/compile-smoke.sh`:
 
 ```bash
 #!/usr/bin/env bash
-# Compiles the smoke tests with a full JDK, for running on a runtime that has no compiler.
+# Compiles the smoke tests with a full JDK, for running on a runtime that has no compiler,
+# and prints the classpath to run them with.
 #
-#   compile-smoke.sh <app-jar> <output-dir>
+#   CP="$(compile-smoke.sh <app-jar> <output-dir> [jdk-home])"
+#   "$some_java" -cp "$CP" EngineSmoke
 #
 # The bundled runtime deliberately omits jdk.compiler, so `java EngineSmoke.java` fails on
 # it with "InternalError: Module jdk.compiler not in boot Layer". Compiling here and running
 # the .class files there tests the runtime module set, which is the point, without shipping
 # a compiler to every user.
+#
+# This script prints the classpath rather than leaving each caller to build one, because
+# getting it right on Windows means both a ';' separator and native paths — Git Bash hands
+# POSIX paths and colon lists to a native java.exe with heuristic, unreliable conversion.
+# That logic belongs in one place.
 set -euo pipefail
 
-JAR="${1:?usage: compile-smoke.sh <app-jar> <output-dir>}"
-OUT="${2:?usage: compile-smoke.sh <app-jar> <output-dir>}"
+JAR="${1:?usage: compile-smoke.sh <app-jar> <output-dir> [jdk-home]}"
+OUT="${2:?usage: compile-smoke.sh <app-jar> <output-dir> [jdk-home]}"
+JDK_HOME="${3:-${JAVA_HOME:-}}"
 SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 
-[ -n "${JAVA_HOME:-}" ] \
-  || { echo "JAVA_HOME must point at a JavaFX-bundled JDK 21 to compile the smoke tests" >&2; exit 1; }
+[ -n "$JDK_HOME" ] \
+  || { echo "pass a jdk-home or set JAVA_HOME to a JavaFX-bundled JDK 21" >&2; exit 1; }
+JAVAC="$JDK_HOME/bin/javac"
+[ -x "$JAVAC" ] || [ -x "$JAVAC.exe" ] || { echo "no javac in $JDK_HOME/bin" >&2; exit 1; }
 [ -f "$JAR" ] || { echo "no such jar: $JAR" >&2; exit 1; }
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
 # -proc:none: dependencies on the classpath carry annotation processors, and javac warns
-# at length about implicitly running them.
-"$JAVA_HOME/bin/javac" -proc:none -cp "$JAR" -d "$OUT" \
-  "$SCRIPTS/EngineSmoke.java" "$SCRIPTS/ToolkitSmoke.java"
+# at length about implicitly running them. Diagnostics go to stderr so stdout stays clean
+# for the classpath this prints.
+"$JAVAC" -proc:none -cp "$JAR" -d "$OUT" \
+  "$SCRIPTS/EngineSmoke.java" "$SCRIPTS/ToolkitSmoke.java" >&2
+
+native() {
+  if command -v cygpath > /dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+if command -v cygpath > /dev/null 2>&1; then
+  printf '%s;%s\n' "$(native "$JAR")" "$(native "$OUT")"
+else
+  printf '%s:%s\n' "$JAR" "$OUT"
+fi
 ```
 
 ```bash
 chmod +x .github/scripts/compile-smoke.sh
 ```
 
-No `--add-modules` is needed to compile `ToolkitSmoke` — in a JavaFX-bundled image the `javafx.*` modules are already roots. If `javafx.scene.web` is not found, `$JAVA_HOME` is a plain JDK, not a missing flag.
+`cygpath` is present exactly on the Git Bash / MSYS platforms that need the conversion, so its presence is the platform test — no `$PLATFORM` argument is needed and no caller can forget to pass one.
+
+No `--add-modules` is needed to compile `ToolkitSmoke` — in a JavaFX-bundled image the `javafx.*` modules are already roots. If `javafx.scene.web` is not found, the JDK is a plain one, not a missing flag.
 
 - [ ] **Step 4: Run both against the current build**
 
 ```bash
 mvn -q install -DskipTests
 JAR=gui/target/MarkdownToPdf-0.1.1-SNAPSHOT.jar
-.github/scripts/compile-smoke.sh "$JAR" /tmp/md2pdf-smoke
-"$JAVA_HOME/bin/java" -cp "$JAR:/tmp/md2pdf-smoke" EngineSmoke
-xvfb-run -a "$JAVA_HOME/bin/java" -cp "$JAR:/tmp/md2pdf-smoke" ToolkitSmoke
+CP="$(.github/scripts/compile-smoke.sh "$JAR" /tmp/md2pdf-smoke)"
+"$JAVA_HOME/bin/java" -cp "$CP" EngineSmoke
+xvfb-run -a "$JAVA_HOME/bin/java" -cp "$CP" ToolkitSmoke
 ```
 Expected: `EngineSmoke: OK (~1600 bytes)` — preceded by three `SLF4J(W): No SLF4J providers were found` lines, which are expected and must not be "fixed" — and `ToolkitSmoke: OK`. Both exit 0.
 
@@ -670,8 +692,7 @@ Now the assertion that matters — both smoke tests **on the bundled runtime, wi
 ```bash
 JAR="$(find gui/target -maxdepth 1 -name 'MarkdownToPdf-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
 cp "$JAR" gui/target/MarkdownToPdf.jar
-.github/scripts/compile-smoke.sh gui/target/MarkdownToPdf.jar /tmp/md2pdf-smoke
-CP="gui/target/MarkdownToPdf.jar:/tmp/md2pdf-smoke"
+CP="$(.github/scripts/compile-smoke.sh gui/target/MarkdownToPdf.jar /tmp/md2pdf-smoke)"
 env -i PATH=/usr/bin:/bin HOME="$HOME" \
   gui/target/runtime/bin/java -cp "$CP" EngineSmoke
 env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" \
@@ -736,6 +757,14 @@ SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 ok()   { printf 'ok: %s\n' "$*"; }
 
+# Windows environment variables hold native paths (C:\Users\…), which bash file tests do
+# not understand. Anything coming from the Windows environment has to be converted before
+# it is used as a path here — including the install directory this script is handed.
+unixpath() {
+  if command -v cygpath > /dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+}
+DEST="$(unixpath "$DEST")"
+
 case "$PLATFORM" in
   macos)   ROOT="$DEST/Contents"; APP="$ROOT/app"; JAVA="$ROOT/runtime/bin/java" ;;
   linux)   ROOT="$DEST";          APP="$DEST";     JAVA="$DEST/runtime/bin/java" ;;
@@ -793,8 +822,9 @@ case "$PLATFORM" in
   windows)
     [ -f "$DEST/run.cmd" ] || fail "run.cmd missing"
     [ -x "$ROOT/runtime/bin/javaw.exe" ] || fail "runtime/bin/javaw.exe missing"
+    userprofile="$(unixpath "${USERPROFILE:-$HOME}")"
     shortcut_found=0
-    for d in "$USERPROFILE/Desktop" "$USERPROFILE/OneDrive/Desktop"; do
+    for d in "$userprofile/Desktop" "$userprofile/OneDrive/Desktop"; do
       [ -f "$d/MarkdownToPdf.lnk" ] && shortcut_found=1
       [ -f "$d/MarkdownToPdf.cmd" ] && shortcut_found=1
     done
@@ -807,21 +837,11 @@ esac
 # ambient environment available to stand in for it.
 # Compiled here with the full JDK, run below on the bundled runtime: the runtime has no
 # jdk.compiler, so source-file mode fails on it outright. This has to happen before the
-# scrubbing, since it is the one step that legitimately needs JAVA_HOME.
+# scrubbing, since it is the one step that legitimately needs JAVA_HOME. compile-smoke.sh
+# prints the classpath in the form the local java expects.
 SMOKE="$(mktemp -d)"
 trap 'rm -rf "$SMOKE"' EXIT
-"$SCRIPTS/compile-smoke.sh" "$APP/MarkdownToPdf.jar" "$SMOKE"
-
-# Git Bash hands POSIX paths and colon-separated lists to a native java.exe with heuristic
-# and unreliable conversion, so on Windows the classpath is built in native form.
-native() {
-  if command -v cygpath > /dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
-if [ "$PLATFORM" = "windows" ]; then
-  CP="$(native "$APP/MarkdownToPdf.jar");$(native "$SMOKE")"
-else
-  CP="$APP/MarkdownToPdf.jar:$SMOKE"
-fi
+CP="$("$SCRIPTS/compile-smoke.sh" "$APP/MarkdownToPdf.jar" "$SMOKE")"
 
 # PATH is set explicitly rather than left to env's built-in default, so that what is kept
 # (xvfb-run, the system utilities) and what is dropped (any JDK on the caller's PATH) is
@@ -1652,7 +1672,7 @@ Expected: exit 0, a `MarkdownToPdf.lnk` on the Desktop, and the app starts from 
 Back in Git Bash:
 
 ```bash
-.github/scripts/verify-install.sh windows "$LOCALAPPDATA/Programs/MarkdownToPdf" 21.0.12
+.github/scripts/verify-install.sh windows "$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" 21.0.12
 ```
 Expected: `PASS: windows install at …`.
 
@@ -1725,8 +1745,12 @@ done
 # JDK. That is the module resolution the archive depends on.
 SMOKE="$(mktemp -d)"
 trap 'rm -rf "$SMOKE"' EXIT
-"$SCRIPTS/compile-smoke.sh" "$DIR/MarkdownToPdf.jar" "$SMOKE"
-CP="$DIR/MarkdownToPdf.jar:$SMOKE"
+# Compile with the JDK that is about to run it, derived from the java binary — not with
+# whatever JAVA_HOME happens to hold. This script's whole subject is "does the archive work
+# on the JDK the user supplied", so compiling against a different one would test something
+# nobody asked about.
+JDK_HOME="$( cd -- "$( dirname -- "$JAVA" )/.." > /dev/null 2>&1 && pwd )"
+CP="$("$SCRIPTS/compile-smoke.sh" "$DIR/MarkdownToPdf.jar" "$SMOKE" "$JDK_HOME")"
 
 "$JAVA" -cp "$CP" EngineSmoke || fail "engine smoke failed"
 if [ "$(uname -s)" = "Linux" ]; then
@@ -1966,7 +1990,9 @@ jobs:
           case "${{ matrix.platform }}" in
             linux)   dest="$HOME/.local/share/MarkdownToPdf" ;;
             macos)   dest="$HOME/Applications/MarkdownToPdf.app" ;;
-            windows) dest="$LOCALAPPDATA/Programs/MarkdownToPdf" ;;
+            # $LOCALAPPDATA is a native path (C:\Users\...); verify-install.sh converts it,
+            # but convert here too so the value is usable if anything else touches it.
+            windows) dest="$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" ;;
           esac
           fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
           .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx"
@@ -2373,9 +2399,11 @@ set -euo pipefail
 BASEDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 cd "$BASEDIR"
 
+# An array, not a string: "$INSTALLER" would look for a command with a space in its name
+# and $INSTALLER unquoted is the word-splitting that shellcheck (rightly) rejects.
 case "$OSTYPE" in
-  darwin*) PLATFORM=macos; INSTALLER="zsh md2pdf-install.zsh" ;;
-  linux*)  PLATFORM=linux; INSTALLER="bash md2pdf-install.sh" ;;
+  darwin*) PLATFORM=macos; LABEL=macos-aarch64; INSTALLER=(zsh md2pdf-install.zsh) ;;
+  linux*)  PLATFORM=linux; LABEL=linux-x64;     INSTALLER=(bash md2pdf-install.sh) ;;
   *) echo "Unsupported platform for a source install: $OSTYPE" >&2; exit 1 ;;
 esac
 
@@ -2385,13 +2413,9 @@ mvn install -DskipTests
 VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-case "$PLATFORM" in
-  macos) LABEL=macos-aarch64 ;;
-  linux) LABEL=linux-x64 ;;
-esac
 unzip -q "gui/target/md2pdf-$VERSION-$LABEL.zip" -d "$WORK"
 cd "$WORK"
-MD2PDF_REPLACE_EXISTING=1 $INSTALLER
+MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}"
 ```
 
 - [ ] **Step 5: Sweep for stale references**
