@@ -56,10 +56,17 @@ resolve_dest() {
     fi
     destination_real="$destination_parent/$(basename -- "$DEST")"
   fi
+  # Keep the root path as "/" while removing other trailing slashes. Otherwise the
+  # comparison below turns "/" into "//" and misses an ancestor destination.
+  while [ "$source_real" != "/" ] && [[ "$source_real" == */ ]]; do source_real="${source_real%/}"; done
+  while [ "$destination_real" != "/" ] && [[ "$destination_real" == */ ]]; do destination_real="${destination_real%/}"; done
 
   # Refuse both installing onto the source and installing across either side of it. In
   # particular, an existing ancestor would be removed by rm -rf before the copy starts.
-  if [[ "$source_real/" == "$destination_real/"* || "$destination_real/" == "$source_real/"* ]]; then
+  if [ "$source_real" = "/" ] || [ "$destination_real" = "/" ] \
+    || [ "$source_real" = "$destination_real" ] \
+    || [[ "$source_real" == "$destination_real/"* ]] \
+    || [[ "$destination_real" == "$source_real/"* ]]; then
     die "Source $source_real and destination $DEST overlap — refusing to remove or copy recursively."
   fi
   [ -d "$DEST" ] || return 0

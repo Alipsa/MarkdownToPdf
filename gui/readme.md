@@ -81,7 +81,12 @@ installs it in one step:
 ```
 
 This runs `mvn install`, builds the platform archive (via `gui/createApp.sh`), and installs
-it — defaulting to `~/Applications` on macOS or `~/.local/share` on Linux.
+it — defaulting to `~/Applications/MarkdownToPdf` on macOS or
+`~/.local/share/MarkdownToPdf` on Linux. If `installDir` is supplied, it is the exact
+destination directory, not its parent. An existing destination is prompted for removal,
+renaming, or cancellation; repeating `./install.sh` therefore prompts instead of replacing
+it silently. In non-interactive use, an existing destination is rejected unless
+`MD2PDF_REPLACE_EXISTING=1` is explicitly set.
 
 This is the source-checkout path. If you are installing a downloaded release zip instead,
 use the platform-specific installer from the zip, described

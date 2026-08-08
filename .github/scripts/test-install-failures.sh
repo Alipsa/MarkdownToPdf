@@ -67,4 +67,14 @@ fi
   || fail "installing into an ancestor of the source destroyed it"
 ok "ancestor install refused"
 
+# 6. The filesystem root is an ancestor of every source. Preserve the explicit replacement
+#    opt-in here so this test proves the overlap guard runs before rm -rf, rather than merely
+#    exercising the non-interactive existing-destination refusal.
+root_output="$WORK/root-output"
+if (cd "$good" && MD2PDF_REPLACE_EXISTING=1 bash md2pdf-install.sh / < /dev/null) >"$root_output" 2>&1; then
+  fail "installing into / exited 0"
+fi
+grep -q "overlap" "$root_output" || fail "installing into / did not report an overlap"
+ok "root install refused"
+
 printf '\nPASS: installer failure paths\n'
