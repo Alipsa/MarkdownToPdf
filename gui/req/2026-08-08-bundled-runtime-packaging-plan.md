@@ -29,6 +29,19 @@ Every task's requirements implicitly include this section.
   `javafx.controls, javafx.swing, javafx.web, java.desktop, java.logging, java.management, java.naming, java.net.http, java.prefs, java.scripting, java.sql, java.xml, jdk.charsets, jdk.crypto.ec, jdk.unsupported, jdk.zipfs`
 - **No `--add-modules` is needed to run the app.** In a custom `jlink` image (and in Liberica Full), every non-`java.*` module present is a root module, so `javafx.*` resolves for classpath code automatically. Adding `--add-modules` at launch is a sign something else is wrong.
 - **Nothing reads or writes `md2pdf.env`, `MD2PDF_JAVA_HOME`, or parses `java -version` any more.** If you find yourself writing JDK detection, stop — that code is what this work deletes.
+- **`0.1.1-SNAPSHOT` in the command examples is today's `${revision}`.** If it has been bumped, substitute. Scripts must never hardcode it; examples may.
+- **Maven plugin invocations from the command line are pinned**, e.g. `mvn org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate …`. An unqualified `mvn help:evaluate` resolves whatever version is newest on Central, which makes the build depend on the day it runs. (Verified working at 3.5.1.)
+- **Command-line tools the packaging needs:** `unzip`, `find`, `awk`, `sed`, and an archiver. On Linux and macOS the archiver must be `zip` — a `jlink` image contains symlinks, and `zip -y` is what stores them rather than following them. On Windows there are no symlinks in the image, so `7z` is an acceptable fallback. **Git Bash does not ship `zip` or `unzip` by default**; on a developer Windows machine install them (e.g. via MSYS2 or the Git for Windows SDK) before running `createApp.sh`. `createApp.sh` checks for them and fails with a clear message rather than half-building an archive.
+
+### Already verified against this repo (2026-08-08)
+
+Do not re-litigate these; they were run, not assumed.
+
+- `copy-dependencies` with `includeScope=runtime` produces **exactly 45 jars**, with no `javafx-*` and no test jars. The `check-lib-classpath.sh` in Task 2 passes against that output unchanged.
+- A jar on the **classpath** (`java -cp app.jar Foo.java`) honours the manifest `Class-Path`, so the smoke tests resolve `lib/` without naming it.
+- `EngineSmoke` produces a **~1.6 KB** PDF and prints three harmless `SLF4J(W): No SLF4J providers were found` lines before the OK line. That is expected — the smoke test runs without a logging backend configured. Do not "fix" it.
+- `mvn -pl gui dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=<file>` works and is the reliable way to get a classpath for an ad-hoc run.
+- `env -i` supplies a default `PATH` of `/bin:/usr/bin` when none is given, so `xvfb-run` is still found. The plan sets `PATH` explicitly anyway, so the scrubbing is visible rather than incidental.
 
 ## File Structure
 
@@ -122,7 +135,8 @@ If compilation fails, every error is a use of a JavaFX API added after 21. Fix e
 
 ```bash
 mvn install -DskipTests
-"$JAVA_HOME/bin/java" -cp "gui/target/classes:$(mvn -q -pl gui dependency:build-classpath -Dmdep.outputFile=/dev/stdout -DincludeScope=runtime | tail -1)" se.alipsa.md2pdf.gui.MarkdownToPdf
+mvn -q -pl gui dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=/tmp/md2pdf-cp.txt
+"$JAVA_HOME/bin/java" -cp "gui/target/classes:$(cat /tmp/md2pdf-cp.txt)" se.alipsa.md2pdf.gui.MarkdownToPdf
 ```
 Expected: the window opens, all three tabs render, the Markdown preview shows HTML. Close it. A clean compile does not prove the runtime behaviour survived a JavaFX downgrade; this is the only check that does.
 
@@ -297,7 +311,7 @@ mvn clean package || exit 1
 mvn -q install -DskipTests
 .github/scripts/check-lib-classpath.sh gui/target/MarkdownToPdf-0.1.1-SNAPSHOT.jar gui/target/lib
 ```
-Expected: `OK: 45 jars, Class-Path consistent`. The count is 45 today; the script derives it rather than hardcoding it, so a dependency change does not break the check.
+Expected, verbatim: `OK: 45 jars, Class-Path consistent`. This exact configuration and this exact script were run against this repo on 2026-08-08 and produced that line — if you get anything else, the difference is in what you changed, not in the approach. The script derives the count rather than hardcoding it, so a later dependency change does not break the check.
 
 - [ ] **Step 8: Verify the app still runs from the jar**
 
@@ -317,7 +331,6 @@ Expected: BUILD SUCCESS.
 
 ```bash
 git add pom.xml gui/pom.xml gui/build.sh .github/scripts/check-lib-classpath.sh
-git rm --cached gui/dependency-reduced-pom.xml 2>/dev/null || true
 git commit -m "build: replace the shade fat-jar with a lib/ directory and manifest Class-Path"
 ```
 
@@ -351,7 +364,9 @@ public class EngineSmoke {
     String md = "# Smoke\n\nHello *world*.\n\n- one\n- two\n\n`code`\n";
     byte[] pdf = new Md2PdfEngine().markdown(md).toPdf();
 
-    if (pdf.length < 1000) {
+    // Observed output for this input is ~1.6 KB; 500 catches a truncated or empty render
+    // without being so tight that a harmless rendering change trips it.
+    if (pdf.length < 500) {
       System.err.println("EngineSmoke: PDF is only " + pdf.length + " bytes");
       System.exit(1);
     }
@@ -423,7 +438,7 @@ JAR=gui/target/MarkdownToPdf-0.1.1-SNAPSHOT.jar
 "$JAVA_HOME/bin/java" -cp "$JAR" .github/scripts/EngineSmoke.java
 xvfb-run -a "$JAVA_HOME/bin/java" -cp "$JAR" .github/scripts/ToolkitSmoke.java
 ```
-Expected: `EngineSmoke: OK (…)` and `ToolkitSmoke: OK`, both exit 0.
+Expected: `EngineSmoke: OK (1603 bytes)` — preceded by three `SLF4J(W): No SLF4J providers were found` lines, which are expected and must not be "fixed" — and `ToolkitSmoke: OK`. Both exit 0.
 
 Do **not** add `--add-modules javafx.controls` to make this work. If `javafx.scene.web` is not found, the cause is a plain JDK on `$JAVA_HOME`, not a missing flag — in a JavaFX-bundled image every non-`java.*` module is already a root.
 
@@ -485,6 +500,36 @@ jdk.charsets,jdk.crypto.ec,jdk.unsupported,jdk.zipfs"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+# Git Bash ships neither zip nor unzip, so a Windows build fails here with a usable
+# message rather than half-writing an archive.
+require_tools() {
+  local missing=()
+  for t in unzip find awk sed; do
+    command -v "$t" > /dev/null || missing+=("$t")
+  done
+  # A jlink image contains symlinks. zip -y stores them; 7z follows them, which inflates
+  # the archive and produces a runtime that breaks on extraction — so 7z is acceptable
+  # only on Windows, where the image has no symlinks to lose.
+  if ! command -v zip > /dev/null; then
+    if [ "$PLATFORM" = "windows" ] && command -v 7z > /dev/null; then
+      :
+    else
+      missing+=("zip")
+    fi
+  fi
+  [ "${#missing[@]}" -eq 0 ] || die "missing required tools: ${missing[*]}"
+}
+
+make_zip() {                  # make_zip <output.zip> <directory-whose-contents-to-zip>
+  local zipfile="$1" srcdir="$2"
+  rm -f "$zipfile"
+  if command -v zip > /dev/null; then
+    ( cd "$srcdir" && zip -q -r -y "$zipfile" . )
+  else
+    ( cd "$srcdir" && 7z a -tzip -bso0 -bsp0 "$zipfile" . )
+  fi
+}
+
 require_arch() {
   local actual
   case "$PLATFORM" in
@@ -526,6 +571,7 @@ build_runtime() {
     --output "$out"
 }
 
+require_tools
 require_arch
 [ -d "$TARGET/lib" ] || die "$TARGET/lib is missing — run 'mvn install' first"
 VERSION="$(app_version)"
@@ -566,8 +612,10 @@ Now the assertion that matters — both smoke tests **on the bundled runtime, wi
 ```bash
 JAR="$(find gui/target -maxdepth 1 -name 'MarkdownToPdf-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
 cp "$JAR" gui/target/MarkdownToPdf.jar
-env -i HOME="$HOME" gui/target/runtime/bin/java -cp gui/target/MarkdownToPdf.jar .github/scripts/EngineSmoke.java
-env -i HOME="$HOME" DISPLAY="${DISPLAY:-}" xvfb-run -a gui/target/runtime/bin/java -cp gui/target/MarkdownToPdf.jar .github/scripts/ToolkitSmoke.java
+env -i PATH=/usr/bin:/bin HOME="$HOME" \
+  gui/target/runtime/bin/java -cp gui/target/MarkdownToPdf.jar .github/scripts/EngineSmoke.java
+env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" \
+  xvfb-run -a gui/target/runtime/bin/java -cp gui/target/MarkdownToPdf.jar .github/scripts/ToolkitSmoke.java
 ```
 Expected: both print OK and exit 0.
 
@@ -695,11 +743,14 @@ esac
 
 # The real test: run the app's own code on the installed runtime, with nothing from the
 # ambient environment available to stand in for it.
+# PATH is set explicitly rather than left to env's built-in default, so that what is kept
+# (xvfb-run, the system utilities) and what is dropped (any JDK on the caller's PATH) is
+# visible in the script rather than a property of env.
 scrub() {
   if [ "$PLATFORM" = "windows" ]; then
     JAVA_HOME= "$@"
   else
-    env -i HOME="$HOME" DISPLAY="${DISPLAY:-}" "$@"
+    env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" "$@"
   fi
 }
 
@@ -781,12 +832,11 @@ esac
   "$(find "$STAGE" -name lib -type d | head -1)"
 
 ZIP="$TARGET/md2pdf-${VERSION}-${ARCH_LABEL}.zip"
-rm -f "$ZIP"
-( cd "$STAGE" && zip -q -r -y "$ZIP" . )
+make_zip "$ZIP" "$STAGE"
 echo "Built $ZIP"
 ```
 
-`zip -y` stores symlinks rather than following them: a `jlink` image contains them, and following them inflates the archive and breaks the runtime on extraction.
+`make_zip` (Task 4) is used rather than a bare `zip` call because of the symlink and Git Bash constraints described there.
 
 - [ ] **Step 6: Build and inspect the zip**
 
@@ -1258,7 +1308,7 @@ mkdir -p "${DEST:h}"
 cp -R "$SRC" "$DEST" || die "Copy failed."
 
 # Not every unzip tool preserves Unix modes.
-chmod +x "$DEST/Contents/MacOS/"* 
+chmod +x "$DEST/Contents/MacOS/"*
 chmod +x "$DEST/Contents/runtime/bin/"* 2>/dev/null || true
 [[ -f "$DEST/Contents/runtime/lib/jspawnhelper" ]] && chmod +x "$DEST/Contents/runtime/lib/jspawnhelper"
 
@@ -1499,7 +1549,7 @@ exit /b 0
 
 - [ ] **Step 5: Build and install on Windows**
 
-In Git Bash:
+In Git Bash. `createApp.sh` needs `unzip` and either `zip` or `7z`, none of which Git Bash ships by default — `require_tools` will tell you which is missing before it builds anything.
 
 ```bash
 export JAVA_HOME="/c/path/to/liberica-full-21.0.12"
@@ -1802,7 +1852,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Read the project version
-        run: echo "APP_VERSION=$(mvn -q help:evaluate -Dexpression=revision -DforceStdout)" >> "$GITHUB_ENV"
+        run: echo "APP_VERSION=$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)" >> "$GITHUB_ENV"
 
       - run: mvn install -DskipTests
 
@@ -1835,7 +1885,7 @@ jobs:
             macos)   dest="$HOME/Applications/MarkdownToPdf.app" ;;
             windows) dest="$LOCALAPPDATA/Programs/MarkdownToPdf" ;;
           esac
-          fx="$(mvn -q -pl gui help:evaluate -Dexpression=javafx.version -DforceStdout)"
+          fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
           .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx"
 
       # ── Linux-only extra artifacts ──────────────────────────────
@@ -1993,7 +2043,7 @@ gh auth status > /dev/null 2>&1 || die "gh is not authenticated"
 [ -z "$(git status --porcelain)" ] || die "working tree is not clean"
 [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || die "not on main"
 
-VERSION="$(mvn -q help:evaluate -Dexpression=revision -DforceStdout)"
+VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)"
 case "$VERSION" in *-SNAPSHOT) die "refusing to release a snapshot version: $VERSION" ;; esac
 TAG="v$VERSION"
 echo "Releasing $VERSION"
@@ -2003,7 +2053,9 @@ git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && die "tag $TAG already 
 git ls-remote --exit-code --tags origin "$TAG" > /dev/null 2>&1 && die "tag $TAG already exists on the remote"
 git push --dry-run --quiet origin HEAD || die "git push would fail"
 
-CENTRAL="https://repo1.maven.org/maven2/se/alipsa/md2pdf/$VERSION/"
+# The POM, not the directory: a directory listing can 200 on a partially-populated or
+# stale path, and only the POM's presence means the version is actually published.
+CENTRAL="https://repo1.maven.org/maven2/se/alipsa/md2pdf/$VERSION/md2pdf-$VERSION.pom"
 if curl -sfI "$CENTRAL" > /dev/null; then
   [ "$SKIP_DEPLOY" -eq 1 ] \
     || die "$VERSION is already on Maven Central. Maven Central cannot be overwritten; re-run with --skip-deploy to finish the rest of the release."
@@ -2113,12 +2165,14 @@ shellcheck release.sh
 ```
 Expected: both clean.
 
-Then confirm the precondition block refuses a snapshot:
+Then confirm the precondition block refuses to proceed:
 
 ```bash
 ./release.sh
 ```
-Expected: `ERROR: refusing to release a snapshot version: 0.1.1-SNAPSHOT`, exit 1, nothing else done.
+Expected: exit 1 at the **first unmet precondition**, with nothing downloaded, tagged or deployed. On the feature branch that is `ERROR: not on main`; on `main` with the version unbumped it is `ERROR: refusing to release a snapshot version: 0.1.1-SNAPSHOT`. Either is a pass — what is being checked is that it stops early and says why.
+
+To exercise the snapshot check specifically without switching branches, temporarily comment out the `not on main` check, re-run, and restore it.
 
 - [ ] **Step 4: Confirm the deploy scope**
 
@@ -2233,7 +2287,7 @@ esac
 mvn install -DskipTests
 ./gui/createApp.sh "$PLATFORM"
 
-VERSION="$(mvn -q help:evaluate -Dexpression=revision -DforceStdout)"
+VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 case "$PLATFORM" in
@@ -2273,6 +2327,8 @@ git commit -m "docs: document the bundled-runtime downloads, Linux prerequisites
 
 - **`VERSION` comes from the built jar's manifest**, not from `mvn help:evaluate`, inside `createApp.sh`. An archive can then never be named for a different version than the jar it contains. The CI workflow does use `help:evaluate`, because it needs the version before anything is built.
 - **`verify-install.sh` takes the expected JavaFX version as an argument** rather than reading `gui/pom.xml` itself, so it stays runnable against an installed tree with no source checkout nearby.
+
+**What was actually executed while writing this plan**, on the maintainer's Linux machine against this repo: the Task 2 POM changes were applied, `mvn install` run, and `check-lib-classpath.sh` run against the result (45 jars, pass); `EngineSmoke.java` was written and run against the produced jar (1603-byte PDF, pass); `mvn dependency:build-classpath` and the pinned `maven-help-plugin:3.5.1:evaluate` invocations were confirmed to work. The POMs were then reverted, so the repo is unchanged — but Tasks 2 and 3 are known-good, not merely plausible. Everything in Tasks 4-12 is unrun.
 
 **Known gaps, deliberate:**
 
