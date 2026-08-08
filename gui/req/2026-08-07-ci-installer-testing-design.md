@@ -1,7 +1,15 @@
 # CI installer testing — Design
 
 **Date:** 2026-08-07
-**Status:** Approved, ready for implementation planning
+**Status:** Superseded by `2026-08-08-bundled-runtime-packaging-design.md`
+
+> **Superseded (2026-08-08).** This design assumed the release zip is built once on a Mac
+> and that the installed app finds a JavaFX-bundled JDK on the user's machine. The project
+> instead bundles a `jlink`-slimmed Liberica Full JDK 21 runtime per platform, so the zip
+> is built natively on each platform and all JDK detection is deleted. Read this document
+> for the rationale behind the assertion-scripts-not-YAML structure and the
+> non-interactive installer requirement, both of which carry over; the job layout and the
+> JDK-related test scenarios do not.
 
 ## Context
 
