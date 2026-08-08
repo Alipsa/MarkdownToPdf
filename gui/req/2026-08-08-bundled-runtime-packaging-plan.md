@@ -64,6 +64,7 @@ Do not re-litigate these; they were run, not assumed.
 | `.github/scripts/ToolkitSmoke.java` | Starts the JavaFX toolkit, constructs a `WebView`. |
 | `.github/scripts/compile-smoke.sh` | Compiles both smoke tests with the full JDK, since the bundled runtime has no compiler. |
 | `.github/scripts/verify-install.sh` | All post-install assertions for one platform. |
+| `.github/scripts/verify-launcher.sh` | Starts the installed launcher and asserts the app stays up. Called by `verify-install.sh`. |
 | `.github/scripts/verify-no-jdk.sh` | Assertions specific to the `-no-jdk` archive. |
 | `.github/scripts/test-install-failures.sh` | Asserts the installer's failure paths fail loudly. |
 | `gui/src/main/assembly/mac/entitlements.plist` | JVM entitlements for later notarization; unused for now. |
@@ -712,7 +713,12 @@ Expected: version 21.0.12; roughly 20 modules (the 16 requested plus transitive 
 Now the assertion that matters — both smoke tests **on the bundled runtime, with the ambient JDK scrubbed**:
 
 ```bash
-JAR="$(find gui/target -maxdepth 1 -name 'MarkdownToPdf-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
+JAR="$(find gui/target -maxdepth 1 -name 'MarkdownToPdf-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar')"
+# The same rule createApp.sh's app_jar() applies: exactly one, never "the first one". A
+# target/ left over from an earlier ${revision} would otherwise get smoke-tested in place
+# of the jar you just built, and the runtime would be declared good on the wrong evidence.
+[ "$(printf '%s' "$JAR" | grep -c .)" = 1 ] \
+  || { printf 'not exactly one application jar:\n%s\nrun: mvn clean install -DskipTests\n' "$JAR"; false; }
 cp "$JAR" gui/target/MarkdownToPdf.jar
 CP="$(.github/scripts/compile-smoke.sh gui/target/MarkdownToPdf.jar /tmp/md2pdf-smoke)"
 env -i PATH=/usr/bin:/bin HOME="$HOME" \
@@ -750,11 +756,13 @@ git commit -m "build: add jlink runtime construction to createApp.sh"
 - Modify: `gui/src/main/assembly/linux/run.sh`
 - Modify: `gui/src/main/assembly/linux/createLauncher.sh`
 - Create: `.github/scripts/verify-install.sh`
+- Create: `.github/scripts/verify-launcher.sh`
 
 **Interfaces:**
 - Consumes: `build_runtime`, `app_version`, `app_jar`, `die` from Task 4; `check-lib-classpath.sh` from Task 2.
 - Produces: `gui/target/md2pdf-<version>-linux-x64.zip`.
 - Produces: `verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version>` — every post-install assertion for that platform, exit 0 on success. All three arguments are required. Used by Tasks 6, 7, 8 and 10.
+- Produces: `verify-launcher.sh <linux|macos|windows> <install-dir>` — starts the installed launcher, asserts the app is still running after `MD2PDF_LAUNCH_SETTLE` (default 10) seconds, stops it. Called by `verify-install.sh` as its final step; no other caller needs to invoke it directly.
 
 - [ ] **Step 1: Write the verification script (it fails first)**
 
@@ -884,12 +892,98 @@ else
   scrub "$JAVA" -cp "$CP" ToolkitSmoke || fail "toolkit smoke failed"
 fi
 
+# Everything above proves the installed *files* are right and that the app's code runs on
+# the installed runtime. It does not prove the launcher works, so it is the last thing
+# checked — after this, a pass means the thing the user double-clicks actually starts.
+"$SCRIPTS/verify-launcher.sh" "$PLATFORM" "$DEST"
+
 printf '\nPASS: %s install at %s\n' "$PLATFORM" "$DEST"
 ```
 
 ```bash
 chmod +x .github/scripts/verify-install.sh
 ```
+
+Now its companion. Create `.github/scripts/verify-launcher.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Starts the installed launcher and asserts the application is still running a few seconds
+# later, then stops it.
+#
+#   verify-launcher.sh <linux|macos|windows> <install-dir>
+#
+# Checking that run.sh / run.cmd / the bundle executable *exist* cannot catch a launcher
+# that points at the wrong java, quotes a path badly, or names a main class that is not
+# there. Each of those leaves a file that is present and a program that dies on its first
+# line. Starting it is the only assertion that separates the two.
+#
+# Called at the end of verify-install.sh, so every caller of that script gets this for free
+# and there is only one entry point to remember. It is a separate file because it is the
+# only check here that starts a GUI and has to clean processes up afterwards.
+set -euo pipefail
+
+PLATFORM="${1:?usage: verify-launcher.sh <platform> <install-dir>}"
+DEST="${2:?usage: verify-launcher.sh <platform> <install-dir>}"
+
+unixpath() {
+  if command -v cygpath > /dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+}
+DEST="$(unixpath "$DEST")"
+fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+
+# Seconds to wait before deciding the app is up. A launcher defect kills the process in
+# well under a second; JavaFX toolkit startup on a cold runner is a few. Overridable so a
+# slow machine does not need a code change.
+SETTLE="${MD2PDF_LAUNCH_SETTLE:-10}"
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+
+case "$PLATFORM" in
+  windows)
+    # run.cmd uses `start`, so it returns at once and the JVM is not its child. Two
+    # separate signals are needed: its exit status catches a wrong or badly quoted
+    # javaw.exe path, and tasklist catches a JVM that started and then died.
+    taskkill //F //IM javaw.exe > /dev/null 2>&1 || true   # no pre-existing process to mistake for ours
+    ( cd "$DEST" && cmd //c run.cmd ) > "$LOG" 2>&1 \
+      || { cat "$LOG" >&2; fail "run.cmd exited non-zero"; }
+    sleep "$SETTLE"
+    tasklist //FI "IMAGENAME eq javaw.exe" | grep -qi 'javaw.exe' \
+      || { cat "$LOG" >&2; fail "run.cmd left no javaw.exe running — the app died on startup"; }
+    taskkill //F //IM javaw.exe > /dev/null 2>&1 || true
+    ;;
+  *)
+    case "$PLATFORM" in
+      # The bundle executable is read from Info.plist rather than hardcoded, so this fails
+      # for the right reason if CFBundleExecutable and the file on disk ever disagree.
+      macos) exe="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$DEST/Contents/Info.plist")"
+             launcher=("$DEST/Contents/MacOS/$exe") ;;
+      linux) launcher=(xvfb-run -a "$DEST/run.sh") ;;
+      *) fail "unknown platform: $PLATFORM" ;;
+    esac
+    "${launcher[@]}" > "$LOG" 2>&1 &
+    pid=$!
+    sleep "$SETTLE"
+    if ! kill -0 "$pid" 2> /dev/null; then
+      cat "$LOG" >&2
+      fail "the launcher exited within ${SETTLE}s instead of running the app"
+    fi
+    kill "$pid" 2> /dev/null || true
+    # Backstop: on Linux the killed process is xvfb-run, and the JVM under it can outlive
+    # the wrapper. A leaked JVM would hold the runner until the job times out.
+    pkill -f 'MarkdownToPdf\.jar' 2> /dev/null || true
+    wait "$pid" 2> /dev/null || true
+    ;;
+esac
+
+printf 'ok: launcher started and was still running after %ss\n' "$SETTLE"
+```
+
+```bash
+chmod +x .github/scripts/verify-launcher.sh
+```
+
+This runs the real GUI, so it needs the same display the toolkit smoke test does — `xvfb-run` on Linux, nothing extra on macOS or Windows. That is not a new requirement: `ToolkitSmoke` already constructs a `WebView` on all three runners, so any platform where this cannot start is one where the existing smoke test would already have failed.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -973,7 +1067,8 @@ The `check-lib-classpath.sh` call inside the script must have printed its `OK:` 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add gui/createApp.sh gui/src/main/assembly/linux .github/scripts/verify-install.sh
+git add gui/createApp.sh gui/src/main/assembly/linux \
+  .github/scripts/verify-install.sh .github/scripts/verify-launcher.sh
 git commit -m "build: assemble the linux archive with a bundled runtime"
 ```
 
@@ -1492,11 +1587,11 @@ rm -rf "$HOME/Applications/MarkdownToPdf.app"
 (cd /tmp/md2pdf-unpack && zsh md2pdf-install.zsh < /dev/null)
 .github/scripts/verify-install.sh macos "$HOME/Applications/MarkdownToPdf.app" 21.0.12
 ```
-Expected: `PASS: macos install at …`, including the `codesign --verify --deep --strict` assertion.
+Expected: `ok: launcher started …` then `PASS: macos install at …`, including the `codesign --verify --deep --strict` assertion.
 
 - [ ] **Step 8: Double-click it in Finder**
 
-Open `~/Applications` in Finder and double-click MarkdownToPdf. Expected: it launches, with the correct Dock icon and name. This is the only check that `CFBundleExecutable`, the icon keys and the signature are all right together — `verify-install.sh` cannot test Launch Services.
+Open `~/Applications` in Finder and double-click MarkdownToPdf. Expected: it launches, with the correct Dock icon and name. `verify-launcher.sh` already ran `Contents/MacOS/<CFBundleExecutable>` directly, so what is left for this step is everything Launch Services adds on top: that Finder resolves the bundle at all, that Gatekeeper admits it, and that the icon and Dock name are right. None of those are reachable from a shell.
 
 - [ ] **Step 9: Commit**
 
@@ -1526,9 +1621,14 @@ Replace `gui/src/main/assembly/win/run.cmd`:
 ```cmd
 @echo off
 setlocal
-set DIR=%~dp0
+rem The quotes around the whole assignment are required, not style: without them cmd.exe
+rem parses &, ^, ( and ) in the install path as syntax. C:\Users\A & B\... is a legal
+rem Windows path and would break the launcher.
+set "DIR=%~dp0"
 start "" "%DIR%runtime\bin\javaw.exe" -Xmx8g -jar "%DIR%MarkdownToPdf.jar"
 ```
+
+`%~dp0` already ends in a backslash, so `%DIR%runtime\…` is correct and `%DIR%\runtime\…` would not be.
 
 - [ ] **Step 2: Rewrite createShortcut.ps1**
 
@@ -1696,7 +1796,7 @@ Back in Git Bash:
 ```bash
 .github/scripts/verify-install.sh windows "$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" 21.0.12
 ```
-Expected: `PASS: windows install at …`.
+Expected: `ok: launcher started …` then `PASS: windows install at …`. If `run.cmd` is reported as leaving no `javaw.exe`, the launcher is broken — read its `%DIR%` construction before suspecting the runner.
 
 - [ ] **Step 7: Test the stub fallback**
 
