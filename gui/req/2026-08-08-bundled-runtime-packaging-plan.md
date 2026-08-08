@@ -31,7 +31,11 @@ Every task's requirements implicitly include this section.
 - **The bundled runtime has no `jdk.compiler`, so `java Foo.java` source-file mode does not work on it** — it fails with `InternalError: Module jdk.compiler not in boot Layer`. The smoke tests are compiled with the full JDK on `$JAVA_HOME` and run as `.class` files. Do not add `jdk.compiler` to the module set to make source mode work; it is ~20 MB of compiler in every user's download to save one `javac` call in CI.
 - **No shipped script reads or writes `md2pdf.env` or `MD2PDF_JAVA_HOME`, or parses `java -version` to decide what to launch.** The rule is about the launchers and installers — the JDK-detection logic this work deletes. `verify-install.sh` does parse `java -version`, but it is a CI assertion checking that the bundled runtime is the version it should be, not a script choosing a JDK. If you find yourself writing JDK *selection* into anything that ships, stop.
 - **`0.1.1-SNAPSHOT` in the command examples is today's `${revision}`.** If it has been bumped, substitute. Scripts must never hardcode it; examples may.
-- **Maven plugin invocations from the command line are pinned**, e.g. `mvn org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate …`. An unqualified `mvn help:evaluate` resolves whatever version is newest on Central, which makes the build depend on the day it runs. (Verified working at 3.5.1.)
+- **Every command-line Maven plugin invocation must resolve to a fixed version**, one of two ways:
+  - **The root `pom.xml` manages the plugin.** A goal prefix then resolves to the managed version, and a short invocation is fine. Verified: `mvn spotless:apply` → `spotless:3.9.0`, `mvn -pl lib javadoc:jar` → `javadoc:3.12.0`.
+  - **Otherwise write the full coordinate**, e.g. `mvn org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate …`. `maven-help-plugin` is not managed anywhere in this build, so every use of it in this plan is spelled out in full. (Verified working at 3.5.1.)
+
+  An unqualified prefix for an *unmanaged* plugin resolves whatever version is newest on Central, which makes the build depend on the day it runs. `maven-dependency-plugin` is unmanaged until Task 2 Step 3 adds it to `pluginManagement` at 3.8.1 — so Task 1, which runs before that, writes its coordinate out in full.
 - **Command-line tools the packaging needs:** `unzip`, `find`, `awk`, `sed`, and an archiver. On Linux and macOS the archiver must be `zip` — a `jlink` image contains symlinks, and `zip -y` is what stores them rather than following them. On Windows there are no symlinks in the image, so `7z` is an acceptable fallback. **Git Bash does not ship `zip` or `unzip` by default**; on a developer Windows machine install them (e.g. via MSYS2 or the Git for Windows SDK) before running `createApp.sh`. `createApp.sh` checks for them and fails with a clear message rather than half-building an archive.
 
 ### Already verified against this repo (2026-08-08)
@@ -44,7 +48,7 @@ Do not re-litigate these; they were run, not assumed.
 - Both smoke tests **compile** against `MarkdownToPdf.jar` with the full Liberica JDK and no `--add-modules`, and the compiled classes run correctly. `javac` emits an annotation-processing note unless `-proc:none` is passed, which the compile helper does.
 - `jlink --compress=2` on 21.0.12 prints `Warning: The 2 argument for --compress is deprecated and may be removed in a future release`. Expected and harmless — `2` is still the only ZIP level JDK 21 accepts, and the `zip-<n>` replacement is JDK 22+ and makes JDK 21 fail outright. Do not "fix" the warning.
 - Liberica Full 21.0.12 ships **seven** `javafx.*` modules: `base`, `controls`, `fxml`, `graphics`, `media`, `swing`, `web`.
-- `mvn -pl gui dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=<file>` works and is the reliable way to get a classpath for an ad-hoc run.
+- `mvn -pl gui org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath -DincludeScope=runtime -Dmdep.outputFile=<file>` works and is the reliable way to get a classpath for an ad-hoc run.
 - `env -i` supplies a default `PATH` of `/bin:/usr/bin` when none is given, so `xvfb-run` is still found. The plan sets `PATH` explicitly anyway, so the scrubbing is visible rather than incidental.
 
 ## File Structure
@@ -152,7 +156,8 @@ If compilation fails, every error is a use of a JavaFX API added after 21. Fix e
 
 ```bash
 mvn install -DskipTests
-mvn -q -pl gui dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=/tmp/md2pdf-cp.txt
+mvn -q -pl gui org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
+  -DincludeScope=runtime -Dmdep.outputFile=/tmp/md2pdf-cp.txt
 "$JAVA_HOME/bin/java" -cp "gui/target/classes:$(cat /tmp/md2pdf-cp.txt)" se.alipsa.md2pdf.gui.MarkdownToPdf
 ```
 Expected: the window opens, all three tabs render, the Markdown preview shows HTML. Close it. A clean compile does not prove the runtime behaviour survived a JavaFX downgrade; this is the only check that does.
@@ -623,16 +628,33 @@ require_arch() {
 # The version comes from the built jar's manifest rather than from the POM, so the
 # archive name can never disagree with the jar inside it.
 app_version() {
-  unzip -p "$(app_jar)" META-INF/MANIFEST.MF | tr -d '\r' \
-    | awk -F': ' '/^Implementation-Version: /{print $2}'
+  local version
+  version="$(unzip -p "$(app_jar)" META-INF/MANIFEST.MF | tr -d '\r' \
+    | awk -F': ' '/^Implementation-Version: /{print $2; exit}')"
+  # addDefaultImplementationEntries writes this; an empty value means the manifest is not
+  # the one maven-jar-plugin produces, and every archive name downstream would be wrong.
+  [ -n "$version" ] || die "no Implementation-Version in $(app_jar) manifest"
+  printf '%s\n' "$version"
 }
 
+# Exactly one candidate, never "the first one". target/ accumulates: bump ${revision} without
+# a clean and two versions sit side by side, and picking either one silently produces an
+# archive whose name, contents and version need not agree.
 app_jar() {
-  local jar
-  jar="$(find "$TARGET" -maxdepth 1 -name 'MarkdownToPdf-*.jar' \
-        ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
-  [ -n "$jar" ] || die "no application jar in $TARGET — run 'mvn install' first"
-  echo "$jar"
+  local jars count
+  jars="$(find "$TARGET" -maxdepth 1 -name 'MarkdownToPdf-*.jar' \
+    ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort)"
+  # A string rather than an array on purpose: macOS ships bash 3.2, where expanding an
+  # empty array under `set -u` is an "unbound variable" error, and empty is a case this
+  # function has to report rather than crash on.
+  count="$(printf '%s' "$jars" | grep -c . || true)"
+  case "$count" in
+    0) die "no application jar in $TARGET — run 'mvn install' first" ;;
+    1) printf '%s\n' "$jars" ;;
+    *) die "$TARGET holds $count application jars:
+$jars
+Run 'mvn clean install' — packaging will not guess which one to ship." ;;
+  esac
 }
 
 build_runtime() {
@@ -732,7 +754,7 @@ git commit -m "build: add jlink runtime construction to createApp.sh"
 **Interfaces:**
 - Consumes: `build_runtime`, `app_version`, `app_jar`, `die` from Task 4; `check-lib-classpath.sh` from Task 2.
 - Produces: `gui/target/md2pdf-<version>-linux-x64.zip`.
-- Produces: `verify-install.sh <linux|macos|windows> <install-dir>` — every post-install assertion for that platform, exit 0 on success. Used by Tasks 6, 7, 8 and 10.
+- Produces: `verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version>` — every post-install assertion for that platform, exit 0 on success. All three arguments are required. Used by Tasks 6, 7, 8 and 10.
 
 - [ ] **Step 1: Write the verification script (it fails first)**
 
@@ -1727,6 +1749,16 @@ JAVA="${2:?usage: verify-no-jdk.sh <unpacked-dir> <java>}"
 SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
+# Both arguments are likely to arrive as native Windows paths on Git Bash — $JAVA_HOME as
+# set by actions/setup-java is C:\hostedtoolcache\..., and `unzip -d` is commonly given the
+# same. dirname, cd and the file tests below all need POSIX form.
+unixpath() {
+  if command -v cygpath > /dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+}
+DIR="$(unixpath "$DIR")"
+JAVA="$(unixpath "$JAVA")"
+[ -x "$JAVA" ] || fail "not an executable java binary: $JAVA"
+
 [ -f "$DIR/MarkdownToPdf.jar" ] || fail "MarkdownToPdf.jar missing"
 [ -f "$DIR/README.txt" ]        || fail "README.txt missing"
 # An assembly slip that added one would produce a 100 MB "no-jdk" download.
@@ -2452,7 +2484,7 @@ git commit -m "docs: document the bundled-runtime downloads, Linux prerequisites
 - The Task 2 POM changes were applied and `mvn install` run; `check-lib-classpath.sh` passed against the result (45 jars).
 - `EngineSmoke.java` and `ToolkitSmoke.java` were compiled against the produced jar and `EngineSmoke` was run (~1.6 KB PDF, pass).
 - A `jlink` image **without** `jdk.compiler` was built and confirmed to fail source-file mode with `InternalError: Module jdk.compiler not in boot Layer`, and to run a precompiled class fine. This is why Task 3 compiles rather than running from source.
-- `mvn dependency:build-classpath` and the pinned `maven-help-plugin:3.5.1:evaluate` invocations were confirmed to work.
+- `maven-dependency-plugin:3.8.1:build-classpath` and the pinned `maven-help-plugin:3.5.1:evaluate` invocations were confirmed to work, as was prefix resolution through `pluginManagement` for `spotless:apply` (3.9.0) and `javadoc:jar` (3.12.0).
 - Asset sizes were measured: the javadoc jar is ~130 KB, which is why the release sanity check uses per-asset floors.
 
 The POMs were then reverted, so the repo is unchanged — but Tasks 2 and 3 are known-good, not merely plausible. Everything in Tasks 4-12 is unrun.
