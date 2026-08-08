@@ -28,6 +28,7 @@ Every task's requirements implicitly include this section.
 - **The jlink module set** (verbatim, order irrelevant):
   `javafx.controls, javafx.swing, javafx.web, java.desktop, java.logging, java.management, java.naming, java.net.http, java.prefs, java.scripting, java.sql, java.xml, jdk.charsets, jdk.crypto.ec, jdk.unsupported, jdk.zipfs`
 - **No `--add-modules` is needed to run the app.** In a custom `jlink` image (and in Liberica Full), every non-`java.*` module present is a root module, so `javafx.*` resolves for classpath code automatically. Adding `--add-modules` at launch is a sign something else is wrong.
+- **The bundled runtime has no `jdk.compiler`, so `java Foo.java` source-file mode does not work on it** — it fails with `InternalError: Module jdk.compiler not in boot Layer`. The smoke tests are compiled with the full JDK on `$JAVA_HOME` and run as `.class` files. Do not add `jdk.compiler` to the module set to make source mode work; it is ~20 MB of compiler in every user's download to save one `javac` call in CI.
 - **Nothing reads or writes `md2pdf.env`, `MD2PDF_JAVA_HOME`, or parses `java -version` any more.** If you find yourself writing JDK detection, stop — that code is what this work deletes.
 - **`0.1.1-SNAPSHOT` in the command examples is today's `${revision}`.** If it has been bumped, substitute. Scripts must never hardcode it; examples may.
 - **Maven plugin invocations from the command line are pinned**, e.g. `mvn org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate …`. An unqualified `mvn help:evaluate` resolves whatever version is newest on Central, which makes the build depend on the day it runs. (Verified working at 3.5.1.)
@@ -39,7 +40,10 @@ Do not re-litigate these; they were run, not assumed.
 
 - `copy-dependencies` with `includeScope=runtime` produces **exactly 45 jars**, with no `javafx-*` and no test jars. The `check-lib-classpath.sh` in Task 2 passes against that output unchanged.
 - A jar on the **classpath** (`java -cp app.jar Foo.java`) honours the manifest `Class-Path`, so the smoke tests resolve `lib/` without naming it.
-- `EngineSmoke` produces a **~1.6 KB** PDF and prints three harmless `SLF4J(W): No SLF4J providers were found` lines before the OK line. That is expected — the smoke test runs without a logging backend configured. Do not "fix" it.
+- `EngineSmoke` produces a **~1.6 KB** PDF (1602-1603 bytes; it varies by a byte between runs, so do not assert an exact size) and prints three harmless `SLF4J(W): No SLF4J providers were found` lines before the OK line. That is expected — the smoke test runs without a logging backend configured. Do not "fix" it.
+- Both smoke tests **compile** against `MarkdownToPdf.jar` with the full Liberica JDK and no `--add-modules`, and the compiled classes run correctly. `javac` emits an annotation-processing note unless `-proc:none` is passed, which the compile helper does.
+- `jlink --compress=2` on 21.0.12 prints `Warning: The 2 argument for --compress is deprecated and may be removed in a future release`. Expected and harmless — `2` is still the only ZIP level JDK 21 accepts, and the `zip-<n>` replacement is JDK 22+ and makes JDK 21 fail outright. Do not "fix" the warning.
+- Liberica Full 21.0.12 ships **seven** `javafx.*` modules: `base`, `controls`, `fxml`, `graphics`, `media`, `swing`, `web`.
 - `mvn -pl gui dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=<file>` works and is the reliable way to get a classpath for an ad-hoc run.
 - `env -i` supplies a default `PATH` of `/bin:/usr/bin` when none is given, so `xvfb-run` is still found. The plan sets `PATH` explicitly anyway, so the scrubbing is visible rather than incidental.
 
@@ -54,6 +58,7 @@ Do not re-litigate these; they were run, not assumed.
 | `.github/scripts/check-lib-classpath.sh` | Asserts manifest `Class-Path` and `lib/` agree exactly. |
 | `.github/scripts/EngineSmoke.java` | Markdown → PDF through `Md2PdfEngine`; asserts `%PDF`. |
 | `.github/scripts/ToolkitSmoke.java` | Starts the JavaFX toolkit, constructs a `WebView`. |
+| `.github/scripts/compile-smoke.sh` | Compiles both smoke tests with the full JDK, since the bundled runtime has no compiler. |
 | `.github/scripts/verify-install.sh` | All post-install assertions for one platform. |
 | `.github/scripts/verify-no-jdk.sh` | Assertions specific to the `-no-jdk` archive. |
 | `.github/scripts/test-install-failures.sh` | Asserts the installer's failure paths fail loudly. |
@@ -103,7 +108,19 @@ This gates every other task. If the GUI cannot compile against JavaFX 21.0.12, t
 ```bash
 /home/per/.sdkman/candidates/java/21.0.12.fx-librca/bin/java --list-modules | grep '^javafx'
 ```
-Expected: seven `javafx.*` modules, each `@21.0.12`. If they are not `21.0.12`, **stop and report** — the rest of this plan is built on that number.
+Expected, all at `@21.0.12`:
+
+```
+javafx.base@21.0.12
+javafx.controls@21.0.12
+javafx.fxml@21.0.12
+javafx.graphics@21.0.12
+javafx.media@21.0.12
+javafx.swing@21.0.12
+javafx.web@21.0.12
+```
+
+What matters is that `javafx.controls`, `javafx.swing` and `javafx.web` are present at `21.0.12` — those are the three the module set requests by name. Assert on the names and the version, not on the count; the count is incidental and would change if BellSoft added or dropped an unrelated module. If the version is not `21.0.12`, **stop and report** — the rest of this plan is built on that number.
 
 - [ ] **Step 2: Change the property and delete the stale comment**
 
@@ -292,10 +309,10 @@ Remove the entire `<profiles>…</profiles>` block from `gui/pom.xml` (lines 255
 Then:
 
 ```bash
-git rm -f gui/dependency-reduced-pom.xml
+rm -f gui/dependency-reduced-pom.xml
 ```
 
-That file is a shade side-effect with no remaining producer.
+`rm`, not `git rm`: the file is matched by `dependency-reduced-pom.xml` in `.gitignore` and has never been tracked, so `git rm` fails. Leave the ignore rule in place — it costs nothing and removing it is a separate decision.
 
 - [ ] **Step 6: Drop -Pfatjar from build.sh**
 
@@ -343,10 +360,14 @@ A hand-curated module set makes "does it actually run" the central risk. These t
 **Files:**
 - Create: `.github/scripts/EngineSmoke.java`
 - Create: `.github/scripts/ToolkitSmoke.java`
+- Create: `.github/scripts/compile-smoke.sh`
 
 **Interfaces:**
-- Produces: `EngineSmoke` — run as `<java> -cp <MarkdownToPdf.jar> .github/scripts/EngineSmoke.java`; exit 0 on success. Resolves dependencies through the jar's manifest `Class-Path`, so it also proves `lib/` is complete.
+- Produces: `compile-smoke.sh <app-jar> <output-dir>` — compiles both tests with the JDK on `$JAVA_HOME` into `<output-dir>`.
+- Produces: `EngineSmoke` — run as `<java> -cp <MarkdownToPdf.jar><sep><output-dir> EngineSmoke`; exit 0 on success. Resolves dependencies through the jar's manifest `Class-Path`, so it also proves `lib/` is complete.
 - Produces: `ToolkitSmoke` — same invocation; exit 0 on success. Needs a display (`xvfb-run` on Linux).
+
+**They are compiled, not run from source.** The bundled runtime has no `jdk.compiler`, so `java EngineSmoke.java` on it fails with `InternalError: Module jdk.compiler not in boot Layer`. Compiling with the full JDK and running the `.class` files on the bundled runtime tests exactly what needed testing — the *runtime* module set — without putting a compiler in every user's download.
 
 - [ ] **Step 1: Write the engine smoke test**
 
@@ -430,24 +451,61 @@ public class ToolkitSmoke {
 
 `Runtime.halt` rather than `System.exit`: the FX toolkit keeps non-daemon threads alive, and a shutdown hook race here would turn a passing test into a hung CI job.
 
-- [ ] **Step 3: Run both against the current build**
+- [ ] **Step 3: Write the compile helper**
+
+Create `.github/scripts/compile-smoke.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Compiles the smoke tests with a full JDK, for running on a runtime that has no compiler.
+#
+#   compile-smoke.sh <app-jar> <output-dir>
+#
+# The bundled runtime deliberately omits jdk.compiler, so `java EngineSmoke.java` fails on
+# it with "InternalError: Module jdk.compiler not in boot Layer". Compiling here and running
+# the .class files there tests the runtime module set, which is the point, without shipping
+# a compiler to every user.
+set -euo pipefail
+
+JAR="${1:?usage: compile-smoke.sh <app-jar> <output-dir>}"
+OUT="${2:?usage: compile-smoke.sh <app-jar> <output-dir>}"
+SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
+
+[ -n "${JAVA_HOME:-}" ] \
+  || { echo "JAVA_HOME must point at a JavaFX-bundled JDK 21 to compile the smoke tests" >&2; exit 1; }
+[ -f "$JAR" ] || { echo "no such jar: $JAR" >&2; exit 1; }
+
+rm -rf "$OUT"
+mkdir -p "$OUT"
+# -proc:none: dependencies on the classpath carry annotation processors, and javac warns
+# at length about implicitly running them.
+"$JAVA_HOME/bin/javac" -proc:none -cp "$JAR" -d "$OUT" \
+  "$SCRIPTS/EngineSmoke.java" "$SCRIPTS/ToolkitSmoke.java"
+```
+
+```bash
+chmod +x .github/scripts/compile-smoke.sh
+```
+
+No `--add-modules` is needed to compile `ToolkitSmoke` — in a JavaFX-bundled image the `javafx.*` modules are already roots. If `javafx.scene.web` is not found, `$JAVA_HOME` is a plain JDK, not a missing flag.
+
+- [ ] **Step 4: Run both against the current build**
 
 ```bash
 mvn -q install -DskipTests
 JAR=gui/target/MarkdownToPdf-0.1.1-SNAPSHOT.jar
-"$JAVA_HOME/bin/java" -cp "$JAR" .github/scripts/EngineSmoke.java
-xvfb-run -a "$JAVA_HOME/bin/java" -cp "$JAR" .github/scripts/ToolkitSmoke.java
+.github/scripts/compile-smoke.sh "$JAR" /tmp/md2pdf-smoke
+"$JAVA_HOME/bin/java" -cp "$JAR:/tmp/md2pdf-smoke" EngineSmoke
+xvfb-run -a "$JAVA_HOME/bin/java" -cp "$JAR:/tmp/md2pdf-smoke" ToolkitSmoke
 ```
-Expected: `EngineSmoke: OK (1603 bytes)` — preceded by three `SLF4J(W): No SLF4J providers were found` lines, which are expected and must not be "fixed" — and `ToolkitSmoke: OK`. Both exit 0.
-
-Do **not** add `--add-modules javafx.controls` to make this work. If `javafx.scene.web` is not found, the cause is a plain JDK on `$JAVA_HOME`, not a missing flag — in a JavaFX-bundled image every non-`java.*` module is already a root.
+Expected: `EngineSmoke: OK (~1600 bytes)` — preceded by three `SLF4J(W): No SLF4J providers were found` lines, which are expected and must not be "fixed" — and `ToolkitSmoke: OK`. Both exit 0.
 
 If `xvfb-run` is not installed: `sudo apt-get install -y xvfb`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add .github/scripts/EngineSmoke.java .github/scripts/ToolkitSmoke.java
+git add .github/scripts/EngineSmoke.java .github/scripts/ToolkitSmoke.java .github/scripts/compile-smoke.sh
 git commit -m "test: add engine and JavaFX toolkit smoke tests"
 ```
 
@@ -612,11 +670,15 @@ Now the assertion that matters — both smoke tests **on the bundled runtime, wi
 ```bash
 JAR="$(find gui/target -maxdepth 1 -name 'MarkdownToPdf-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
 cp "$JAR" gui/target/MarkdownToPdf.jar
+.github/scripts/compile-smoke.sh gui/target/MarkdownToPdf.jar /tmp/md2pdf-smoke
+CP="gui/target/MarkdownToPdf.jar:/tmp/md2pdf-smoke"
 env -i PATH=/usr/bin:/bin HOME="$HOME" \
-  gui/target/runtime/bin/java -cp gui/target/MarkdownToPdf.jar .github/scripts/EngineSmoke.java
+  gui/target/runtime/bin/java -cp "$CP" EngineSmoke
 env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" \
-  xvfb-run -a gui/target/runtime/bin/java -cp gui/target/MarkdownToPdf.jar .github/scripts/ToolkitSmoke.java
+  xvfb-run -a gui/target/runtime/bin/java -cp "$CP" ToolkitSmoke
 ```
+
+The tests are compiled with `$JAVA_HOME` first and then run on the bundled runtime, because the runtime has no `jdk.compiler`. `java …/EngineSmoke.java` against it fails with `InternalError: Module jdk.compiler not in boot Layer`.
 Expected: both print OK and exit 0.
 
 `env -i` is not decoration. Without it the test can silently lean on `$JAVA_HOME` or a `java` on `PATH`, and the whole point of this step is that it cannot.
@@ -743,6 +805,24 @@ esac
 
 # The real test: run the app's own code on the installed runtime, with nothing from the
 # ambient environment available to stand in for it.
+# Compiled here with the full JDK, run below on the bundled runtime: the runtime has no
+# jdk.compiler, so source-file mode fails on it outright. This has to happen before the
+# scrubbing, since it is the one step that legitimately needs JAVA_HOME.
+SMOKE="$(mktemp -d)"
+trap 'rm -rf "$SMOKE"' EXIT
+"$SCRIPTS/compile-smoke.sh" "$APP/MarkdownToPdf.jar" "$SMOKE"
+
+# Git Bash hands POSIX paths and colon-separated lists to a native java.exe with heuristic
+# and unreliable conversion, so on Windows the classpath is built in native form.
+native() {
+  if command -v cygpath > /dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+if [ "$PLATFORM" = "windows" ]; then
+  CP="$(native "$APP/MarkdownToPdf.jar");$(native "$SMOKE")"
+else
+  CP="$APP/MarkdownToPdf.jar:$SMOKE"
+fi
+
 # PATH is set explicitly rather than left to env's built-in default, so that what is kept
 # (xvfb-run, the system utilities) and what is dropped (any JDK on the caller's PATH) is
 # visible in the script rather than a property of env.
@@ -754,14 +834,12 @@ scrub() {
   fi
 }
 
-scrub "$JAVA" -cp "$APP/MarkdownToPdf.jar" "$SCRIPTS/EngineSmoke.java" || fail "engine smoke failed"
+scrub "$JAVA" -cp "$CP" EngineSmoke || fail "engine smoke failed"
 
 if [ "$PLATFORM" = "linux" ]; then
-  scrub xvfb-run -a "$JAVA" -cp "$APP/MarkdownToPdf.jar" "$SCRIPTS/ToolkitSmoke.java" \
-    || fail "toolkit smoke failed"
+  scrub xvfb-run -a "$JAVA" -cp "$CP" ToolkitSmoke || fail "toolkit smoke failed"
 else
-  scrub "$JAVA" -cp "$APP/MarkdownToPdf.jar" "$SCRIPTS/ToolkitSmoke.java" \
-    || fail "toolkit smoke failed"
+  scrub "$JAVA" -cp "$CP" ToolkitSmoke || fail "toolkit smoke failed"
 fi
 
 printf '\nPASS: %s install at %s\n' "$PLATFORM" "$DEST"
@@ -1645,11 +1723,16 @@ done
 # JavaFX-bundled JDK is a working installation — and, with check-lib-classpath.sh having
 # just asserted there is no javafx-* jar in lib/, that the JavaFX modules came from the
 # JDK. That is the module resolution the archive depends on.
-"$JAVA" -cp "$DIR/MarkdownToPdf.jar" "$SCRIPTS/EngineSmoke.java" || fail "engine smoke failed"
+SMOKE="$(mktemp -d)"
+trap 'rm -rf "$SMOKE"' EXIT
+"$SCRIPTS/compile-smoke.sh" "$DIR/MarkdownToPdf.jar" "$SMOKE"
+CP="$DIR/MarkdownToPdf.jar:$SMOKE"
+
+"$JAVA" -cp "$CP" EngineSmoke || fail "engine smoke failed"
 if [ "$(uname -s)" = "Linux" ]; then
-  xvfb-run -a "$JAVA" -cp "$DIR/MarkdownToPdf.jar" "$SCRIPTS/ToolkitSmoke.java" || fail "toolkit smoke failed"
+  xvfb-run -a "$JAVA" -cp "$CP" ToolkitSmoke || fail "toolkit smoke failed"
 else
-  "$JAVA" -cp "$DIR/MarkdownToPdf.jar" "$SCRIPTS/ToolkitSmoke.java" || fail "toolkit smoke failed"
+  "$JAVA" -cp "$CP" ToolkitSmoke || fail "toolkit smoke failed"
 fi
 
 printf '\nPASS: no-jdk archive at %s\n' "$DIR"
@@ -2100,11 +2183,23 @@ done
 step "Checking the staged assets"
 count="$(find "$STAGING" -maxdepth 1 -type f | wc -l | tr -d ' ')"
 [ "$count" -eq 5 ] || die "expected exactly 5 files in $STAGING, found $count"
+# Per-asset floors, because the assets differ by three orders of magnitude: a platform zip
+# carries a ~100 MB runtime, the no-jdk zip is ~15 MB, and the javadoc jar is ~130 KB. A
+# single 1 MB floor would abort every release on the javadoc jar.
+asset_floor() {
+  case "$1" in
+    *-linux-x64.zip|*-macos-aarch64.zip|*-windows-x64.zip) echo 40000000 ;;  # 40 MB
+    *-no-jdk.zip)                                          echo  5000000 ;;  #  5 MB
+    *-javadoc.jar)                                         echo    20000 ;;  # 20 KB
+    *) echo 1 ;;
+  esac
+}
 for asset in "${ASSETS[@]}"; do
   f="$STAGING/$asset"
   [ -f "$f" ] || die "missing: $asset"
   size="$(wc -c < "$f" | tr -d ' ')"
-  [ "$size" -gt 1000000 ] || die "$asset is only $size bytes"
+  floor="$(asset_floor "$asset")"
+  [ "$size" -gt "$floor" ] || die "$asset is only $size bytes (expected more than $floor)"
 done
 for label in linux-x64 macos-aarch64 windows-x64; do
   unzip -l "$STAGING/md2pdf-$VERSION-$label.zip" | grep -q 'MarkdownToPdf' \
@@ -2328,7 +2423,15 @@ git commit -m "docs: document the bundled-runtime downloads, Linux prerequisites
 - **`VERSION` comes from the built jar's manifest**, not from `mvn help:evaluate`, inside `createApp.sh`. An archive can then never be named for a different version than the jar it contains. The CI workflow does use `help:evaluate`, because it needs the version before anything is built.
 - **`verify-install.sh` takes the expected JavaFX version as an argument** rather than reading `gui/pom.xml` itself, so it stays runnable against an installed tree with no source checkout nearby.
 
-**What was actually executed while writing this plan**, on the maintainer's Linux machine against this repo: the Task 2 POM changes were applied, `mvn install` run, and `check-lib-classpath.sh` run against the result (45 jars, pass); `EngineSmoke.java` was written and run against the produced jar (1603-byte PDF, pass); `mvn dependency:build-classpath` and the pinned `maven-help-plugin:3.5.1:evaluate` invocations were confirmed to work. The POMs were then reverted, so the repo is unchanged — but Tasks 2 and 3 are known-good, not merely plausible. Everything in Tasks 4-12 is unrun.
+**What was actually executed while writing this plan**, on the maintainer's Linux machine against this repo:
+
+- The Task 2 POM changes were applied and `mvn install` run; `check-lib-classpath.sh` passed against the result (45 jars).
+- `EngineSmoke.java` and `ToolkitSmoke.java` were compiled against the produced jar and `EngineSmoke` was run (~1.6 KB PDF, pass).
+- A `jlink` image **without** `jdk.compiler` was built and confirmed to fail source-file mode with `InternalError: Module jdk.compiler not in boot Layer`, and to run a precompiled class fine. This is why Task 3 compiles rather than running from source.
+- `mvn dependency:build-classpath` and the pinned `maven-help-plugin:3.5.1:evaluate` invocations were confirmed to work.
+- Asset sizes were measured: the javadoc jar is ~130 KB, which is why the release sanity check uses per-asset floors.
+
+The POMs were then reverted, so the repo is unchanged — but Tasks 2 and 3 are known-good, not merely plausible. Everything in Tasks 4-12 is unrun.
 
 **Known gaps, deliberate:**
 
