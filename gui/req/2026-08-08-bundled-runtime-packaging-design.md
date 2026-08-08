@@ -625,12 +625,19 @@ or Windows runtimes — and becomes a release driver:
    `gh run download -n <name> -D "$STAGING"` call per artifact** — see below.
 4. Sanity-check the staging directory: all five assets present, non-trivial size, expected
    top-level entries.
-5. Generate `SHA256SUMS` over the staging directory. Every asset is already present, so the
-   checksums cover the exact set that gets uploaded.
+5. Generate `SHA256SUMS` into the staging directory, hashing the five assets. Every asset is
+   already present, so the checksums cover the exact set that gets uploaded. Run `sha256sum`
+   with the staging directory as the working directory so the file records bare basenames —
+   a user who downloads the assets and `SHA256SUMS` into one directory can then verify with
+   `sha256sum -c SHA256SUMS` and nothing else.
 6. `mvn -Prelease -pl lib -am clean site deploy` — the Maven Central publication of `lib`
    and the parent POM, and nothing else.
 7. Tag `v<version>` and push it.
-8. `gh release create v<version>` with the staging directory and `SHA256SUMS`.
+8. `gh release create v<version> "$STAGING"/*` — six files: the five assets and
+   `SHA256SUMS`. Its synopsis is
+   `gh release create [<tag>] [<filename>... | <pattern>...]`; it takes filenames or globs,
+   never a directory, so the glob must be expanded by the shell. The upload is therefore
+   only as complete as the staging directory, which is what step 4 exists to check.
 
 ### Downloading the assets
 
