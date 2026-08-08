@@ -22,7 +22,7 @@
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- Bump here, in gui/pom.xml <md2pdf.version>, and in Info.plist when releasing -->
+    <!-- Bump here and in gui/pom.xml <md2pdf.version> when releasing -->
     <revision>0.1.1-SNAPSHOT</revision>
     <batik.version>1.19</batik.version>
     <commonmark.version>0.30.0</commonmark.version>

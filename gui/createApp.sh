@@ -153,6 +153,36 @@ case "$PLATFORM" in
     CHECK_JAR="$APPDIR/MarkdownToPdf.jar"
     CHECK_LIB="$APPDIR/lib"
     ;;
+  macos)
+    EXECUTABLE="markdownToPdf"
+    BUNDLE_VERSION="${VERSION%%-*}"
+    printf '%s' "$BUNDLE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$' \
+      || die "BUNDLE_VERSION '$BUNDLE_VERSION' is not one to three period-separated integers"
+    COMMIT="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+    CONTENTS="$STAGE/MarkdownToPdf.app/Contents"
+    mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
+    stage_app "$CONTENTS/app"
+    build_runtime "$CONTENTS/runtime"
+
+    # The executable name and CFBundleExecutable come from one variable so they cannot
+    # diverge again.
+    cp "$DIR/src/main/assembly/mac/$EXECUTABLE" "$CONTENTS/MacOS/$EXECUTABLE"
+    chmod +x "$CONTENTS/MacOS/$EXECUTABLE"
+    cp "$DIR/src/main/assembly/mac/md2pdf.icns" "$CONTENTS/Resources/"
+    sed -e "s|@EXECUTABLE@|$EXECUTABLE|g" \
+        -e "s|@BUNDLE_VERSION@|$BUNDLE_VERSION|g" \
+        -e "s|@FULL_VERSION@|$VERSION|g" \
+        -e "s|@COMMIT@|$COMMIT|g" \
+        "$DIR/src/main/assembly/mac/Info.plist" > "$CONTENTS/Info.plist"
+
+    cp "$DIR/src/main/assembly/mac/md2pdf-install.zsh" "$STAGE/"
+    chmod +x "$STAGE/md2pdf-install.zsh"
+
+    bash "$DIR/src/main/assembly/mac/sign-app.sh" "$STAGE/MarkdownToPdf.app"
+    CHECK_JAR="$CONTENTS/app/MarkdownToPdf.jar"
+    CHECK_LIB="$CONTENTS/app/lib"
+    ;;
   *) die "$PLATFORM packaging is not implemented yet" ;;
 esac
 

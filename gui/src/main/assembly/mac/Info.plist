@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <plist version="1.0">
   <dict>
+    <!-- Must match the file in Contents/MacOS exactly. Packaging writes the launcher and
+         this key from one variable; a mismatch only appears to work because APFS is
+         case-insensitive by default, and fails outright on a case-sensitive volume. -->
     <key>CFBundleExecutable</key>
+    <string>@EXECUTABLE@</string>
+    <key>CFBundleIdentifier</key>
+    <string>se.alipsa.md2pdf</string>
+    <key>CFBundleName</key>
     <string>MarkdownToPdf</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <!-- Free-form, so it is where the full ${revision} and the commit survive. -->
     <key>CFBundleGetInfoString</key>
-    <string>Markdown To PDF IDE</string>
+    <string>MarkdownToPdf @FULL_VERSION@ (@COMMIT@)</string>
+    <!-- Apple allows only one to three period-separated integers here. -->
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>@BUNDLE_VERSION@</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>@BUNDLE_VERSION@</string>
     <key>CFBundleIconFile</key>
     <string>md2pdf.icns</string>
     <key>CFBundleIconName</key>

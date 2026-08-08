@@ -1,67 +1,9 @@
 #!/usr/bin/env zsh
-# This script goes into the Contents/MacOS folder
-DIR="${0:A:h}"
-
-source "$HOME/.zshrc"
-
-# MD2PDF_JAVA_HOME, if set to a JDK home containing bin/java, overrides the
-# JDK on PATH — useful when the default JVM isn't JavaFX-bundled but a
-# suitable one is installed elsewhere (e.g. a non-default sdkman candidate).
-# Set it in ~/.zshrc, sourced above, so a double-click launch picks it up.
-# md2pdf-install.sh records the JDK it validated in md2pdf.env at the app root;
-# an MD2PDF_JAVA_HOME from ~/.zshrc wins over it.
-APP_ROOT="$DIR/../.."
-if [[ -z "$MD2PDF_JAVA_HOME" && -f "$APP_ROOT/md2pdf.env" ]]; then
-  source "$APP_ROOT/md2pdf.env"
-fi
-
-javaBin() {
-  if [[ -n "$MD2PDF_JAVA_HOME" && -x "$MD2PDF_JAVA_HOME/bin/java" ]]; then
-    echo "$MD2PDF_JAVA_HOME/bin/java"
-  else
-    echo "java"
-  fi
-}
-
-javaMajorVersion() {
-  "$(javaBin)" -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1
-}
-
-javaIsSuitable() {
-  local bin
-  bin=$(javaBin)
-  if [[ "$bin" == "java" ]]; then
-    command -v java >/dev/null 2>&1 || return 1
-  fi
-  local v
-  v=$(javaMajorVersion)
-  case "$v" in
-    (""|*[!0-9]*) return 1 ;;
-  esac
-  [[ "$v" -ge 21 ]] || return 1
-  "$bin" --list-modules 2>/dev/null | grep -q '^javafx.controls' || return 1
-  return 0
-}
-
-if ! javaIsSuitable && [[ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
-  # A stale/unsuitable MD2PDF_JAVA_HOME would otherwise pin javaBin() to the
-  # same bad path on every iteration below, masking a perfectly good sdkman
-  # candidate — unset it for the duration of this recovery attempt.
-  savedJavaHome="$MD2PDF_JAVA_HOME"
-  unset MD2PDF_JAVA_HOME
-  source "$HOME/.sdkman/bin/sdkman-init.sh"
-  for candidate in $(sdk list java 2>/dev/null | grep installed | cut -d '|' -f 6 | sed 's/^ *//;s/ *$//'); do
-    sdk use java "$candidate" >/dev/null 2>&1
-    javaIsSuitable && break
-  done
-  if ! javaIsSuitable && [[ -n "$savedJavaHome" ]]; then
-    export MD2PDF_JAVA_HOME="$savedJavaHome"
-  fi
-fi
-
-if ! javaIsSuitable; then
-  osascript -e 'display dialog "MarkdownToPdf requires a JavaFX-bundled JDK 21 or later (e.g. Liberica Full JDK), but none was found.\n\nRun md2pdf-install.sh from the folder where you unzipped MarkdownToPdf to install one automatically, or download one manually from https://bell-sw.com/pages/downloads/?version=java.\n\nIf you already have a suitable JDK installed elsewhere, set MD2PDF_JAVA_HOME to its home directory in ~/.zshrc and relaunch." with title "MarkdownToPdf" with icon stop buttons {"OK"} default button "OK"'
-  exit 1
-fi
-
-source "$APP_ROOT/run.zsh"
+# Contents/MacOS/markdownToPdf — the app bundle's only entry point.
+set -e
+DIR="${0:A:h}"          # Contents/MacOS
+CONTENTS="${DIR:h}"     # Contents
+exec "$CONTENTS/runtime/bin/java" -Xmx8g \
+  -Xdock:name=MarkdownToPdf \
+  -Xdock:icon="$CONTENTS/Resources/md2pdf.icns" \
+  -jar "$CONTENTS/app/MarkdownToPdf.jar"
