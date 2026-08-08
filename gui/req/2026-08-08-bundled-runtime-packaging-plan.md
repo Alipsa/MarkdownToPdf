@@ -2238,9 +2238,16 @@ The likely first-run failures, in order of probability:
 
 - [ ] **Step 4: Deliberately break something and confirm CI catches it**
 
-This is the acceptance test for whether the CI work was worth doing. On a throwaway commit, remove `jdk.crypto.ec` from `MODULES` in `createApp.sh` and push.
+This is the acceptance test for whether the CI work was worth doing. On a throwaway commit,
+remove the explicit leaf module `javafx.web` from `MODULES` in `createApp.sh` and push. Do not
+remove `java.desktop`, `java.net.http`, `java.xml`, `javafx.controls` or `javafx.swing`: those
+are transitively required and jlink keeps them in the image even when removed from the root
+list. `javafx.web` is the testable leaf, and `ToolkitSmoke` constructs a `WebView`.
 
-Expected: the `build` job fails. Revert the throwaway commit.
+Expected: the `build` job fails during installed-runtime verification when the toolkit smoke
+tries to load `WebView`. A green run after removing `jdk.crypto.ec` would not have tested
+anything: that provider is lazy and neither smoke test opens a socket. Revert the throwaway
+commit after the failure is observed.
 
 - [ ] **Step 5: Commit any fixes**
 

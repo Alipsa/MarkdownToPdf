@@ -25,6 +25,9 @@ esac
 # The module set is hand-curated: jlink's --bind-services or a whole-JDK image would
 # undo the size saving this packaging exists for. jdk.localedata is deliberately absent
 # (~15 MB); the consequence is English-only locale formatting.
+# jdk.crypto.ec is required for TLS: WebView can load https: resources in a preview. The
+# smoke tests intentionally do not cover this lazily-loaded provider; they use local or
+# inline content and open no sockets, so this module must not be inferred from their result.
 MODULES="javafx.controls,javafx.swing,javafx.web,\
 java.desktop,java.logging,java.management,java.naming,\
 java.net.http,java.prefs,java.scripting,java.sql,java.xml,\

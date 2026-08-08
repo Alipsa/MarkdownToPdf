@@ -66,7 +66,10 @@ gh run watch "$RUN_ID" --exit-status || die "CI run $RUN_ID did not succeed"
 
 # ── 3. download the assets ──────────────────────────────────────────
 step "Downloading release assets"
-STAGING="$BASEDIR/target/release-$VERSION"
+# Keep staging outside target/: the release deploy includes `clean`, and -am brings the
+# aggregator parent into the reactor, so Maven clean removes every module's target tree.
+# This directory is ignored so a failed post-deploy recovery does not dirty the checkout.
+STAGING="$BASEDIR/.release-staging/release-$VERSION"
 # Emptied, not reused: the --skip-deploy recovery re-runs this step over a directory a
 # previous attempt already populated, and a stale file here would ship unhashed under a
 # SHA256SUMS that appears to account for it.

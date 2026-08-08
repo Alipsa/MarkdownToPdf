@@ -15,7 +15,7 @@ set "SRC=%SCRIPTDIR%%APP_NAME%"
 if "%~1"=="" (
   set "DEST=%LOCALAPPDATA%\Programs\%APP_NAME%"
 ) else (
-  set "DEST=%~1"
+  set "DEST=%~f1"
 )
 
 if not exist "%SRC%\" (

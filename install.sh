@@ -14,6 +14,12 @@ case "$OSTYPE" in
   *) echo "Unsupported platform for a source install: $OSTYPE" >&2; exit 1 ;;
 esac
 
+[ "$#" -le 1 ] || { echo "usage: $0 [installDir]" >&2; exit 2; }
+INSTALL_DIR="${1:-}"
+if [ -n "$INSTALL_DIR" ] && [[ "$INSTALL_DIR" != /* ]]; then
+  INSTALL_DIR="$BASEDIR/$INSTALL_DIR"
+fi
+
 mvn install -DskipTests
 ./gui/createApp.sh "$PLATFORM"
 
@@ -22,4 +28,8 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-$LABEL.zip" -d "$WORK"
 cd "$WORK"
-MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}"
+if [ -n "$INSTALL_DIR" ]; then
+  MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}" "$INSTALL_DIR"
+else
+  MD2PDF_REPLACE_EXISTING=1 "${INSTALLER[@]}"
+fi

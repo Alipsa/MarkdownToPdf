@@ -18,4 +18,5 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-linux-x64.zip" -d "$WORK"
 MD2PDF_REPLACE_EXISTING=1 bash "$WORK/md2pdf-install.sh" < /dev/null
-exec "$HOME/.local/share/MarkdownToPdf/run.sh"
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/MarkdownToPdf"
+exec "$INSTALL_DIR/run.sh"

@@ -593,6 +593,12 @@ never shipped.
   the only assertion proving that `javafx.web`'s WebKit native library loads; a class-load
   check cannot do that.
 
+Neither smoke test exercises TLS: `EngineSmoke` renders a hardcoded local Markdown string,
+and `ToolkitSmoke` calls `loadContent()` with inline HTML, so neither opens a socket. This is
+intentional for a fast deterministic CI job, but it means the lazily-loaded `jdk.crypto.ec`
+provider is not covered by CI; its inclusion above is a design requirement for WebView HTTPS
+resources, not an inference from smoke-test coverage.
+
 The toolkit smoke is the most likely source of CI flakiness, particularly on Windows. It
 is included anyway: a missing or broken `javafx.web` native library is precisely the
 failure this change could introduce. If it proves unstable, restrict it to Linux under
