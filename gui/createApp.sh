@@ -183,6 +183,18 @@ case "$PLATFORM" in
     CHECK_JAR="$CONTENTS/app/MarkdownToPdf.jar"
     CHECK_LIB="$CONTENTS/app/lib"
     ;;
+  windows)
+    APPDIR="$STAGE/MarkdownToPdf"
+    mkdir -p "$APPDIR"
+    stage_app "$APPDIR"
+    build_runtime "$APPDIR/runtime"
+    cp "$DIR/src/main/assembly/win/run.cmd"            "$APPDIR/"
+    cp "$DIR/src/main/assembly/win/createShortcut.ps1" "$APPDIR/"
+    cp "$DIR/src/main/resources/MarkdownToPdf-rounded.ico" "$APPDIR/"
+    cp "$DIR/src/main/assembly/win/md2pdf-install.cmd" "$STAGE/"
+    CHECK_JAR="$APPDIR/MarkdownToPdf.jar"
+    CHECK_LIB="$APPDIR/lib"
+    ;;
   *) die "$PLATFORM packaging is not implemented yet" ;;
 esac
 
