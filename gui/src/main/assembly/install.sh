@@ -7,6 +7,13 @@ set -euo pipefail
 MIN_JAVA_VERSION="21"
 REPO="Alipsa/MarkdownToPdf"
 APP_NAME="MarkdownToPdf.app"
+JDK_DOWNLOAD_PAGE="https://bell-sw.com/pages/downloads/?version=java"
+
+# Home of the JDK the installed app should use. Left empty when the `java` on
+# PATH is already suitable, in which case the launchers just use PATH. When set,
+# it is written to md2pdf.env in the install directory and the launchers pick it
+# up as MD2PDF_JAVA_HOME.
+RESOLVED_JAVA_HOME=""
 
 # ── colour helpers ────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -74,43 +81,46 @@ die_on_empty() { [ -n "${1:-}" ] || die "$2"; }
 
 # ── Java detection & (optional) BellSoft install ─────────────────
 check_or_install_java() {
-    # 1. Honour JAVA_HOME if set
-    if [ -n "${JAVA_HOME:-}" ]; then
-        _validate_jdk "${JAVA_HOME}/bin/java"
-        return 0
+    # 1. Honour an explicit MD2PDF_JAVA_HOME / JAVA_HOME override
+    local override=""
+    if [ -n "${MD2PDF_JAVA_HOME:-}" ]; then
+        override="$MD2PDF_JAVA_HOME"
+    elif [ -n "${JAVA_HOME:-}" ]; then
+        override="$JAVA_HOME"
+    fi
+    if [ -n "$override" ]; then
+        if _jdk_is_suitable "${override}/bin/java"; then
+            info "Using the JDK at ${override}"
+            RESOLVED_JAVA_HOME="$override"
+            return 0
+        fi
+        # A stale or non-JavaFX override must not mask a working JDK on PATH or
+        # one we are about to install, so drop it for the rest of this run.
+        warn "${override} is not a usable JavaFX-bundled JDK ${MIN_JAVA_VERSION}+ – ignoring it."
     fi
 
     # 2. Try java on PATH
-    if command -v java >/dev/null 2>&1; then
-        local java_bin jv
-        java_bin="$(command -v java)"
-        jv=$(_java_major_version "$java_bin")
-        if [ "$jv" -ge "$MIN_JAVA_VERSION" ]; then
-            info "Java $jv found on PATH."
-            _validate_jdk "$java_bin"
-            return 0
-        fi
-        warn "Found Java $jv but need >= ${MIN_JAVA_VERSION}."
-    else
-        warn "No java command found on PATH."
+    if _jdk_is_suitable "$(command -v java 2>/dev/null || true)"; then
+        info "Using the java found on PATH."
+        RESOLVED_JAVA_HOME=""
+        return 0
     fi
 
-    # 3. Offer BellSoft Full JDK download / manual path entry
+    # 3. Offer BellSoft Full JDK install / manual path entry
     echo ""
-    read -rp "  Install BellSoft Full JDK ${MIN_JAVA_VERSION} now? [y/N] " reply
+    warn "No JavaFX-bundled JDK ${MIN_JAVA_VERSION}+ was found."
+    read -rp "  Install BellSoft Liberica Full JDK ${MIN_JAVA_VERSION} now? [y/N] " reply
     case "$reply" in
         [yY][eE][sS]|[yY])
             _install_bellsoft_full_jdk
             ;;
         *)
             echo ""
-            read -rp "  Enter the path to a JDK ${MIN_JAVA_VERSION}+ directory (contains bin/java): " manual_home
+            read -rp "  Enter the path to a JavaFX-bundled JDK ${MIN_JAVA_VERSION}+ directory (contains bin/java): " manual_home
             die_on_empty "$manual_home" "Empty path given."
-            if [ ! -x "${manual_home}/bin/java" ]; then
-                die "${manual_home}/bin/java is not executable or does not exist."
-            fi
-            _validate_jdk "${manual_home}/bin/java"
-            export JAVA_HOME="${manual_home}"
+            _jdk_is_suitable "${manual_home}/bin/java" \
+              || die "${manual_home} is not a usable JavaFX-bundled JDK ${MIN_JAVA_VERSION}+."
+            RESOLVED_JAVA_HOME="$manual_home"
             ;;
     esac
 }
@@ -118,92 +128,174 @@ check_or_install_java() {
 _java_major_version() {
     local java_bin="${1:-java}"
     local version_line major
-    version_line=$("$java_bin" -version 2>&1 | head -1)
-    major=$(printf '%s\n' "$version_line" | sed -nE 's/.*version "([0-9]+).*/\1/p')
-    die_on_empty "$major" "Could not parse Java version from: $version_line"
-    printf '%s\n' "$major"
+    version_line=$("$java_bin" -version 2>&1 | head -1 || true)
+    # Strip a legacy 1.x prefix, then take the feature version.
+    major=$(printf '%s\n' "$version_line" \
+            | sed -nE 's/.*version "(1\.)?([0-9]+).*/\2/p')
+    # Print 0 rather than failing so callers can compare numerically.
+    printf '%s\n' "${major:-0}"
 }
 
-_validate_jdk() {
-    local java_bin="$1"
-    if [ ! -x "$java_bin" ]; then
-        die "Java binary not found or not executable: $java_bin"
-    fi
+# Returns 0 when $1 is a java binary of at least MIN_JAVA_VERSION that bundles
+# JavaFX. Prints nothing on success; the caller reports.
+_jdk_is_suitable() {
+    local java_bin="${1:-}"
+    [ -n "$java_bin" ] && [ -x "$java_bin" ] || return 1
+
     local jv
     jv=$(_java_major_version "$java_bin")
-    [ "$jv" -ge "$MIN_JAVA_VERSION" ] || die "Java $jv is below required ${MIN_JAVA_VERSION}."
-
-    info "Java $jv OK – checking for JavaFX …"
-    if "$java_bin" --list-modules 2>/dev/null | grep -q 'javafx'; then
-        info "JavaFX detected on this JDK."
-    else
-        warn "JavaFX modules not detected. The app may fail to start."
-        read -rp "  Continue anyway? [y/N] " reply
-        case "$reply" in y|Y|yes|Yes) ;; *) die "Aborted." ;; esac
+    if [ "$jv" -lt "$MIN_JAVA_VERSION" ]; then
+        if [ "$jv" -gt 0 ]; then
+            warn "Found Java $jv at $java_bin but need >= ${MIN_JAVA_VERSION}."
+        fi
+        return 1
     fi
+
+    if ! "$java_bin" --list-modules 2>/dev/null | grep -q '^javafx.controls'; then
+        warn "Java $jv at $java_bin does not bundle JavaFX (javafx.controls is missing)."
+        return 1
+    fi
+
+    info "Java $jv with JavaFX OK ($java_bin)"
+    return 0
 }
 
 _install_bellsoft_full_jdk() {
-    local arch os_ext b_arch
+    if [ "$OS" = "macos" ] && command -v brew >/dev/null 2>&1; then
+        info "Installing Liberica Full JDK ${MIN_JAVA_VERSION} via Homebrew …"
+        if brew install --cask "liberica-jdk${MIN_JAVA_VERSION}-full"; then
+            _adopt_installed_jdk && return 0
+        fi
+        warn "Homebrew install did not yield a usable JDK – falling back to a direct download."
+    fi
+    _install_bellsoft_from_api
+    _adopt_installed_jdk \
+      || die "The JDK was installed but could not be located afterwards. Open a new terminal and re-run this script, or install manually from ${JDK_DOWNLOAD_PAGE}"
+}
+
+# Locate a usable JDK after an install, and remember it for the launchers.
+_adopt_installed_jdk() {
+    hash -r 2>/dev/null || true
+
+    # Something we extracted ourselves takes priority.
+    if [ -n "${_EXTRACTED_JDK_HOME:-}" ] && _jdk_is_suitable "${_EXTRACTED_JDK_HOME}/bin/java"; then
+        RESOLVED_JAVA_HOME="$_EXTRACTED_JDK_HOME"
+        return 0
+    fi
+
+    if _jdk_is_suitable "$(command -v java 2>/dev/null || true)"; then
+        RESOLVED_JAVA_HOME=""
+        return 0
+    fi
+
+    # A Homebrew cask installs into /Library/Java/JavaVirtualMachines without
+    # touching PATH; java_home knows where it landed.
+    if [ "$OS" = "macos" ] && [ -x /usr/libexec/java_home ]; then
+        local jh
+        jh=$(/usr/libexec/java_home -v "$MIN_JAVA_VERSION" 2>/dev/null || true)
+        if [ -n "$jh" ] && _jdk_is_suitable "${jh}/bin/java"; then
+            RESOLVED_JAVA_HOME="$jh"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+_install_bellsoft_from_api() {
+    local api_os api_arch bitness pkg_type
     case "$OS" in
-      macos)    arch="$(uname -m)";  os_ext="mac"   ;;
-      linux)    arch="$(uname -m)";  os_ext="linux" ;;
-      windows)  arch="x86_64";       os_ext="windows" ;;
+      macos)   api_os="macos"   ;;
+      linux)   api_os="linux"   ;;
+      windows) api_os="windows" ;;
     esac
-    case "$arch" in
-        arm64|aarch64) b_arch="aarch64" ;;
-        x86_64|i386)   b_arch="x64"     ;;
-        *)             die "Unsupported architecture $arch" ;;
+    case "$OS" in
+      windows) pkg_type="zip"    ;;
+      *)       pkg_type="tar.gz" ;;
     esac
 
-    local dl_url
-    dl_url=$(curl -fsSL "https://api.bell-sw.com/v1/downloads/jdk?os=${os_ext}&arch=${b_arch}&version=${MIN_JAVA_VERSION}&build=latest&releaseType=jdk&packageType=full" 2>/dev/null \
-          | sed -nE 's/.*"downloadURL"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' \
-          | head -n1 || true)
-    die_on_empty "$dl_url" "Could not resolve a BellSoft Full JDK download URL."
+    local machine
+    case "$OS" in
+      windows) machine="x86_64"      ;;
+      *)       machine="$(uname -m)" ;;
+    esac
+    bitness="64"
+    case "$machine" in
+        arm64|aarch64) api_arch="arm" ;;
+        x86_64|amd64)  api_arch="x86" ;;
+        *)             die "Unsupported architecture $machine – install a JDK manually from ${JDK_DOWNLOAD_PAGE}" ;;
+    esac
 
-    info "Downloading BellSoft Full JDK ${MIN_JAVA_VERSION} …"
-    local dl_name
+    # BellSoft's current API: /v1/liberica/releases returning objects with a
+    # "downloadUrl" and a "sha1" field.
+    local api_url response dl_url expected_sha1
+    api_url="https://api.bell-sw.com/v1/liberica/releases?version-feature=${MIN_JAVA_VERSION}&os=${api_os}&arch=${api_arch}&bitness=${bitness}&package-type=${pkg_type}&bundle-type=jdk-full&version-modifier=latest"
+    info "Looking up the latest Liberica Full JDK ${MIN_JAVA_VERSION} for ${api_os}/${api_arch} …"
+    response=$(curl -fsSL "$api_url" 2>/dev/null || true)
+    if [ -z "$response" ] || [ "$response" = "[]" ]; then
+        die "Could not find a Liberica Full JDK release. Install one manually from ${JDK_DOWNLOAD_PAGE}"
+    fi
+    dl_url=$(printf '%s' "$response" | grep -o '"downloadUrl"[[:space:]]*:[[:space:]]*"[^"]*"' \
+             | head -n1 | sed -E 's/.*:[[:space:]]*"(.*)"/\1/' || true)
+    expected_sha1=$(printf '%s' "$response" | grep -o '"sha1"[[:space:]]*:[[:space:]]*"[^"]*"' \
+             | head -n1 | sed -E 's/.*:[[:space:]]*"(.*)"/\1/' || true)
+    die_on_empty "$dl_url" "Unexpected response from the BellSoft API. Install a JDK manually from ${JDK_DOWNLOAD_PAGE}"
+
+    local dl_name tmp_dir
     dl_name=$(basename "$dl_url")
-    curl -fsSL "$dl_url" -o "/tmp/${dl_name}" || die "BellSoft JDK download failed."
+    tmp_dir=$(mktemp -d) || die "Could not create a temporary directory."
+    # shellcheck disable=SC2064  # expand tmp_dir now, it never changes
+    trap "rm -rf '$tmp_dir'" RETURN
+
+    info "Downloading ${dl_name} …"
+    curl -fL "$dl_url" -o "${tmp_dir}/${dl_name}" || die "BellSoft JDK download failed."
+
+    if [ -n "$expected_sha1" ]; then
+        local actual_sha1
+        actual_sha1=$(_sha1_of "${tmp_dir}/${dl_name}")
+        if [ -z "$actual_sha1" ]; then
+            warn "No sha1 tool available – skipping checksum verification."
+        elif [ "$actual_sha1" != "$expected_sha1" ]; then
+            die "Checksum mismatch for ${dl_name} (expected ${expected_sha1}, got ${actual_sha1}). Aborting."
+        else
+            info "Checksum verified."
+        fi
+    else
+        warn "The BellSoft API did not return a checksum – skipping verification."
+    fi
 
     mkdir -p "${HOME}/.jdks"
     local before_extract
-    before_extract=$(mktemp)
+    before_extract="${tmp_dir}/before"
     find "${HOME}/.jdks" -mindepth 1 -maxdepth 1 -type d -print | sort > "$before_extract"
 
     info "Extracting to ${HOME}/.jdks …"
     case "$dl_name" in
-        *.tar.gz) tar -xzf "/tmp/${dl_name}" -C "${HOME}/.jdks";;
-        *.zip)    unzip -qo "/tmp/${dl_name}" -d "${HOME}/.jdks";;
-        *.exe)
-            # BellSoft Windows is a self-extracting exe – fall back to manual install hint
-            warn "BellSoft Windows JDK is an installer (.exe). Download it manually from:"
-            warn "  https://bell-sw.com/pages/downloads/"
-            rm -f "/tmp/${dl_name}"
-            rm -f "$before_extract"
-            die "Cannot auto-install the Windows BellSoft JDK from script – please run the .exe and retry."
-            ;;
-        *)  die "Unrecognized archive format: $dl_name" ;;
+        *.tar.gz) tar -xzf "${tmp_dir}/${dl_name}" -C "${HOME}/.jdks" || die "Extraction failed." ;;
+        *.zip)    unzip -qo "${tmp_dir}/${dl_name}" -d "${HOME}/.jdks" || die "Extraction failed." ;;
+        *)        die "Unrecognized archive format: $dl_name" ;;
     esac
-    rm -f "/tmp/${dl_name}"
 
-    local extracted_dir jdk_dir java_bin
+    local extracted_dir java_bin
     extracted_dir=$(find "${HOME}/.jdks" -mindepth 1 -maxdepth 1 -type d -print \
         | sort \
         | comm -13 "$before_extract" - \
         | head -n1)
-    rm -f "$before_extract"
-    die_on_empty "$extracted_dir" "Could not locate BellSoft JDK after extraction."
+    die_on_empty "$extracted_dir" "Could not locate the BellSoft JDK after extraction."
 
     java_bin=$(find "$extracted_dir" -path "*/bin/java" -type f -perm -u+x | head -n1)
-    die_on_empty "$java_bin" "Could not locate bin/java in extracted BellSoft JDK."
-    jdk_dir="$(cd "$(dirname "$java_bin")/.." && pwd)"
+    die_on_empty "$java_bin" "Could not locate bin/java in the extracted BellSoft JDK."
 
-    export JAVA_HOME="$jdk_dir"
-    info "BellSoft Full JDK installed at ${JAVA_HOME}"
-    export PATH="${JAVA_HOME}/bin:${PATH}"
-    _validate_jdk "${JAVA_HOME}/bin/java"
+    _EXTRACTED_JDK_HOME="$(cd "$(dirname "$java_bin")/.." && pwd)"
+    info "Liberica Full JDK installed at ${_EXTRACTED_JDK_HOME}"
+}
+
+_sha1_of() {
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 1 "$1" | cut -d' ' -f1
+    elif command -v sha1sum >/dev/null 2>&1; then
+        sha1sum "$1" | cut -d' ' -f1
+    fi
 }
 
 # ── resolve install destination, handle existing installation ────
@@ -214,6 +306,13 @@ _resolve_dest() {
       linux)   default_dest="${HOME}/.local/share/MarkdownToPdf" ;;
       windows) default_dest="${HOME}/MarkdownToPdf"            ;;
     esac
+
+    # Refuse to install a directory onto itself (e.g. running the script from
+    # inside an existing installation).
+    if [ -d "$default_dest" ] \
+       && [ "$(cd "$APP_NAME" && pwd -P)" = "$(cd "$default_dest" && pwd -P)" ]; then
+        die "${APP_NAME} is already installed at ${default_dest} and this script is running from there – nothing to do."
+    fi
 
     # Check for an existing installation
     if [ -d "$default_dest" ]; then
@@ -251,6 +350,8 @@ install_app() {
     info "Installing to ${INSTALL_DEST}"
     cp -R "${APP_NAME}/." "$INSTALL_DEST/" || die "Copy failed."
 
+    _write_java_env
+
     case "$OS" in
       macos)   _finalize_mac ;;
       linux)   _finalize_linux ;;
@@ -258,9 +359,33 @@ install_app() {
     esac
 }
 
+# Record the JDK the launchers should use. Without this the installer would
+# validate one JDK and the launchers would then start a different one, because
+# they invoke a bare `java`.
+_write_java_env() {
+    local env_file="${INSTALL_DEST}/md2pdf.env"
+    if [ -z "$RESOLVED_JAVA_HOME" ]; then
+        # java on PATH is fine – don't pin the app to a specific JDK.
+        rm -f "$env_file"
+        return
+    fi
+    info "Recording the JDK to launch with in ${env_file}"
+    {
+        echo "# Written by md2pdf-install.sh – the JDK MarkdownToPdf launches with."
+        echo "# Delete this file to fall back to the java on PATH, or edit the path"
+        echo "# to point at a different JavaFX-bundled JDK ${MIN_JAVA_VERSION}+."
+        echo "MD2PDF_JAVA_HOME=\"${RESOLVED_JAVA_HOME}\""
+    } > "$env_file"
+}
+
 _finalize_mac() {
-    chmod +x "${INSTALL_DEST}/run.zsh"
-    chmod +x "${INSTALL_DEST}/MacOS/markdownToPdf"
+    chmod +x "${INSTALL_DEST}/run.zsh" 2>/dev/null || true
+    chmod +x "${INSTALL_DEST}/Contents/MacOS/markdownToPdf" 2>/dev/null || true
+
+    # Gatekeeper flags anything downloaded from a browser; without this the user
+    # has to right-click → Open the first time.
+    info "Removing the macOS quarantine attribute …"
+    xattr -dr com.apple.quarantine "$INSTALL_DEST" 2>/dev/null || true
 
     echo ""
     info "Installation complete!"
@@ -270,10 +395,14 @@ _finalize_mac() {
 }
 
 _finalize_linux() {
+    chmod +x "${INSTALL_DEST}"/*.sh 2>/dev/null || true
+
     info "Creating desktop launcher and shortcuts …"
-    if [ -x "${INSTALL_DEST}/createLauncher.sh" ]; then
-        (cd "$INSTALL_DEST" && bash createLauncher.sh) \
-          || warn "createLauncher.sh failed – you can run it manually."
+    if [ ! -x "${INSTALL_DEST}/createLauncher.sh" ]; then
+        die "createLauncher.sh is missing from ${INSTALL_DEST} – the release archive looks incomplete."
+    fi
+    if ! (cd "$INSTALL_DEST" && bash createLauncher.sh); then
+        die "createLauncher.sh failed – the app is installed at ${INSTALL_DEST} but has no desktop launcher. Run 'bash ${INSTALL_DEST}/createLauncher.sh' to retry, or start it with 'bash ${INSTALL_DEST}/run.sh'."
     fi
 
     echo ""

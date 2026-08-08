@@ -34,7 +34,10 @@ Full API documentation, including styling, images, custom fonts, page headers/fo
 and Spring Boot integration lives in [lib/README.md](lib/README.md).
 
 Installation instructions and usage for the desktop application live in
-[gui/readme.md](gui/readme.md).
+[gui/readme.md](gui/readme.md). Released zips ship a `md2pdf-install.sh` that installs the
+app on macOS, Linux and Windows; if you are building from a source checkout instead, the
+repository-root `./install.sh` builds and installs it in one step (macOS / Linux) — see
+the [gui readme](gui/readme.md#one-command-build--install-macos--linux) for details.
 
 ## Building from source
 

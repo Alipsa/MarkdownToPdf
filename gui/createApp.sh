@@ -35,6 +35,7 @@ cp "src/main/assembly/install.sh" "$DIR/target/md2pdf-install.sh"
 chmod +x "${MACOS_DIR}/markdownToPdf"
 chmod +x  "$targetDir"/*.sh
 chmod +x  "$targetDir"/*.zsh
+chmod +x "$DIR/target/md2pdf-install.sh"
 
 # cd to the target so we dont have to allow full disk access in Settings -> Privacy and Security
 cd "${targetDir}/.."
@@ -50,7 +51,7 @@ zip -r md2pdf-gui.zip "${appName}" md2pdf-install.sh
 echo "Done!"
 if [[ "$skipInstructions" == "false" ]]; then
   echo "To install the MarkdownToPdf.zip do the following"
-  echo "Linux: Unzip the MarkdownToPdf.zip to your applications folder and run createLauncher.sh to install!"
-  echo "MacOs: Unzip the MarkdownToPdf.zip and drag the $appName to your applications folder to install!"
-  echo "Windows: Unzip the MarkdownToPdf.zip to your applications folder and run createShortcut.ps1 to install!"
+  echo "All platforms: Unzip the MarkdownToPdf.zip and run 'bash md2pdf-install.sh' from the unzipped folder."
+  echo "(On Windows, run it from Git Bash. It installs $appName, checks for a JavaFX-bundled"
+  echo " JDK 21+, and creates the launcher/shortcut for you.)"
 fi
