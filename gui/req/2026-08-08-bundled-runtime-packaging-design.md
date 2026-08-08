@@ -608,11 +608,15 @@ Much smaller now that there is no JDK detection:
 ## release.sh
 
 `release.sh` stops building platform artifacts — a Linux machine cannot produce the macOS
-or Windows runtimes — and becomes a release driver:
+or Windows runtimes — and becomes a release driver.
+
+Because it now builds nothing, it runs on **either Linux or macOS**: it needs `git`, `gh`,
+`mvn`, a JDK and a SHA-256 tool, and nothing platform-specific. This is a change worth
+stating, since the old flow could only run on a Mac.
 
 1. Preconditions: clean tree, on `main`, `${revision}` is not a `-SNAPSHOT`, `gh`
-   authenticated, `HEAD` pushed. Also, everything that would fail *after* the irreversible
-   step, checked *before* it: `v<version>` must not already exist locally or on the remote,
+   authenticated, `HEAD` pushed, and a usable SHA-256 tool present (see "Checksums"). Also,
+   everything that would fail *after* the irreversible step, checked *before* it: `v<version>` must not already exist locally or on the remote,
    `git push --dry-run` must succeed, and the version must not already be present on Maven
    Central. A tag collision discovered after deploying is unrecoverable in the sense that
    matters — the deploy cannot be taken back.
@@ -626,10 +630,9 @@ or Windows runtimes — and becomes a release driver:
 4. Sanity-check the staging directory: all five assets present, non-trivial size, expected
    top-level entries.
 5. Generate `SHA256SUMS` into the staging directory, hashing the five assets. Every asset is
-   already present, so the checksums cover the exact set that gets uploaded. Run `sha256sum`
-   with the staging directory as the working directory so the file records bare basenames —
-   a user who downloads the assets and `SHA256SUMS` into one directory can then verify with
-   `sha256sum -c SHA256SUMS` and nothing else.
+   already present, so the checksums cover the exact set that gets uploaded. Run the hashing
+   command with the staging directory as the working directory so the file records bare
+   basenames — see below.
 6. `mvn -Prelease -pl lib -am clean site deploy` — the Maven Central publication of `lib`
    and the parent POM, and nothing else.
 7. Tag `v<version>` and push it.
@@ -653,6 +656,41 @@ artifact contains exactly one file, so a per-name download lands that file direc
 `md2pdf-<version>-linux-x64` contains `md2pdf-<version>-linux-x64.zip` — which keeps the
 loop a list of names and makes a missing artifact fail on the download rather than as a
 confusing gap in the sanity check.
+
+### Checksums
+
+`sha256sum` is GNU coreutils and is not present on macOS, which ships `shasum` (Perl) and
+`openssl` instead. The old release flow ran on a Mac because it built the macOS app; that
+reason is gone — no asset is built locally any more — but `release.sh` must not silently
+acquire a Linux-only requirement, and a `command not found` at step 5 would abort a release
+that is otherwise ready to go.
+
+`release.sh` therefore resolves the tool once, at the top with the other preconditions
+rather than at the point of use, so an unusable host fails before anything is downloaded:
+
+```sh
+if command -v sha256sum >/dev/null; then
+  sha256() { sha256sum "$@"; }
+elif command -v shasum >/dev/null; then
+  sha256() { shasum -a 256 "$@"; }
+else
+  die "need sha256sum or shasum"
+fi
+```
+
+The two produce byte-identical output — `<hash>  <name>`, two spaces — so `SHA256SUMS` does
+not reveal which host built it, and either tool's `-c` verifies the other's file. `openssl
+dgst` is not used as a third fallback: its default output format is different, and a host
+with neither of the first two is not a host anyone releases from.
+
+The release notes give both verification commands, because the asymmetry is the user's
+problem too:
+
+- Linux: `sha256sum -c SHA256SUMS`
+- macOS: `shasum -a 256 -c SHA256SUMS`
+
+Windows users get `certutil -hashfile <file> SHA256` and a manual comparison; `certutil`
+cannot read a checksum file, so there is no `-c` equivalent to offer.
 
 ### What the release deploy publishes
 
