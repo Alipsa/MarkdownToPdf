@@ -490,7 +490,7 @@ appends the file to `$GITHUB_ENV`, and `setup-java` then reads it:
 
 ```yaml
 - run: cat .github/versions.env >> "$GITHUB_ENV"
-- uses: actions/setup-java@v4
+- uses: actions/setup-java@v5
   with:
     java-version: ${{ env.LIBERICA_VERSION }}
     distribution: liberica
@@ -621,15 +621,47 @@ or Windows runtimes — and becomes a release driver:
    `install-failures` are separate gates, and a release that proceeds with failing tests or
    a broken installer-failure check defeats the point of running them. Abort if the commit
    has no run.
-3. `gh run download` every release asset from that run into one staging directory: the three
-   platform zips, `md2pdf-<version>-no-jdk.zip`, and `md2pdf-<version>-javadoc.jar`.
+3. Download the five release assets from that run into one flat staging directory, **one
+   `gh run download -n <name> -D "$STAGING"` call per artifact** — see below.
 4. Sanity-check the staging directory: all five assets present, non-trivial size, expected
    top-level entries.
 5. Generate `SHA256SUMS` over the staging directory. Every asset is already present, so the
    checksums cover the exact set that gets uploaded.
-6. `mvn -Prelease clean site deploy` — the Maven Central publication of `lib`.
+6. `mvn -Prelease -pl lib -am clean site deploy` — the Maven Central publication of `lib`
+   and the parent POM, and nothing else.
 7. Tag `v<version>` and push it.
 8. `gh release create v<version>` with the staging directory and `SHA256SUMS`.
+
+### Downloading the assets
+
+`gh run download <run-id> -D dir` does not produce a flat directory: "the contents of each
+artifact will be extracted under separate directories based on the artifact name", and only
+"if only a single artifact is specified, it will be extracted into the current directory".
+Downloading the run in one call would therefore give five subdirectories, and every
+subsequent step — the sanity check, `SHA256SUMS`, `gh release create` — assumes flat files.
+
+Step 3 loops instead, downloading each artifact by name into the staging directory. Each
+artifact contains exactly one file, so a per-name download lands that file directly in
+`$STAGING`. **The artifact name equals the file's basename** — artifact
+`md2pdf-<version>-linux-x64` contains `md2pdf-<version>-linux-x64.zip` — which keeps the
+loop a list of names and makes a missing artifact fail on the download rather than as a
+confusing gap in the sanity check.
+
+### What the release deploy publishes
+
+`-pl lib -am` is not optional. The root POM aggregates both `lib` and `gui`, and the
+`release` profile is defined on the parent, so a bare `mvn -Prelease deploy` at the root
+runs the whole reactor and hands the GUI application to the central-publishing plugin
+alongside the library. `gui` is not a library, is not intended for Maven Central, and does
+not produce the sources and javadoc jars Central validation requires — so the deploy either
+fails after doing part of the work, or succeeds and publishes an artifact that cannot be
+withdrawn. `-am` is required with `-pl lib` because the parent POM is itself a published
+artifact that `lib` resolves against.
+
+As a second guard, `gui/pom.xml` sets `<skipPublishing>true</skipPublishing>` for the
+central-publishing plugin, so an unqualified `mvn -Prelease deploy` at the root cannot
+publish the GUI even if someone runs it by hand. The flag on the command line states the
+intent; the POM setting is what enforces it.
 
 **No asset is built locally.** An earlier draft rebuilt the javadoc jar as a side effect of
 step 6, which forced staging and checksumming to happen after the irreversible deploy and
@@ -756,7 +788,7 @@ gives up that guarantee.
 6. macOS packaging: bundle layout, the `Info.plist` fixes, and signing.
 7. Windows packaging and installer.
 8. The CI workflow.
-9. `release.sh`.
+9. `release.sh`, plus the `skipPublishing` guard in `gui/pom.xml`.
 10. Documentation — both READMEs currently document JDK requirements that will cease to
     exist, and must gain the Linux prerequisites.
 
