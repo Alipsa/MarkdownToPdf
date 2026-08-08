@@ -275,6 +275,7 @@
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.11.0</version>
         <configuration>
           <!-- The GUI is an application, not a library. It has no place on Maven Central,
                and an artifact published there cannot be withdrawn. -->

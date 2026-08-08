@@ -10,9 +10,10 @@ two modules:
 | **[lib](lib/)** | `se.alipsa:md2pdf` | Core library — turn any Markdown string, file or stream into a PDF byte-array |
 | **[gui](gui/)**  | standalone desktop app | JavaFX editor with live preview, visual style editor and project management |
 
-Both modules require **JDK 21 or later**. The GUI additionally requires a JDK that
-bundles JavaFX (e.g. [Liberica Full](https://bell-sw.com/pages/downloads/) or
-[Azul Zulu FX](https://www.azul.com/downloads/)).
+The `lib` module requires **JDK 21 or later**. The GUI desktop application is shipped as
+self-contained platform archives that bundle their own Java runtime, so end users do not
+need a JDK installed. A separate `-no-jdk` archive is available for users who already have
+a JavaFX-bundled JDK 21+ and prefer a smaller download.
 
 The library's rendering pipeline is:
 **commonmark-java** (Markdown → HTML) → **jsoup** (HTML → well-formed XHTML) →
@@ -34,10 +35,35 @@ Full API documentation, including styling, images, custom fonts, page headers/fo
 and Spring Boot integration lives in [lib/README.md](lib/README.md).
 
 Installation instructions and usage for the desktop application live in
-[gui/readme.md](gui/readme.md). Released zips ship a `md2pdf-install.sh` that installs the
-app on macOS, Linux and Windows; if you are building from a source checkout instead, the
+[gui/readme.md](gui/readme.md). If you are building from a source checkout instead, the
 repository-root `./install.sh` builds and installs it in one step (macOS / Linux) — see
 the [gui readme](gui/readme.md#one-command-build--install-macos--linux) for details.
+
+### Linux prerequisites
+
+The bundled runtime supplies Java, but not the system libraries JavaFX draws with.
+GTK 3 and the WebKit dependencies must be present:
+
+    Debian/Ubuntu: sudo apt-get install libgtk-3-0 libxtst6
+    Fedora/RHEL:   sudo dnf install gtk3 libXtst
+    Arch:          sudo pacman -S gtk3 libxtst
+
+The installer checks for these and reports what is missing, but cannot install them.
+
+### Downloads
+
+| Download | Install | Size |
+|---|---|---|
+| `md2pdf-<version>-linux-x64.zip` | unzip, then `bash md2pdf-install.sh` | ~100 MB |
+| `md2pdf-<version>-macos-aarch64.zip` | unzip, then `zsh md2pdf-install.zsh` | ~100 MB |
+| `md2pdf-<version>-windows-x64.zip` | unzip, then double-click `md2pdf-install.cmd` | ~100 MB |
+| `md2pdf-<version>-no-jdk.zip` | unzip, then `java -jar MarkdownToPdf.jar` (needs a JavaFX-bundled JDK 21+) | ~15 MB |
+
+Verify a download against `SHA256SUMS` from the same release:
+
+    Linux:   sha256sum -c SHA256SUMS
+    macOS:   shasum -a 256 -c SHA256SUMS
+    Windows: certutil -hashfile <file> SHA256   (compare the line by eye)
 
 ## Building from source
 
@@ -48,8 +74,8 @@ mvn verify
 # Build and install to local Maven repo
 mvn install
 
-# Build the GUI standalone fat-jar
-mvn install && mvn package -P fatjar -pl gui
+# Build a platform archive (linux | macos | windows | no-jdk)
+mvn install -DskipTests && ./gui/createApp.sh linux
 
 # Auto-format all code (Google Java Format)
 mvn spotless:apply

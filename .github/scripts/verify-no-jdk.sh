@@ -24,8 +24,13 @@ JAVA="$(unixpath "$JAVA")"
 [ -f "$DIR/README.txt" ]        || fail "README.txt missing"
 # An assembly slip that added one would produce a 100 MB "no-jdk" download.
 [ ! -d "$DIR/runtime" ]         || fail "runtime/ is present — this is not a no-jdk archive"
-for f in run.sh run.cmd run.zsh md2pdf-install.sh md2pdf-install.cmd md2pdf-install.zsh; do
-  [ ! -e "$DIR/$f" ] || fail "$f is present — the no-jdk archive ships no launchers or installers"
+for entry in "$DIR"/*; do
+  [ -e "$entry" ] || continue
+  name=$(basename "$entry")
+  case "$name" in
+    MarkdownToPdf.jar|README.txt|lib) ;;
+    *) fail "$name is present — the no-jdk archive ships no launchers or installers" ;;
+  esac
 done
 
 "$SCRIPTS/check-lib-classpath.sh" "$DIR/MarkdownToPdf.jar" "$DIR/lib"
