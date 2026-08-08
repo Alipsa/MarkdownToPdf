@@ -107,6 +107,8 @@ CP="$("$SCRIPTS/compile-smoke.sh" "$APP/MarkdownToPdf.jar" "$SMOKE")"
 # visible in the script rather than a property of env.
 scrub() {
   if [ "$PLATFORM" = "windows" ]; then
+    # Clear JAVA_HOME so the bundled runtime is used, not the runner's setup-java JDK.
+    # shellcheck disable=SC1007
     JAVA_HOME= "$@"
   else
     env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" "$@"
