@@ -12,7 +12,7 @@ release and a later release step needs recovery; see the recovery instructions i
 # MarkdownToPdf GUI Release History
 (Note, dates are in yyyy-MM-dd format)
 
-## 0.1.1-SNAPSHOT
+## 0.1.1-SNAPSHOT (unreleased)
 - Bundled-runtime packaging for Linux, macOS and Windows, plus a runtime-free `-no-jdk`
   archive.
 - CI builds, installs and smoke-tests the platform archives and uploads release artifacts.

@@ -1,14 +1,14 @@
 # MarkdownToPdf — Markdown to PDF toolset
 [![Maven Central](https://img.shields.io/maven-central/v/se.alipsa/md2pdf)](https://central.sonatype.com/artifact/se.alipsa/md2pdf)
-[![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/0.1.0/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
+[![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/0.1.1/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
 
 MarkdownToPdf is a Java-based toolkit for converting Markdown to PDF. It consists of
 two modules:
 
-| Module | Artifact | Description |
-|--------|----------|-------------|
-| **[lib](lib/)** | `se.alipsa:md2pdf` | Core library — turn any Markdown string, file or stream into a PDF byte-array |
-| **[gui](gui/)**  | standalone desktop app | JavaFX editor with live preview, visual style editor and project management |
+| Module          | Artifact               | Description                                                                   |
+|-----------------|------------------------|-------------------------------------------------------------------------------|
+| **[lib](lib/)** | `se.alipsa:md2pdf`     | Core library — turn any Markdown string, file or stream into a PDF byte-array |
+| **[gui](gui/)** | standalone desktop app | JavaFX editor with live preview, visual style editor and project management   |
 
 The `lib` module requires **JDK 21 or later**. The GUI desktop application is shipped as
 self-contained platform archives that bundle their own Java runtime, so end users do not
@@ -52,12 +52,12 @@ The installer checks for these and reports what is missing, but cannot install t
 
 ### Downloads
 
-| Download | Install | Size |
-|---|---|---|
-| `md2pdf-<version>-linux-x64.zip` | unzip, then `bash md2pdf-install.sh` | ~100 MB |
-| `md2pdf-<version>-macos-aarch64.zip` | unzip, then `zsh md2pdf-install.zsh` | ~100 MB |
-| `md2pdf-<version>-windows-x64.zip` | unzip, then double-click `md2pdf-install.cmd` | ~100 MB |
-| `md2pdf-<version>-no-jdk.zip` | unzip, then `java -jar MarkdownToPdf.jar` (needs a JavaFX-bundled JDK 21+) | ~15 MB |
+| Download                             | Install                                                                    | Size    |
+|--------------------------------------|----------------------------------------------------------------------------|---------|
+| `md2pdf-<version>-linux-x64.zip`     | unzip, then `bash md2pdf-install.sh`                                       | ~100 MB |
+| `md2pdf-<version>-macos-aarch64.zip` | unzip, then `zsh md2pdf-install.zsh`                                       | ~100 MB |
+| `md2pdf-<version>-windows-x64.zip`   | unzip, then double-click `md2pdf-install.cmd`                              | ~100 MB |
+| `md2pdf-<version>-no-jdk.zip`        | unzip, then `java -jar MarkdownToPdf.jar` (needs a JavaFX-bundled JDK 21+) | ~15 MB  |
 
 Verify a download against `SHA256SUMS` from the same release:
 

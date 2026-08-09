@@ -16,5 +16,5 @@ follow the recovery procedure in `gui/readme.md`, then run `./release.sh --skip-
 - Release artifacts are built and tested by CI; `./release.sh` downloads those artifacts,
   publishes the library to Maven Central, tags the commit and creates the GitHub release.
 
-## 0.1.0
+## 0.1.0 (2026-05-17)
 - Initial release
