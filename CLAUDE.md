@@ -40,4 +40,4 @@ archive requires a JavaFX-bundled JDK.
 - **Zero new Maven dependencies** for anything in the `gui` model layer or `lib` core. The CSS round-trip parser in `StyleProfile.fromCss()` is intentionally hand-written for this reason.
 - **No `--add-exports`/`--add-opens` config needed** — Spotless 3.x handles Google Java Format's module requirements automatically.
 - Build-generated files such as `.flattened-pom.xml` and `dependency-reduced-pom.xml` are ignored by `.gitignore`; do not commit them.
-- The `${revision}` property in the root POM controls the version for all modules. Bump it in `pom.xml` only; flatten-maven-plugin propagates it. Note that `gui/MarkdownToPdf.xml` sits outside the reactor and does **not** pick up `${revision}` — update it by hand.
+- The `${revision}` property in the root POM controls the version for all modules. Bump it in `pom.xml` only; flatten-maven-plugin propagates it. `gui/MarkdownToPdf.xml` inherits the root parent, so its launcher dependency follows `${revision}` as well.

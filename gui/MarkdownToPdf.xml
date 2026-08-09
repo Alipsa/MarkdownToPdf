@@ -13,13 +13,17 @@
   Prerequisites:
   - JDK 25 or higher
   - Maven 3.9.9 or higher
-  - se.alipsa:MarkdownToPdf:0.1.1-SNAPSHOT installed in the local Maven repository
+  - the matching se.alipsa:MarkdownToPdf version installed in the local Maven repository
     (run "mvn install" from the project root first)
   -->
   <modelVersion>4.0.0</modelVersion>
-  <groupId>se.alipsa</groupId>
+  <parent>
+    <groupId>se.alipsa</groupId>
+    <artifactId>md2pdf-parent</artifactId>
+    <version>${revision}</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
   <artifactId>MarkdownToPdf-launcher</artifactId>
-  <version>0.1.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>MarkdownToPdf Launcher</name>
 
@@ -92,31 +96,6 @@
             </goals>
             <configuration>
               <skipMain>true</skipMain>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <version>3.2.0</version>
-        <executions>
-          <execution>
-            <id>check-project-version</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>run</goal>
-            </goals>
-            <configuration>
-              <target>
-                <loadfile property="root.pom" srcFile="${project.basedir}/../pom.xml"/>
-                <condition property="root.version.matches">
-                  <contains string="${root.pom}"
-                            substring="&lt;revision&gt;${project.version}&lt;/revision&gt;"/>
-                </condition>
-                <fail unless="root.version.matches"
-                      message="MarkdownToPdf-launcher version ${project.version} must match the root pom revision"/>
-              </target>
             </configuration>
           </execution>
         </executions>
