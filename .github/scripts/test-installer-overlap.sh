@@ -41,12 +41,16 @@ run_installer() {
       (cd "$SRC" && "${installer[@]}" "$destination" < /dev/null)
       ;;
     windows)
-      local windows_destination
-      windows_destination="$(cygpath -w "$destination")"
       if [[ "$destination" == */ ]]; then
-        windows_destination="${windows_destination}\\"
+        # Use an unquoted relative .\ argument so cmd receives the trailing separator
+        # instead of treating it as the escape for a closing quote. The runner paths do
+        # not contain spaces, and the current directory is the unpacked archive root.
+        (cd "$SRC" && cmd //c md2pdf-install.cmd $'.\\')
+      else
+        local windows_destination
+        windows_destination="$(cygpath -w "$destination")"
+        (cd "$SRC" && cmd //c md2pdf-install.cmd "$windows_destination")
       fi
-      (cd "$SRC" && MSYS_NO_PATHCONV=1 cmd //c md2pdf-install.cmd "$windows_destination")
       ;;
   esac
 }
@@ -57,7 +61,7 @@ expect_refusal() {
   if run_installer "$destination" >"$output" 2>&1; then
     fail "$name destination was accepted"
   fi
-  grep -Eiq 'overlap|same directory' "$output" \
+  grep -Eiq 'overlap' "$output" \
     || fail "$name destination failed without an overlap diagnostic"
   [ -f "$marker" ] || fail "$name destination damaged the source tree"
   ok "$name destination refused"

@@ -41,7 +41,7 @@ jobs:
           zsh -n gui/src/main/assembly/mac/md2pdf-install.zsh
           zsh -n gui/src/main/assembly/mac/markdownToPdf
           zsh -n gui/src/main/assembly/mac/mkicns.zsh
-      # md2pdf-install.cmd has no linter; the build job running it is its only safety net.
+      # md2pdf-install.cmd has no linter; its native packaging and overlap jobs exercise it.
 
   build:
     strategy:
@@ -176,9 +176,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            platform: linux
-            label: linux-x64
           - os: macos-14
             platform: macos
             label: macos-aarch64

@@ -59,7 +59,11 @@ resolve_dest() {
     done
     destination_parent="$(cd -- "$destination_parent" 2>/dev/null && pwd -P)" \
       || die "Cannot resolve the parent directory of destination $DEST."
-    destination_real="$destination_parent/$destination_suffix"
+    if [ "$destination_parent" = "/" ]; then
+      destination_real="/$destination_suffix"
+    else
+      destination_real="$destination_parent/$destination_suffix"
+    fi
   fi
   # Keep the root path as "/" while removing other trailing slashes. Otherwise the
   # comparison below turns "/" into "//" and misses an ancestor destination.
@@ -111,6 +115,7 @@ install_app() {
   chmod +x "$DEST"/runtime/bin/* 2>/dev/null || true
   [ -f "$DEST/runtime/lib/jspawnhelper" ] && chmod +x "$DEST/runtime/lib/jspawnhelper"
 
+  # MD2PDF_SKIP_LAUNCHER=1 is used only by gui/buildAndRun.sh, whose install is temporary.
   if [ "${MD2PDF_SKIP_LAUNCHER:-0}" = "1" ]; then
     info "Skipping desktop launcher creation."
   else

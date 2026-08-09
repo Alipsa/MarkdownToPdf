@@ -33,7 +33,11 @@ resolve_dest() {
       destination_suffix="${destination_parent:t}/$destination_suffix"
       destination_parent="${destination_parent:h}"
     done
-    destination_real="$(cd -- "$destination_parent" && pwd -P)/$destination_suffix"
+    if [[ "$destination_parent" == "/" ]]; then
+      destination_real="/$destination_suffix"
+    else
+      destination_real="$(cd -- "$destination_parent" && pwd -P)/$destination_suffix"
+    fi
   fi
 
   # Keep the root path as "/" while removing other trailing slashes. Otherwise the
