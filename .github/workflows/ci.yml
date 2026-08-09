@@ -116,7 +116,18 @@ jobs:
           esac
           fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
           java_major="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=maven.compiler.target -DforceStdout)"
-          .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx" "$java_major"
+          case "${{ matrix.platform }}" in
+            # macos-14's virtualized Metal device crashes JavaFX 25's renderer. The
+            # shipped launcher keeps the native pipeline; CI only needs a stable
+            # end-to-end launcher check on the hosted runner.
+            macos)
+              JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Dprism.order=sw" \
+                .github/scripts/verify-install.sh macos "$dest" "$fx" "$java_major"
+              ;;
+            *)
+              .github/scripts/verify-install.sh "${{ matrix.platform }}" "$dest" "$fx" "$java_major"
+              ;;
+          esac
 
       # ── Linux-only extra artifacts ──────────────────────────────
       - name: Build the no-jdk archive
