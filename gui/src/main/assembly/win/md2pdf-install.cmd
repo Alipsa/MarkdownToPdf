@@ -17,7 +17,7 @@ if "%~1"=="" (
 ) else (
   set "DEST=%~f1"
 )
-set "RAW_DEST="
+set "RAW_DEST=<none>"
 if not "%~1"=="" set "RAW_DEST=%~1"
 
 :normalize_destination
