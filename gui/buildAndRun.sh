@@ -2,9 +2,9 @@
 # Builds the Linux archive and runs the app from the staged install.
 set -euo pipefail
 
-if command -v jdk21; then
+if command -v jdk25; then
   # shellcheck disable=SC1091
-  source jdk21
+  source jdk25
 fi
 
 DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"

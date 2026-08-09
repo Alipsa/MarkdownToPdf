@@ -115,7 +115,8 @@ jobs:
             windows) dest="$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" ;;
           esac
           fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
-          .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx" 25
+          java_major="${LIBERICA_VERSION%%.*}"
+          .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx" "$java_major"
 
       # ── Linux-only extra artifacts ──────────────────────────────
       - name: Build the no-jdk archive

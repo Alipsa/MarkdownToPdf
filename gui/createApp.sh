@@ -114,6 +114,17 @@ build_runtime() {
   [ -d "$JAVA_HOME/jmods" ] \
     || die "$JAVA_HOME has no jmods/ — a Liberica *Full* JDK is required, not a JRE"
 
+  local java_version java_major
+  java_version="$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 \
+    | sed -E 's/.*"([^"]+)".*/\1/')"
+  java_major="$(printf '%s\n' "$java_version" \
+    | sed -E 's/^1\.([0-9]+).*/\1/; s/^([0-9]+).*/\1/')"
+  case "$java_major" in
+    ''|*[!0-9]*) die "cannot determine Java major version from $JAVA_HOME/bin/java" ;;
+  esac
+  [ "$java_major" -ge 25 ] \
+    || die "$JAVA_HOME provides Java $java_version, but the GUI requires Java 25 or higher"
+
   rm -rf "$out"
   # JDK 25 supports the explicit ZIP compression-level syntax. Keep this aligned with the
   # JDK used by CI and release packaging rather than relying on the deprecated numeric form.
