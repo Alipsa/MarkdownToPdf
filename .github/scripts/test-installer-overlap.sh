@@ -42,10 +42,13 @@ run_installer() {
       ;;
     windows)
       if [[ "$destination" == */ ]]; then
-        # Use an unquoted relative .\ argument so cmd receives the trailing separator
-        # instead of treating it as the escape for a closing quote. The runner paths do
-        # not contain spaces, and the current directory is the unpacked archive root.
-        (cd "$SRC" && cmd //c md2pdf-install.cmd $'.\\')
+        local windows_destination
+        windows_destination="$(cygpath -w "$destination")"
+        windows_destination="${windows_destination}\\"
+        # GitHub runner paths contain no spaces. Leave this argument unquoted so the
+        # trailing separator is not consumed as an escape for a closing quote.
+        # shellcheck disable=SC2086
+        (cd "$SRC" && MD2PDF_DEBUG_PATHS=1 cmd //c md2pdf-install.cmd $windows_destination)
       else
         local windows_destination
         windows_destination="$(cygpath -w "$destination")"
@@ -61,9 +64,13 @@ expect_refusal() {
   if run_installer "$destination" >"$output" 2>&1; then
     fail "$name destination was accepted"
   fi
-  grep -Eiq 'overlap' "$output" \
+  grep -iq 'overlap' "$output" \
     || fail "$name destination failed without an overlap diagnostic"
   [ -f "$marker" ] || fail "$name destination damaged the source tree"
+  if [ "$PLATFORM" = "windows" ] && [ "$name" = "trailing" ]; then
+    grep -Eq '\[DEBUG\] RAW_DEST=.*\\$' "$output" \
+      || fail "trailing destination did not reach cmd with a trailing separator"
+  fi
   ok "$name destination refused"
 }
 

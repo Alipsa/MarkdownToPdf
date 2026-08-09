@@ -40,8 +40,8 @@ resolve_dest() {
     fi
   fi
 
-  # Keep the root path as "/" while removing other trailing slashes. Otherwise the
-  # comparison below turns "/" into "//" and misses an ancestor destination.
+  # Keep this normalization in sync with the Linux install.sh. Keep the root path as
+  # "/" while removing other trailing slashes; otherwise "/" becomes "//".
   while [[ "$source_real" != "/" && "$source_real" == */ ]]; do source_real="${source_real%/}"; done
   while [[ "$destination_real" != "/" && "$destination_real" == */ ]]; do destination_real="${destination_real%/}"; done
 

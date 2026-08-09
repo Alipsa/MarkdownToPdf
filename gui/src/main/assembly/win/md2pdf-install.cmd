@@ -17,6 +17,7 @@ if "%~1"=="" (
 ) else (
   set "DEST=%~f1"
 )
+set "RAW_DEST=%~1"
 
 :normalize_destination
 rem Preserve a drive root (C:\), but remove every other trailing separator before the
@@ -27,6 +28,8 @@ set "DEST=%DEST:~0,-1%"
 goto normalize_destination
 
 :destination_normalized
+if "%MD2PDF_DEBUG_PATHS%"=="1" echo [DEBUG] RAW_DEST=%RAW_DEST%
+if "%MD2PDF_DEBUG_PATHS%"=="1" echo [DEBUG] NORMALIZED_DEST=%DEST%
 
 if not exist "%SRC%\" (
   echo [ERROR] %APP_NAME% is not next to this script - run it from the unzipped archive.
