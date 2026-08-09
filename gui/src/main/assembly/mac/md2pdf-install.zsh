@@ -36,6 +36,11 @@ resolve_dest() {
     destination_real="$(cd -- "$destination_parent" && pwd -P)/$destination_suffix"
   fi
 
+  # Keep the root path as "/" while removing other trailing slashes. Otherwise the
+  # comparison below turns "/" into "//" and misses an ancestor destination.
+  while [[ "$source_real" != "/" && "$source_real" == */ ]]; do source_real="${source_real%/}"; done
+  while [[ "$destination_real" != "/" && "$destination_real" == */ ]]; do destination_real="${destination_real%/}"; done
+
   if [[ "$source_real" == "/" || "$destination_real" == "/" \
     || "$source_real" == "$destination_real" \
     || "$source_real" == "$destination_real"/* \

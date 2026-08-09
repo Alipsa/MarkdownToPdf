@@ -18,5 +18,6 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-linux-x64.zip" -d "$WORK"
 INSTALL_DIR="$WORK/install"
-MD2PDF_REPLACE_EXISTING=1 bash "$WORK/md2pdf-install.sh" "$INSTALL_DIR" < /dev/null
+MD2PDF_REPLACE_EXISTING=1 MD2PDF_SKIP_LAUNCHER=1 \
+  bash "$WORK/md2pdf-install.sh" "$INSTALL_DIR" < /dev/null
 "$INSTALL_DIR/run.sh"

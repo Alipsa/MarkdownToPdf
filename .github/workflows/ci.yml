@@ -170,3 +170,36 @@ jobs:
           rm -rf "$RUNNER_TEMP/unpack" && mkdir -p "$RUNNER_TEMP/unpack"
           unzip -q "$RUNNER_TEMP"/dl/*.zip -d "$RUNNER_TEMP/unpack"
           .github/scripts/test-install-failures.sh "$RUNNER_TEMP/unpack"
+
+  installer-overlap:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            label: linux-x64
+          - os: macos-14
+            platform: macos
+            label: macos-aarch64
+          - os: windows-2022
+            platform: windows
+            label: windows-x64
+    runs-on: ${{ matrix.os }}
+    needs: build
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: md2pdf-*-${{ matrix.label }}
+          path: ${{ runner.temp }}/dl
+          merge-multiple: true
+      - name: Assert overlap paths are refused
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/unpack" && mkdir -p "$RUNNER_TEMP/unpack"
+          unzip -q "$RUNNER_TEMP"/dl/*.zip -d "$RUNNER_TEMP/unpack"
+          .github/scripts/test-installer-overlap.sh "${{ matrix.platform }}" "$RUNNER_TEMP/unpack"

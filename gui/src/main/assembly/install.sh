@@ -54,7 +54,6 @@ resolve_dest() {
     destination_suffix="$(basename -- "$DEST")"
     destination_parent="$(dirname -- "$DEST")"
     while [ ! -d "$destination_parent" ]; do
-      [ "$destination_parent" != "." ] || die "Cannot resolve the parent directory of destination $DEST."
       destination_suffix="$(basename -- "$destination_parent")/$destination_suffix"
       destination_parent="$(dirname -- "$destination_parent")"
     done
@@ -112,11 +111,15 @@ install_app() {
   chmod +x "$DEST"/runtime/bin/* 2>/dev/null || true
   [ -f "$DEST/runtime/lib/jspawnhelper" ] && chmod +x "$DEST/runtime/lib/jspawnhelper"
 
-  info "Creating the desktop launcher …"
-  [ -x "$DEST/createLauncher.sh" ] \
-    || die "createLauncher.sh is missing from $DEST — the archive looks incomplete."
-  (cd "$DEST" && bash createLauncher.sh) \
-    || die "createLauncher.sh failed — $APP_NAME is installed at $DEST but has no launcher. Retry with 'bash $DEST/createLauncher.sh', or start it with 'bash $DEST/run.sh'."
+  if [ "${MD2PDF_SKIP_LAUNCHER:-0}" = "1" ]; then
+    info "Skipping desktop launcher creation."
+  else
+    info "Creating the desktop launcher …"
+    [ -x "$DEST/createLauncher.sh" ] \
+      || die "createLauncher.sh is missing from $DEST — the archive looks incomplete."
+    (cd "$DEST" && bash createLauncher.sh) \
+      || die "createLauncher.sh failed — $APP_NAME is installed at $DEST but has no launcher. Retry with 'bash $DEST/createLauncher.sh', or start it with 'bash $DEST/run.sh'."
+  fi
 
   echo ""
   info "Installation complete."

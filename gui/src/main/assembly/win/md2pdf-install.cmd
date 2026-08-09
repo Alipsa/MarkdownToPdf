@@ -18,6 +18,16 @@ if "%~1"=="" (
   set "DEST=%~f1"
 )
 
+:normalize_destination
+rem Preserve a drive root (C:\), but remove every other trailing separator before the
+rem ancestor walk. This also handles callers that pass a path ending in multiple '\\'s.
+if "%DEST:~3%"=="" goto destination_normalized
+if not "%DEST:~-1%"=="\" goto destination_normalized
+set "DEST=%DEST:~0,-1%"
+goto normalize_destination
+
+:destination_normalized
+
 if not exist "%SRC%\" (
   echo [ERROR] %APP_NAME% is not next to this script - run it from the unzipped archive.
   exit /b 1
