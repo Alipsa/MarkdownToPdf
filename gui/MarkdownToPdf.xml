@@ -13,13 +13,13 @@
   Prerequisites:
   - JDK 25 or higher
   - Maven 3.9.9 or higher
-  - se.alipsa:MarkdownToPdf:0.1.0 installed in the local Maven repository
+  - se.alipsa:MarkdownToPdf:0.1.1-SNAPSHOT installed in the local Maven repository
     (run "mvn install" from the project root first)
   -->
   <modelVersion>4.0.0</modelVersion>
   <groupId>se.alipsa</groupId>
   <artifactId>MarkdownToPdf-launcher</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>MarkdownToPdf Launcher</name>
 

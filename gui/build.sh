@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1091
-# (jdk25 is an optional local helper, not part of the repo.)
 set -euo pipefail
 
 DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
@@ -11,9 +9,6 @@ if command -v java ; then
 	  echo "Java $javaVersion OK"
 	else
 	  echo "Java version 25 or greater required"
-	  if command -v jdk25; then
-	    source jdk25
-	  fi
 	  exit 1
 	fi
 else
