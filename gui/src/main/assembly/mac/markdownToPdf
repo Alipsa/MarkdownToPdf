@@ -3,7 +3,7 @@
 set -e
 DIR="${0:A:h}"          # Contents/MacOS
 CONTENTS="${DIR:h}"     # Contents
-exec "$CONTENTS/runtime/bin/java" --enable-native-access=javafx.graphics,javafx.web \
+exec "$CONTENTS/runtime/bin/java" --enable-native-access=javafx.graphics,javafx.web,javafx.media \
   -Xmx8g \
   -Xdock:name=MarkdownToPdf \
   -Xdock:icon="$CONTENTS/Resources/md2pdf.icns" \

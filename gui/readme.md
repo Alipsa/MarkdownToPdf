@@ -43,7 +43,7 @@ The installer checks for these and reports what is missing, but cannot install t
 | `md2pdf-<version>-linux-x64.zip` | unzip, then `bash md2pdf-install.sh` |
 | `md2pdf-<version>-macos-aarch64.zip` | unzip, then `zsh md2pdf-install.zsh` |
 | `md2pdf-<version>-windows-x64.zip` | unzip, then double-click `md2pdf-install.cmd` |
-| `md2pdf-<version>-no-jdk.zip` | unzip, then `java --enable-native-access=javafx.graphics,javafx.web -jar MarkdownToPdf.jar` |
+| `md2pdf-<version>-no-jdk.zip` | unzip, then `java --enable-native-access=javafx.graphics,javafx.web,javafx.media -jar MarkdownToPdf.jar` |
 
 The installer will:
 

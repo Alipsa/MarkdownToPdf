@@ -28,7 +28,7 @@ esac
 # jdk.crypto.ec is required for TLS: WebView can load https: resources in a preview. The
 # smoke tests intentionally do not cover this lazily-loaded provider; they use local or
 # inline content and open no sockets, so this module must not be inferred from their result.
-MODULES="javafx.controls,javafx.swing,javafx.web,\
+MODULES="javafx.controls,javafx.swing,javafx.web,javafx.media,\
 java.desktop,java.logging,java.management,java.naming,\
 java.net.http,java.prefs,java.scripting,java.sql,java.xml,\
 jdk.charsets,jdk.crypto.ec,jdk.unsupported,jdk.zipfs"

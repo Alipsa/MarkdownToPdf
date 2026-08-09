@@ -115,8 +115,7 @@ jobs:
             windows) dest="$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" ;;
           esac
           fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
-          liberica_version="${LIBERICA_VERSION%%+*}"
-          java_major="${liberica_version%%.*}"
+          java_major="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=maven.compiler.target -DforceStdout)"
           .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx" "$java_major"
 
       # ── Linux-only extra artifacts ──────────────────────────────
