@@ -65,7 +65,6 @@ resolve_dest() {
       destination_real="$destination_parent/$destination_suffix"
     fi
   fi
-  # Keep the root path as "/" while removing other trailing slashes. Otherwise the
   # Keep this normalization in sync with mac/md2pdf-install.zsh. Keep the root path as
   # "/" while removing other trailing slashes; otherwise "/" becomes "//".
   while [ "$source_real" != "/" ] && [[ "$source_real" == */ ]]; do source_real="${source_real%/}"; done

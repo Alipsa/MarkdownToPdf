@@ -36,13 +36,13 @@ esac
 
 run_installer() {
   local destination="$1"
+  local windows_destination
   case "$PLATFORM" in
     linux|macos)
       (cd "$SRC" && "${installer[@]}" "$destination" < /dev/null)
       ;;
     windows)
       if [[ "$destination" == */ ]]; then
-        local windows_destination
         windows_destination="$(cygpath -w "$destination")"
         windows_destination="${windows_destination}\\"
         # GitHub runner paths contain no spaces. Leave this argument unquoted so the
@@ -50,7 +50,6 @@ run_installer() {
         # shellcheck disable=SC2086
         (cd "$SRC" && MD2PDF_DEBUG_PATHS=1 cmd //c md2pdf-install.cmd $windows_destination)
       else
-        local windows_destination
         windows_destination="$(cygpath -w "$destination")"
         (cd "$SRC" && cmd //c md2pdf-install.cmd "$windows_destination")
       fi
@@ -64,6 +63,8 @@ expect_refusal() {
   if run_installer "$destination" >"$output" 2>&1; then
     fail "$name destination was accepted"
   fi
+  tr -d '\r' <"$output" >"$output.normalized"
+  mv "$output.normalized" "$output"
   grep -iq 'overlap' "$output" \
     || fail "$name destination failed without an overlap diagnostic"
   [ -f "$marker" ] || fail "$name destination damaged the source tree"

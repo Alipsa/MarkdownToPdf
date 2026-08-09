@@ -17,7 +17,8 @@ if "%~1"=="" (
 ) else (
   set "DEST=%~f1"
 )
-set "RAW_DEST=%~1"
+set "RAW_DEST="
+if not "%~1"=="" set "RAW_DEST=%~1"
 
 :normalize_destination
 rem Preserve a drive root (C:\), but remove every other trailing separator before the
