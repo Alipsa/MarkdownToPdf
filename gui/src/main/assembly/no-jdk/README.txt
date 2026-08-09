@@ -13,7 +13,7 @@ Zulu "FX" builds both qualify.
 
 Running
 -------
-    java -jar MarkdownToPdf.jar
+    java --enable-native-access=javafx.graphics,javafx.web -jar MarkdownToPdf.jar
 
 The lib/ directory next to the jar is resolved through the jar's manifest, so it must
 stay where it is.
