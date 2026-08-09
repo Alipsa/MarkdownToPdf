@@ -21,8 +21,6 @@
     <maven.compiler.target>25</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-    <!-- Must equal the JavaFX version inside the bundled Liberica runtime; CI asserts it -->
-    <javafx.version>25.0.4</javafx.version>
     <md2pdf.version>${revision}</md2pdf.version>
     <log4j.version>2.26.1</log4j.version>
     <pdfbox.version>3.0.8</pdfbox.version>

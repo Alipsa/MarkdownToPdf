@@ -44,8 +44,13 @@ if [ "$PLATFORM" != "windows" ]; then
   ok "execute bits re-applied"
 fi
 
-version="$("$JAVA" -version 2>&1 | head -1 | cut -d'"' -f2)"
+version="$(
+  "$JAVA" -version 2>&1 |
+    grep -m1 ' version ' |
+    cut -d'"' -f2 || true
+)"
 case "$version" in
+  "$JAVA_MAJOR") ok "runtime java $version" ;;
   "$JAVA_MAJOR".*) ok "runtime java $version" ;;
   *) fail "expected java $JAVA_MAJOR, got $version" ;;
 esac

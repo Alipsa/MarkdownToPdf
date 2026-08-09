@@ -27,10 +27,6 @@
   <packaging>pom</packaging>
   <name>MarkdownToPdf Launcher</name>
 
-  <properties>
-    <javafx.version>25.0.4</javafx.version>
-  </properties>
-
   <dependencies>
     <dependency>
       <groupId>se.alipsa</groupId>

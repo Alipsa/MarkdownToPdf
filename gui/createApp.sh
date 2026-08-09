@@ -115,8 +115,11 @@ build_runtime() {
     || die "$JAVA_HOME has no jmods/ — a Liberica *Full* JDK is required, not a JRE"
 
   local java_version java_major
-  java_version="$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 \
-    | sed -E 's/.*"([^"]+)".*/\1/')"
+  java_version="$(
+    "$JAVA_HOME/bin/java" -version 2>&1 |
+      grep -m1 ' version ' |
+      sed -E 's/.*"([^"]+)".*/\1/' || true
+  )"
   java_major="$(printf '%s\n' "$java_version" \
     | sed -E 's/^1\.([0-9]+).*/\1/; s/^([0-9]+).*/\1/')"
   case "$java_major" in

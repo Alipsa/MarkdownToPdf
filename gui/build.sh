@@ -13,8 +13,18 @@ else
   exit 1
 fi
 
-javaVersion=$("$JAVA_BIN" -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1)
-if [[ (( $javaVersion -ge 25 )) ]]; then
+javaVersion="$(
+  "$JAVA_BIN" -version 2>&1 |
+    grep -m1 ' version ' |
+    cut -d'"' -f2 |
+    sed '/^1\./s///' |
+    cut -d'.' -f1 || true
+)"
+if ! [[ "$javaVersion" =~ ^[0-9]+$ ]]; then
+  echo "Could not determine Java major version from $JAVA_BIN"
+  exit 1
+fi
+if (( javaVersion >= 25 )); then
   echo "Java $javaVersion OK"
 else
   echo "Java version 25 or greater required"

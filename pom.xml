@@ -22,8 +22,9 @@
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- Bump here and in gui/pom.xml <md2pdf.version> when releasing -->
+    <!-- Bump revision here when releasing; GUI packaging uses the JavaFX version below. -->
     <revision>0.1.1-SNAPSHOT</revision>
+    <javafx.version>25.0.4</javafx.version>
     <batik.version>1.19</batik.version>
     <commonmark.version>0.30.0</commonmark.version>
     <jsoup.version>1.23.1</jsoup.version>
