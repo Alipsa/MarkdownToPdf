@@ -91,8 +91,6 @@ public class MarkdownToPdf extends Application {
   private Button viewExternalButton;
 
   private final StyleProfileManager profileManager = new StyleProfileManager();
-  private static Image appIcon;
-  private static URL styleSheetUrl;
   private final List<String> searchStrings = new UniqueList<>();
 
   /** Creates the JavaFX application instance. */
@@ -404,7 +402,6 @@ public class MarkdownToPdf extends Application {
 
     scene = new Scene(root, 1100, 820);
     scene.getStylesheets().add(getStyleSheet().toExternalForm());
-    getLogo();
 
     primaryStage.setOnCloseRequest(
         t -> {
@@ -422,8 +419,9 @@ public class MarkdownToPdf extends Application {
           endProgram();
         });
 
-    if (appIcon != null) {
-      primaryStage.getIcons().add(appIcon);
+    Image logo = getLogo();
+    if (logo != null) {
+      primaryStage.getIcons().add(logo);
     }
     if (Taskbar.isTaskbarSupported()) {
       var taskbar = Taskbar.getTaskbar();
@@ -447,14 +445,21 @@ public class MarkdownToPdf extends Application {
    * @return the icon {@link Image}, or {@code null} if the resource is missing
    */
   public static Image getLogo() {
-    if (appIcon == null) {
+    return LogoHolder.INSTANCE;
+  }
+
+  /** Loads the app icon when {@link #getLogo()} is first called, and only once. */
+  private static final class LogoHolder {
+    static final Image INSTANCE = load();
+
+    private static Image load() {
       try (InputStream is = MarkdownToPdf.class.getResourceAsStream("/MarkdownToPdf-rounded.png")) {
-        appIcon = is == null ? null : new Image(is);
+        return is == null ? null : new Image(is);
       } catch (IOException e) {
         logger().warn("Failed to load app icon", e);
+        return null;
       }
     }
-    return appIcon;
   }
 
   /**
@@ -463,10 +468,12 @@ public class MarkdownToPdf extends Application {
    * @return the stylesheet {@link URL}
    */
   public static URL getStyleSheet() {
-    if (styleSheetUrl == null) {
-      styleSheetUrl = MarkdownToPdf.class.getResource("/default-theme.css");
-    }
-    return styleSheetUrl;
+    return StyleSheetHolder.INSTANCE;
+  }
+
+  /** Resolves the stylesheet URL when {@link #getStyleSheet()} is first called, and only once. */
+  private static final class StyleSheetHolder {
+    static final URL INSTANCE = MarkdownToPdf.class.getResource("/default-theme.css");
   }
 
   /** Exits the JavaFX application and terminates the process shortly after shutdown. */
@@ -771,7 +778,11 @@ public class MarkdownToPdf extends Application {
 
   private void setActiveProject(Project p) {
     logger().info("Activating project: {}", p.getName());
-    markdownTab.loadFile(p.getMarkdownFile());
+    Path markdownFile = p.getMarkdownFile();
+    if (markdownFile != null && !markdownTab.loadFile(markdownFile)) {
+      logger().warn("Could not load Markdown file for project {}", p.getName());
+      return;
+    }
     String styleName = p.getStyleProfileName();
     if (styleName != null && !styleName.isBlank()) {
       if (styleCombo != null) styleCombo.setValue(styleName);

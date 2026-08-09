@@ -1,0 +1,205 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      # Shell-sourcing a file does not populate a later action's inputs, so the value has
+      # to go through $GITHUB_ENV to reach the with: block below.
+      - run: cat .github/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.LIBERICA_VERSION }}
+          distribution: liberica
+          java-package: jdk+fx
+          cache: maven
+      - run: mvn verify
+
+  lint-scripts:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck zsh
+      - name: shellcheck the bash scripts
+        run: |
+          shellcheck \
+            release.sh install.sh \
+            gui/createApp.sh gui/build.sh \
+            gui/src/main/assembly/install.sh \
+            gui/src/main/assembly/linux/*.sh \
+            gui/src/main/assembly/mac/sign-app.sh \
+            .github/scripts/*.sh
+      # shellcheck refuses zsh and is not a zsh linter, so these get a syntax check only.
+      - name: syntax-check the zsh scripts
+        run: |
+          zsh -n gui/src/main/assembly/mac/md2pdf-install.zsh
+          zsh -n gui/src/main/assembly/mac/markdownToPdf
+          zsh -n gui/src/main/assembly/mac/mkicns.zsh
+      # md2pdf-install.cmd has no linter; its native packaging and overlap jobs exercise it.
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned versioned labels, never -latest: macos-latest is a moving alias whose
+          # architecture GitHub has already changed once, and a silent migration would
+          # produce an x64 runtime under an aarch64 filename.
+          - os: ubuntu-22.04
+            platform: linux
+            label: linux-x64
+          - os: macos-14
+            platform: macos
+            label: macos-aarch64
+          - os: windows-2022
+            platform: windows
+            label: windows-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - run: cat .github/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.LIBERICA_VERSION }}
+          distribution: liberica
+          java-package: jdk+fx
+          cache: maven
+
+      - name: Install Xvfb
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Read the project version
+        run: echo "APP_VERSION=$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)" >> "$GITHUB_ENV"
+
+      - run: mvn install -DskipTests
+
+      - name: Package
+        run: ./gui/createApp.sh ${{ matrix.platform }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: md2pdf-${{ env.APP_VERSION }}-${{ matrix.label }}
+          path: gui/target/md2pdf-${{ env.APP_VERSION }}-${{ matrix.label }}.zip
+          if-no-files-found: error
+
+      - name: Unpack and install
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/unpack" && mkdir -p "$RUNNER_TEMP/unpack"
+          unzip -q "gui/target/md2pdf-$APP_VERSION-${{ matrix.label }}.zip" -d "$RUNNER_TEMP/unpack"
+          cd "$RUNNER_TEMP/unpack"
+          case "${{ matrix.platform }}" in
+            linux)   bash md2pdf-install.sh < /dev/null ;;
+            macos)   zsh md2pdf-install.zsh < /dev/null ;;
+            windows) MD2PDF_REPLACE_EXISTING=1 cmd //c md2pdf-install.cmd ;;
+          esac
+
+      - name: Verify the install
+        run: |
+          set -euo pipefail
+          case "${{ matrix.platform }}" in
+            linux)   dest="$HOME/.local/share/MarkdownToPdf" ;;
+            macos)   dest="$HOME/Applications/MarkdownToPdf.app" ;;
+            # $LOCALAPPDATA is a native path (C:\Users\...); verify-install.sh converts it,
+            # but convert here too so the value is usable if anything else touches it.
+            windows) dest="$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" ;;
+          esac
+          fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
+          .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx"
+
+      # ── Linux-only extra artifacts ──────────────────────────────
+      - name: Build the no-jdk archive
+        if: matrix.platform == 'linux'
+        run: ./gui/createApp.sh no-jdk
+
+      - name: Verify the no-jdk archive
+        if: matrix.platform == 'linux'
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nojdk" && mkdir -p "$RUNNER_TEMP/nojdk"
+          unzip -q "gui/target/md2pdf-$APP_VERSION-no-jdk.zip" -d "$RUNNER_TEMP/nojdk"
+          .github/scripts/verify-no-jdk.sh "$RUNNER_TEMP/nojdk" "$JAVA_HOME/bin/java"
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'linux'
+        with:
+          name: md2pdf-${{ env.APP_VERSION }}-no-jdk
+          path: gui/target/md2pdf-${{ env.APP_VERSION }}-no-jdk.zip
+          if-no-files-found: error
+
+      - name: Build the javadoc jar
+        if: matrix.platform == 'linux'
+        run: mvn -pl lib javadoc:jar
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'linux'
+        with:
+          name: md2pdf-${{ env.APP_VERSION }}-javadoc
+          path: lib/target/md2pdf-${{ env.APP_VERSION }}-javadoc.jar
+          if-no-files-found: error
+
+  install-failures:
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - run: cat .github/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.LIBERICA_VERSION }}
+          distribution: liberica
+          java-package: jdk+fx
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: md2pdf-*-linux-x64
+          path: ${{ runner.temp }}/dl
+          merge-multiple: true
+      - name: Assert the failure paths fail loudly
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/unpack" && mkdir -p "$RUNNER_TEMP/unpack"
+          unzip -q "$RUNNER_TEMP"/dl/*.zip -d "$RUNNER_TEMP/unpack"
+          .github/scripts/test-install-failures.sh "$RUNNER_TEMP/unpack"
+
+  installer-overlap:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            label: linux-x64
+          - os: macos-14
+            platform: macos
+            label: macos-aarch64
+          - os: windows-2022
+            platform: windows
+            label: windows-x64
+    runs-on: ${{ matrix.os }}
+    needs: build
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: md2pdf-*-${{ matrix.label }}
+          path: ${{ runner.temp }}/dl
+          merge-multiple: true
+      - name: Assert overlap paths are refused
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/unpack" && mkdir -p "$RUNNER_TEMP/unpack"
+          unzip -q "$RUNNER_TEMP"/dl/*.zip -d "$RUNNER_TEMP/unpack"
+          .github/scripts/test-installer-overlap.sh "${{ matrix.platform }}" "$RUNNER_TEMP/unpack"

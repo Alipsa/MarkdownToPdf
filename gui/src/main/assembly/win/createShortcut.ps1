@@ -1,19 +1,22 @@
-# Create a shortcut to MarkdownToPdf on the desktop
-$scriptDir = split-path -parent $MyInvocation.MyCommand.Definition
-# if the above does not work, try to use $scriptDir = $PSScriptRoot instead
-$WScriptObj = New-Object -ComObject ("WScript.Shell")
+# Creates the desktop shortcut for MarkdownToPdf.
+# Targets runtime\bin\javaw.exe directly rather than cmd.exe /c run.cmd — now possible
+# because the runtime is at a known path inside the install directory, and it removes
+# the console window that the cmd.exe target flashed up on every launch.
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
-if (Test-Path -Path $env:USERPROFILE\Desktop) {
-    $shortCut="$env:USERPROFILE\Desktop\MarkdownToPdf.lnk"
-} elseif (Test-Path -Path $env:USERPROFILE\OneDrive\Desktop) {
-    $shortCut="$env:USERPROFILE\OneDrive\Desktop\MarkdownToPdf.lnk"
+if (Test-Path -Path "$env:USERPROFILE\Desktop") {
+    $desktop = "$env:USERPROFILE\Desktop"
+} elseif (Test-Path -Path "$env:USERPROFILE\OneDrive\Desktop") {
+    $desktop = "$env:USERPROFILE\OneDrive\Desktop"
 } else {
-    Write-Error "Could not locate Desktop folder; shortcut was not created."
+    Write-Error "Could not locate the Desktop folder; shortcut was not created."
     exit 1
 }
-$shortcut = $WscriptObj.CreateShortcut($shortCut)
-$shortcut.TargetPath = "C:\Windows\System32\cmd.exe"
-$shortcut.Arguments = "/c $scriptDir\run.cmd"
+
+$WScriptObj = New-Object -ComObject WScript.Shell
+$shortcut = $WScriptObj.CreateShortcut("$desktop\MarkdownToPdf.lnk")
+$shortcut.TargetPath = "$scriptDir\runtime\bin\javaw.exe"
+$shortcut.Arguments = "-Xmx8g -jar `"$scriptDir\MarkdownToPdf.jar`""
 $shortcut.WorkingDirectory = "$scriptDir"
 $shortcut.IconLocation = "$scriptDir\MarkdownToPdf-rounded.ico, 0"
 $shortcut.Save()

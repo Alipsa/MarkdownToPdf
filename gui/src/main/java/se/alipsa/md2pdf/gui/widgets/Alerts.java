@@ -2,6 +2,7 @@ package se.alipsa.md2pdf.gui.widgets;
 
 import java.net.URL;
 import java.util.Optional;
+import java.util.function.Consumer;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.TextArea;
@@ -23,6 +24,27 @@ public class Alerts {
    * @return {@code true} if the user chose Yes
    */
   public static boolean confirm(String title, String headerText, String contentText) {
+    Alert alert = createConfirmation(title, headerText, contentText);
+    Optional<ButtonType> result = alert.showAndWait();
+    return result.isPresent() && result.get() == ButtonType.YES;
+  }
+
+  /**
+   * Shows a confirmation dialog without blocking the current event handler.
+   *
+   * @param title the dialog window title
+   * @param headerText the dialog header
+   * @param contentText the dialog body
+   * @param resultHandler called with {@code true} when Yes is selected
+   */
+  public static void confirmAsync(
+      String title, String headerText, String contentText, Consumer<Boolean> resultHandler) {
+    Alert alert = createConfirmation(title, headerText, contentText);
+    alert.setOnHidden(event -> resultHandler.accept(alert.getResult() == ButtonType.YES));
+    alert.show();
+  }
+
+  private static Alert createConfirmation(String title, String headerText, String contentText) {
     Alert alert =
         new Alert(Alert.AlertType.CONFIRMATION, contentText, ButtonType.YES, ButtonType.NO);
     alert.setTitle(title);
@@ -34,8 +56,7 @@ public class Alerts {
     alert.getDialogPane().getStylesheets().add(MarkdownToPdf.getStyleSheet().toExternalForm());
     Stage stage = (Stage) alert.getDialogPane().getScene().getWindow();
     stage.getIcons().add(MarkdownToPdf.getLogo());
-    Optional<ButtonType> result = alert.showAndWait();
-    return result.isPresent() && result.get() == ButtonType.YES;
+    return alert;
   }
 
   /**

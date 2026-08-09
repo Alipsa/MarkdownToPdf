@@ -24,7 +24,6 @@ Type=Application
 Categories=Development"
 } > "${LAUNCHER}"
 
-chmod +x run.sh
 chmod +x "${LAUNCHER}"
 
 # The desktop symlink is a convenience; a missing ~/Desktop (or a localised one)

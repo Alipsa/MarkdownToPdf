@@ -21,8 +21,8 @@
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-    <!-- don't forget to update run.sh / run.zsh / run.cmd if javafx version is changed -->
-    <javafx.version>23.0.2</javafx.version>
+    <!-- Must equal the JavaFX version inside the bundled Liberica runtime; CI asserts it -->
+    <javafx.version>21.0.12</javafx.version>
     <md2pdf.version>${revision}</md2pdf.version>
     <log4j.version>2.26.1</log4j.version>
     <pdfbox.version>3.0.8</pdfbox.version>
@@ -202,6 +202,27 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-runtime-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/lib</outputDirectory>
+              <!-- Mandatory. The default copies provided and test scope too, which would put
+                   the JavaFX jars next to a runtime that already contains the JavaFX modules. -->
+              <includeScope>runtime</includeScope>
+              <overWriteReleases>true</overWriteReleases>
+              <overWriteSnapshots>true</overWriteSnapshots>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
@@ -214,6 +235,7 @@
               -->
               <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
               <addClasspath>true</addClasspath>
+              <classpathPrefix>lib/</classpathPrefix>
               <mainClass>se.alipsa.md2pdf.gui.MarkdownToPdf</mainClass>
             </manifest>
           </archive>
@@ -250,85 +272,16 @@
           <excludeFilterFile>${project.basedir}/spotbugs-exclude.xml</excludeFilterFile>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.11.0</version>
+        <configuration>
+          <!-- The GUI is an application, not a library. It has no place on Maven Central,
+               and an artifact published there cannot be withdrawn. -->
+          <skipPublishing>true</skipPublishing>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
-  <profiles>
-    <profile>
-      <id>fatjar</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-shade-plugin</artifactId>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>shade</goal>
-                </goals>
-                <configuration>
-                  <minimizeJar>false</minimizeJar>
-                  <shadedArtifactAttached>true</shadedArtifactAttached>
-                  <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
-                  <filters>
-                    <filter>
-                      <artifact>*:*</artifact>
-                      <excludes>
-                        <!-- Signature files from signed JARs break the uber-jar -->
-                        <exclude>META-INF/*.SF</exclude>
-                        <exclude>META-INF/*.DSA</exclude>
-                        <exclude>META-INF/*.RSA</exclude>
-                        <!-- module-info at root and inside multi-release JARs are meaningless in a flat uber-jar -->
-                        <exclude>**/module-info.class</exclude>
-                        <!-- Boilerplate Apache metadata present in every Apache JAR -->
-                        <exclude>META-INF/MANIFEST.MF</exclude>
-                        <exclude>META-INF/DEPENDENCIES</exclude>
-                        <exclude>META-INF/LICENSE</exclude>
-                        <exclude>META-INF/LICENSE.txt</exclude>
-                        <exclude>META-INF/LICENSE-LGPL-2.1.txt</exclude>
-                        <exclude>META-INF/LICENSE-LGPL-3.txt</exclude>
-                        <exclude>META-INF/LICENSE-W3C-TEST</exclude>
-                        <exclude>META-INF/NOTICE</exclude>
-                        <exclude>META-INF/NOTICE.txt</exclude>
-                      </excludes>
-                    </filter>
-                    <!-- jcl-over-slf4j bridges Commons Logging to SLF4J by replacing the same
-                         classes; keeping the real commons-logging JAR would override the bridge -->
-                    <filter>
-                      <artifact>commons-logging:commons-logging</artifact>
-                      <excludes>
-                        <exclude>**</exclude>
-                      </excludes>
-                    </filter>
-                    <!-- xml-apis license directories are redundant in the uber-jar -->
-                    <filter>
-                      <artifact>xml-apis:xml-apis</artifact>
-                      <excludes>
-                        <exclude>license/**</exclude>
-                      </excludes>
-                    </filter>
-                    <filter>
-                      <artifact>xml-apis:xml-apis-ext</artifact>
-                      <excludes>
-                        <exclude>license/**</exclude>
-                      </excludes>
-                    </filter>
-                  </filters>
-                  <transformers>
-                    <!-- Build a proper manifest with the correct Main-Class -->
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                      <mainClass>se.alipsa.md2pdf.gui.MarkdownToPdf</mainClass>
-                    </transformer>
-                    <!-- Merge META-INF/services/ entries from all JARs so SPI registrations
-                         (PDFBox font loaders, XML parsers, SLF4J) all survive into the uber-jar -->
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                  </transformers>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

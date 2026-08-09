@@ -8,7 +8,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
+import java.util.stream.Stream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -20,6 +22,7 @@ public class StyleProfileManager {
 
   private static final Logger log = LogManager.getLogger(StyleProfileManager.class);
   private static final List<String> BUILTIN_NAMES = List.of("Default", "Minimal", "Print");
+  private static final String PROFILE_SUFFIX = ".properties";
 
   private final Path profilesDir;
 
@@ -62,10 +65,13 @@ public class StyleProfileManager {
     if (!Files.isDirectory(profilesDir)) {
       return List.of();
     }
-    try {
-      return Files.list(profilesDir)
-          .filter(p -> p.getFileName().toString().endsWith(".properties"))
-          .map(p -> p.getFileName().toString().replace(".properties", ""))
+    try (Stream<Path> files = Files.list(profilesDir)) {
+      return files
+          .map(Path::getFileName)
+          .filter(Objects::nonNull)
+          .map(Path::toString)
+          .filter(name -> name.endsWith(PROFILE_SUFFIX))
+          .map(name -> name.substring(0, name.length() - PROFILE_SUFFIX.length()))
           .sorted()
           .toList();
     } catch (IOException e) {
@@ -86,7 +92,7 @@ public class StyleProfileManager {
     if (builtin != null) {
       return builtin;
     }
-    Path file = profilesDir.resolve(name + ".properties");
+    Path file = profilesDir.resolve(name + PROFILE_SUFFIX);
     if (!Files.exists(file)) {
       return null;
     }
@@ -113,7 +119,7 @@ public class StyleProfileManager {
     }
     Properties props = new Properties();
     profile.saveToProperties(props);
-    Path file = profilesDir.resolve(profile.getName() + ".properties");
+    Path file = profilesDir.resolve(profile.getName() + PROFILE_SUFFIX);
     try (OutputStream out = Files.newOutputStream(file)) {
       props.store(out, "MarkdownToPdf style profile");
     }
@@ -129,7 +135,7 @@ public class StyleProfileManager {
     if (BUILTIN_NAMES.contains(name)) {
       return;
     }
-    Path file = profilesDir.resolve(name + ".properties");
+    Path file = profilesDir.resolve(name + PROFILE_SUFFIX);
     Files.deleteIfExists(file);
   }
 

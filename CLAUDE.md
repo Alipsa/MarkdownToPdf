@@ -11,8 +11,8 @@ mvn verify
 # Build and install to local Maven repo
 mvn install
 
-# Build the GUI standalone fat-jar (two steps avoids reactor-mode shade warnings)
-mvn install && mvn package -P fatjar -pl gui
+# Build a self-contained platform archive (linux | macos | windows | no-jdk)
+mvn install -DskipTests && ./gui/createApp.sh linux
 
 # Auto-format all code (Google Java Format)
 mvn spotless:apply
@@ -54,7 +54,9 @@ Pipeline: commonmark-java (Markdown → HTML) → jsoup (HTML → well-formed XH
 
 ### `gui` — the desktop application (`se.alipsa:MarkdownToPdf`)
 
-JavaFX 23.0.2 application. JavaFX dependencies are `provided` scope — **requires a JavaFX-bundled JDK** (e.g. Liberica Full JDK, Azul Zulu+FX). Standard OpenJDK will not run the GUI.
+JavaFX 21.0.12 application. JavaFX dependencies are `provided` scope — the build requires a
+JavaFX-bundled JDK (e.g. Liberica Full JDK, Azul Zulu+FX). The platform release archives
+bundle their own runtime, so end users do not need a JDK.
 
 **Tab hierarchy:**
 - `MarkdownToPdf extends Application` — main window; builds the three-tab UI and wires project/style management.
@@ -72,11 +74,11 @@ JavaFX 23.0.2 application. JavaFX dependencies are `provided` scope — **requir
 - `StyleProfileManager` — three built-in profiles (`Default`, `Minimal`, `Print`) defined in code; user profiles stored as `.properties` files under `~/.config/md2pdf/styles/`. Built-ins cannot be overwritten.
 - `Project` — name + Markdown file path + style profile name; serialised to `.jpr` (Java properties format).
 
-**Assembly scripts** (`gui/src/main/assembly/`): platform launch scripts (Linux `run.sh`, macOS `run.zsh`, Windows `run.cmd`) and shortcut creators. All require a JavaFX-bundled JDK; the minimum Java version check in scripts is `JV=21`.
+**Assembly scripts** (`gui/src/main/assembly/`): platform launch scripts (Linux `run.sh`, macOS `MarkdownToPdf.app/Contents/MacOS/markdownToPdf`, Windows `run.cmd`) and shortcut creators. Platform archives bundle their own runtime; only the separate `-no-jdk` archive requires a JavaFX-bundled JDK 21+.
 
 ## Key constraints
 
 - **Zero new Maven dependencies** for anything in the `gui` model layer or `lib` core. The CSS round-trip parser in `StyleProfile.fromCss()` is intentionally hand-written for this reason.
 - **No `--add-exports`/`--add-opens` config needed** — Spotless 3.x handles Google Java Format's module requirements automatically.
-- `gui/dependency-reduced-pom.xml` is a build side-effect of the shade plugin; ignore it.
+- Build-generated files such as `.flattened-pom.xml` and `dependency-reduced-pom.xml` are ignored by `.gitignore`; do not commit them.
 - The `${revision}` property in the root POM controls the version for all modules. Bump it in `pom.xml` only; flatten-maven-plugin propagates it.

@@ -90,17 +90,23 @@ public class MarkdownTab extends BaseTab {
     boolean success = false;
     if (isSingleMarkdownFile(dragboard)) {
       File droppedFile = dragboard.getFiles().get(0);
-      boolean canProceed =
-          !isChanged()
-              || Alerts.confirm(
-                  "Unsaved changes",
-                  "The markdown file has unsaved changes.",
-                  "Discard changes and open the dropped file?");
+      boolean canProceed = !isChanged();
+      Path path = droppedFile.toPath();
       if (canProceed) {
-        Path path = droppedFile.toPath();
-        loadFile(path);
-        gui.setProjectMarkdownFile(path);
-        setStatus("Loaded " + path.getFileName());
+        success = loadDroppedFile(path);
+      } else {
+        // Do not block the drag source in a modal showAndWait() while the drop event is
+        // still being handled. The drop is accepted now; the non-blocking dialog decides
+        // whether the file is loaded after the drag event has completed.
+        Alerts.confirmAsync(
+            "Unsaved changes",
+            "The markdown file has unsaved changes.",
+            "Discard changes and open the dropped file?",
+            confirmed -> {
+              if (confirmed) {
+                loadDroppedFile(path);
+              }
+            });
         success = true;
       }
     } else {
@@ -108,6 +114,15 @@ public class MarkdownTab extends BaseTab {
     }
     event.setDropCompleted(success);
     event.consume();
+  }
+
+  private boolean loadDroppedFile(Path path) {
+    if (!loadFile(path)) {
+      return false;
+    }
+    gui.setProjectMarkdownFile(path);
+    setStatus("Loaded " + path.getFileName());
+    return true;
   }
 
   /** Re-renders the HTML preview using the active style profile. */
@@ -204,10 +219,11 @@ public class MarkdownTab extends BaseTab {
    * Loads a Markdown file into the editor without prompting the user.
    *
    * @param markdownFile the path to load, or {@code null} to do nothing
+   * @return {@code true} if the file was loaded, otherwise {@code false}
    */
-  public void loadFile(Path markdownFile) {
+  public boolean loadFile(Path markdownFile) {
     if (markdownFile == null) {
-      return;
+      return false;
     }
     try {
       markdownArea.setText(Files.readString(markdownFile));
@@ -215,8 +231,10 @@ public class MarkdownTab extends BaseTab {
       setTitle(fileName != null ? fileName.toString() : markdownFile.toString());
       setFile(markdownFile.toFile());
       contentSaved();
+      return true;
     } catch (IOException e) {
       ExceptionAlert.showAlert("Failed to load " + markdownFile, e);
+      return false;
     }
   }
 

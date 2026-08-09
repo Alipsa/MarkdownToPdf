@@ -22,10 +22,10 @@
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- Bump here, in gui/pom.xml <md2pdf.version>, and in Info.plist when releasing -->
+    <!-- Bump here and in gui/pom.xml <md2pdf.version> when releasing -->
     <revision>0.1.1-SNAPSHOT</revision>
     <batik.version>1.19</batik.version>
-    <commonmark.version>0.28.0</commonmark.version>
+    <commonmark.version>0.30.0</commonmark.version>
     <groovy-version>5.0.6</groovy-version>
     <jsoup.version>1.23.1</jsoup.version>
     <junit-jupiter.version>6.1.3</junit-jupiter.version>
@@ -218,6 +218,11 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
           <version>3.5.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.8.1</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
