@@ -23,11 +23,33 @@ if not exist "%SRC%\" (
   exit /b 1
 )
 
-rem Refuse to install a directory onto itself.
-if /I "%SRC%"=="%DEST%" (
-  echo [ERROR] Source and destination are the same directory - nothing to do.
-  exit /b 1
-)
+rem Canonicalize both paths, then walk each path toward its root. Refuse every overlap:
+rem installing onto the source, into a source child, or into an ancestor of the source.
+for %%I in ("%SRC%") do set "SRC_REAL=%%~fI"
+for %%I in ("%DEST%") do set "DEST_REAL=%%~fI"
+
+set "CURRENT=%DEST_REAL%"
+:check_destination_ancestors
+if /I "%CURRENT%"=="%SRC_REAL%" goto overlap
+for %%I in ("%CURRENT%\..") do set "PARENT=%%~fI"
+if /I "%PARENT%"=="%CURRENT%" goto check_source_ancestors
+set "CURRENT=%PARENT%"
+goto check_destination_ancestors
+
+:check_source_ancestors
+set "CURRENT=%SRC_REAL%"
+:check_source_ancestors_loop
+if /I "%CURRENT%"=="%DEST_REAL%" goto overlap
+for %%I in ("%CURRENT%\..") do set "PARENT=%%~fI"
+if /I "%PARENT%"=="%CURRENT%" goto paths_are_safe
+set "CURRENT=%PARENT%"
+goto check_source_ancestors_loop
+
+:overlap
+echo [ERROR] Source and destination overlap - refusing to remove or copy recursively.
+exit /b 1
+
+:paths_are_safe
 
 if exist "%DEST%\" (
   if "%MD2PDF_REPLACE_EXISTING%"=="1" (

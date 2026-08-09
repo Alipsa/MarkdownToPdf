@@ -46,15 +46,21 @@ check_host_libraries() {
 
 # ── existing installation ───────────────────────────────────────────
 resolve_dest() {
-  local source_real destination_real destination_parent
+  local source_real destination_real destination_parent destination_suffix
   source_real="$(cd "$SRC" && pwd -P)"
   if [ -d "$DEST" ]; then
     destination_real="$(cd "$DEST" && pwd -P)"
   else
-    if ! destination_parent="$(cd -- "$(dirname -- "$DEST")" 2>/dev/null && pwd -P)"; then
-      die "Cannot resolve the parent directory of destination $DEST."
-    fi
-    destination_real="$destination_parent/$(basename -- "$DEST")"
+    destination_suffix="$(basename -- "$DEST")"
+    destination_parent="$(dirname -- "$DEST")"
+    while [ ! -d "$destination_parent" ]; do
+      [ "$destination_parent" != "." ] || die "Cannot resolve the parent directory of destination $DEST."
+      destination_suffix="$(basename -- "$destination_parent")/$destination_suffix"
+      destination_parent="$(dirname -- "$destination_parent")"
+    done
+    destination_parent="$(cd -- "$destination_parent" 2>/dev/null && pwd -P)" \
+      || die "Cannot resolve the parent directory of destination $DEST."
+    destination_real="$destination_parent/$destination_suffix"
   fi
   # Keep the root path as "/" while removing other trailing slashes. Otherwise the
   # comparison below turns "/" into "//" and misses an ancestor destination.

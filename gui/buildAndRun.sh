@@ -17,6 +17,6 @@ VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dex
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-linux-x64.zip" -d "$WORK"
-MD2PDF_REPLACE_EXISTING=1 bash "$WORK/md2pdf-install.sh" < /dev/null
-INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/MarkdownToPdf"
+INSTALL_DIR="$WORK/install"
+MD2PDF_REPLACE_EXISTING=1 bash "$WORK/md2pdf-install.sh" "$INSTALL_DIR" < /dev/null
 "$INSTALL_DIR/run.sh"

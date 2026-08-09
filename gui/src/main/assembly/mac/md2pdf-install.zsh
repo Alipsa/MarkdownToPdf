@@ -19,9 +19,32 @@ NONINTERACTIVE=0
 DEST="${1:-$HOME/Applications/$APP_NAME}"
 [ -d "$SRC" ] || die "$APP_NAME is not next to this script — run it from the unzipped archive."
 
-if [[ -d "$DEST" && "$(cd "$SRC" && pwd -P)" == "$(cd "$DEST" && pwd -P)" ]]; then
-  die "$APP_NAME is already installed at $DEST and this script is running from there — nothing to do."
-fi
+resolve_dest() {
+  local source_real destination_real destination_parent destination_suffix
+  source_real="$(cd -- "$SRC" && pwd -P)"
+  if [[ -d "$DEST" ]]; then
+    destination_real="$(cd -- "$DEST" && pwd -P)"
+  else
+    destination_suffix="${DEST:t}"
+    destination_parent="${DEST:h}"
+    while [[ ! -d "$destination_parent" ]]; do
+      [[ "$destination_parent" != "/" && "$destination_parent" != "." ]] \
+        || die "Cannot resolve the parent directory of destination $DEST."
+      destination_suffix="${destination_parent:t}/$destination_suffix"
+      destination_parent="${destination_parent:h}"
+    done
+    destination_real="$(cd -- "$destination_parent" && pwd -P)/$destination_suffix"
+  fi
+
+  if [[ "$source_real" == "/" || "$destination_real" == "/" \
+    || "$source_real" == "$destination_real" \
+    || "$source_real" == "$destination_real"/* \
+    || "$destination_real" == "$source_real"/* ]]; then
+    die "Source $source_real and destination $DEST overlap — refusing to remove or copy recursively."
+  fi
+}
+
+resolve_dest
 
 if [[ -d "$DEST" ]]; then
   if [[ "${MD2PDF_REPLACE_EXISTING:-0}" == "1" ]]; then

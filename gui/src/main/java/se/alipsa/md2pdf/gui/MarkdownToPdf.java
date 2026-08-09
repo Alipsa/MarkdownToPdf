@@ -778,7 +778,8 @@ public class MarkdownToPdf extends Application {
 
   private void setActiveProject(Project p) {
     logger().info("Activating project: {}", p.getName());
-    if (!markdownTab.loadFile(p.getMarkdownFile())) {
+    Path markdownFile = p.getMarkdownFile();
+    if (markdownFile != null && !markdownTab.loadFile(markdownFile)) {
       logger().warn("Could not load Markdown file for project {}", p.getName());
       return;
     }
