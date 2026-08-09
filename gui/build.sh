@@ -5,6 +5,9 @@ DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 
 if [ -n "${JAVA_HOME:-}" ]; then
   JAVA_BIN="$JAVA_HOME/bin/java"
+  if [ ! -x "$JAVA_BIN" ] && [ -x "$JAVA_BIN.exe" ]; then
+    JAVA_BIN="$JAVA_BIN.exe"
+  fi
   [ -x "$JAVA_BIN" ] || { echo "JAVA_HOME does not contain an executable Java: $JAVA_BIN"; exit 1; }
 elif command -v java ; then
   JAVA_BIN="$(command -v java)"

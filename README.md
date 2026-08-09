@@ -10,7 +10,8 @@ two modules:
 | **[lib](lib/)** | `se.alipsa:md2pdf`     | Core library — turn any Markdown string, file or stream into a PDF byte-array |
 | **[gui](gui/)** | standalone desktop app | JavaFX editor with live preview, visual style editor and project management   |
 
-The `lib` module requires **JDK 21 or later**. The GUI desktop application is shipped as
+The `lib` module requires **JDK 21 or later**. Building the GUI requires **JDK 25 or later**.
+The GUI desktop application is shipped as
 self-contained platform archives that bundle their own Java 25 runtime, so end users do not
 need a JDK installed. A separate `-no-jdk` archive is available for users who already have
 a JavaFX-bundled JDK 25+ and prefer a smaller download.

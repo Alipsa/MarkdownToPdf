@@ -6,4 +6,4 @@ rem The quotes around the whole assignment are required, not style: without them
 rem parses &, ^, ( and ) in the install path as syntax. C:\Users\A & B\... is a legal
 rem Windows path and would break the launcher.
 set "DIR=%~dp0"
-start "" "%DIR%runtime\bin\javaw.exe" -Xmx8g -jar "%DIR%MarkdownToPdf.jar"
+start "" "%DIR%runtime\bin\javaw.exe" --enable-native-access=javafx.graphics,javafx.web -Xmx8g -jar "%DIR%MarkdownToPdf.jar"
