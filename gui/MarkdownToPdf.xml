@@ -11,7 +11,7 @@
   JavaFX-bundled JDK; the javafx-maven-plugin downloads and wires JavaFX automatically.
 
   Prerequisites:
-  - JDK 21 or higher
+  - JDK 25 or higher
   - Maven 3.9.9 or higher
   - se.alipsa:MarkdownToPdf:0.1.0 installed in the local Maven repository
     (run "mvn install" from the project root first)
@@ -24,7 +24,7 @@
   <name>MarkdownToPdf Launcher</name>
 
   <properties>
-    <javafx.version>23.0.2</javafx.version>
+    <javafx.version>25.0.4</javafx.version>
   </properties>
 
   <dependencies>
@@ -70,9 +70,9 @@
                   <message>Please use maven version 3.9.9 or higher</message>
                 </requireMavenVersion>
                 <requireJavaVersion>
-                  <version>[21,)</version>
+                  <version>[25,)</version>
                   <level>ERROR</level>
-                  <message>Please use Java 21 or higher</message>
+                  <message>Please use Java 25 or higher</message>
                 </requireJavaVersion>
               </rules>
             </configuration>

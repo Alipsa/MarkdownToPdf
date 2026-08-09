@@ -5,11 +5,11 @@ This archive contains the application and its dependencies, but no Java runtime.
 
 Requirements
 ------------
-A JavaFX-bundled JDK 21 or later. A plain OpenJDK will NOT work: it has no JavaFX
+A JavaFX-bundled JDK 25 or later. A plain OpenJDK will NOT work: it has no JavaFX
 modules, and this archive does not supply them. BellSoft Liberica "Full" and Azul
 Zulu "FX" builds both qualify.
 
-    https://bell-sw.com/pages/downloads/?version=java-21&package=jdk-full
+    https://bell-sw.com/pages/downloads/?version=java-25&package=jdk-full
 
 Running
 -------

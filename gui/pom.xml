@@ -17,12 +17,12 @@
   <url>https://github.com/Alipsa/MarkdownToPdf</url>
 
   <properties>
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
+    <maven.compiler.source>25</maven.compiler.source>
+    <maven.compiler.target>25</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- Must equal the JavaFX version inside the bundled Liberica runtime; CI asserts it -->
-    <javafx.version>21.0.12</javafx.version>
+    <javafx.version>25.0.4</javafx.version>
     <md2pdf.version>${revision}</md2pdf.version>
     <log4j.version>2.26.1</log4j.version>
     <pdfbox.version>3.0.8</pdfbox.version>
@@ -133,9 +133,9 @@
                   <message>Please use maven version 3.9.9 or higher</message>
                 </requireMavenVersion>
                 <requireJavaVersion>
-                  <version>[21,)</version>
+                  <version>[25,)</version>
                   <level>ERROR</level>
-                  <message>Please use Java 21 or higher</message>
+                  <message>Please use Java 25 or higher</message>
                 </requireJavaVersion>
               </rules>
             </configuration>
@@ -146,8 +146,8 @@
             <configuration>
               <rules>
                 <enforceBytecodeVersion>
-                  <!-- Cap dependencies at JDK 21 -->
-                  <maxJdkVersion>21</maxJdkVersion>
+                  <!-- Cap GUI dependencies at JDK 25 -->
+                  <maxJdkVersion>25</maxJdkVersion>
                   <!-- Optional: ignore test scope -->
                   <ignoredScopes>
                     <ignoredScope>test</ignoredScope>

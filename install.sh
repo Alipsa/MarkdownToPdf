@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds MarkdownToPdf from source and installs it on this machine.
 # For a normal install, download a release archive instead — this is a developer
-# convenience and requires a JavaFX-bundled JDK 21 to build with.
+# convenience and requires a JavaFX-bundled JDK 25 to build with.
 set -euo pipefail
 CALLER_DIR="$(pwd -P)"
 BASEDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"

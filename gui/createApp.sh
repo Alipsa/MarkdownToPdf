@@ -115,12 +115,12 @@ build_runtime() {
     || die "$JAVA_HOME has no jmods/ — a Liberica *Full* JDK is required, not a JRE"
 
   rm -rf "$out"
-  # --compress=2 is ZIP and is the strongest level JDK 21 accepts. The zip-<n> syntax is
-  # JDK 22+ and makes JDK 21 jlink fail rather than fall back.
+  # JDK 25 supports the explicit ZIP compression-level syntax. Keep this aligned with the
+  # JDK used by CI and release packaging rather than relying on the deprecated numeric form.
   "$JAVA_HOME/bin/jlink" \
     --module-path "$JAVA_HOME/jmods" \
     --add-modules "$MODULES" \
-    --strip-debug --no-header-files --no-man-pages --compress=2 \
+    --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
     --output "$out"
 }
 

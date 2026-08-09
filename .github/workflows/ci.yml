@@ -115,7 +115,7 @@ jobs:
             windows) dest="$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" ;;
           esac
           fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
-          .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx"
+          .github/scripts/verify-install.sh ${{ matrix.platform }} "$dest" "$fx" 25
 
       # ── Linux-only extra artifacts ──────────────────────────────
       - name: Build the no-jdk archive
@@ -170,6 +170,20 @@ jobs:
           rm -rf "$RUNNER_TEMP/unpack" && mkdir -p "$RUNNER_TEMP/unpack"
           unzip -q "$RUNNER_TEMP"/dl/*.zip -d "$RUNNER_TEMP/unpack"
           .github/scripts/test-install-failures.sh "$RUNNER_TEMP/unpack"
+
+  library-java21:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: cat .github/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.LIBERICA_LIB_VERSION }}
+          distribution: liberica
+          java-package: jdk
+          cache: maven
+      - name: Verify the library on Java 21
+        run: mvn -pl lib -am verify
 
   installer-overlap:
     strategy:

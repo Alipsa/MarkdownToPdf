@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Asserts an installed MarkdownToPdf is complete and runnable.
 #
-#   verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version>
+#   verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version> <java-major>
 #
 # Runs against the installed tree, never the build tree, and always on the bundled
 # runtime with the ambient JDK scrubbed — otherwise a missing runtime would be masked
 # by whatever java happens to be on PATH.
 set -euo pipefail
 
-PLATFORM="${1:?usage: verify-install.sh <platform> <install-dir> <javafx-version>}"
-DEST="${2:?usage: verify-install.sh <platform> <install-dir> <javafx-version>}"
-FX_VERSION="${3:?usage: verify-install.sh <platform> <install-dir> <javafx-version>}"
+PLATFORM="${1:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
+DEST="${2:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
+FX_VERSION="${3:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
+JAVA_MAJOR="${4:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
 
 SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -44,7 +45,10 @@ if [ "$PLATFORM" != "windows" ]; then
 fi
 
 version="$("$JAVA" -version 2>&1 | head -1 | cut -d'"' -f2)"
-case "$version" in 21.*) ok "runtime java $version" ;; *) fail "expected java 21, got $version" ;; esac
+case "$version" in
+  "$JAVA_MAJOR".*) ok "runtime java $version" ;;
+  *) fail "expected java $JAVA_MAJOR, got $version" ;;
+esac
 
 modules="$("$JAVA" --list-modules)"
 printf '%s\n' "$modules" | grep -q '^javafx.web@' || fail "javafx.web is not in the runtime"

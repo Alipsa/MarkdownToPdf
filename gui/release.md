@@ -15,8 +15,9 @@ release and a later release step needs recovery; see the recovery instructions i
 ## 0.1.1-SNAPSHOT (unreleased)
 - Bundled-runtime packaging for Linux, macOS and Windows, plus a runtime-free `-no-jdk`
   archive.
+- GUI builds and bundled runtimes use Java 25 with JavaFX 25; the `-no-jdk` archive requires
+  a JavaFX-bundled JDK 25 or later.
 - CI builds, installs and smoke-tests the platform archives and uploads release artifacts.
 
 ## v0.1.0 (2026-05-17)
 - Initial release
-

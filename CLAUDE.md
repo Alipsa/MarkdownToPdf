@@ -54,9 +54,9 @@ Pipeline: commonmark-java (Markdown → HTML) → jsoup (HTML → well-formed XH
 
 ### `gui` — the desktop application (`se.alipsa:MarkdownToPdf`)
 
-JavaFX 21.0.12 application. JavaFX dependencies are `provided` scope — the build requires a
+JavaFX 25.0.4 application. JavaFX dependencies are `provided` scope — the build requires a
 JavaFX-bundled JDK (e.g. Liberica Full JDK, Azul Zulu+FX). The platform release archives
-bundle their own runtime, so end users do not need a JDK.
+bundle their own Java 25 runtime, so end users do not need a JDK.
 
 **Tab hierarchy:**
 - `MarkdownToPdf extends Application` — main window; builds the three-tab UI and wires project/style management.
@@ -74,7 +74,7 @@ bundle their own runtime, so end users do not need a JDK.
 - `StyleProfileManager` — three built-in profiles (`Default`, `Minimal`, `Print`) defined in code; user profiles stored as `.properties` files under `~/.config/md2pdf/styles/`. Built-ins cannot be overwritten.
 - `Project` — name + Markdown file path + style profile name; serialised to `.jpr` (Java properties format).
 
-**Assembly scripts** (`gui/src/main/assembly/`): platform launch scripts (Linux `run.sh`, macOS `MarkdownToPdf.app/Contents/MacOS/markdownToPdf`, Windows `run.cmd`) and shortcut creators. Platform archives bundle their own runtime; only the separate `-no-jdk` archive requires a JavaFX-bundled JDK 21+.
+**Assembly scripts** (`gui/src/main/assembly/`): platform launch scripts (Linux `run.sh`, macOS `MarkdownToPdf.app/Contents/MacOS/markdownToPdf`, Windows `run.cmd`) and shortcut creators. Platform archives bundle their own Java 25 runtime; only the separate `-no-jdk` archive requires a JavaFX-bundled JDK 25+.
 
 ## Key constraints
 
