@@ -16,24 +16,14 @@ import se.alipsa.md2pdf.gui.MarkdownToPdf;
 public class Alerts {
 
   /**
-   * A "No" button whose {@link ButtonBar.ButtonData} is {@code OTHER} rather than the built-in
-   * {@link ButtonType#NO} (whose data is {@code ButtonData.NO}, a cancel button). {@code
-   * Dialog.close()} substitutes any cancel-button as the result when the window is closed (X or
-   * ESC) with nothing clicked, so a "No" built on a cancel-type button is indistinguishable from
-   * the user not answering at all. {@code OTHER} is not a cancel button, so it can't be substituted
-   * that way.
-   */
-  private static final ButtonType NO_EXPLICIT = new ButtonType("No", ButtonBar.ButtonData.OTHER);
-
-  /**
    * A third button, present purely so the dialog remains closable. {@code
    * FXDialog.requestPermissionToClose} refuses to let the X button or ESC close a multi-button
-   * dialog unless at least one button is {@code CANCEL_CLOSE} or otherwise a cancel button — with
-   * only {@link ButtonType#YES} and {@link #NO_EXPLICIT} (neither a cancel button), the dialog
-   * became an unclosable modal trap. {@code CANCEL_CLOSE} both satisfies that gate and is what
-   * {@code Dialog.close()} prefers when substituting a result on an abnormal close, so a window/ESC
-   * close resolves to this button — not {@code YES}, not {@code NO_EXPLICIT} — and {@link
-   * #confirmAsync(String, String, String, Runnable, Runnable)} correctly runs neither handler.
+   * dialog unless at least one button is {@code CANCEL_CLOSE} or otherwise a cancel button —
+   * without one, a two-button Yes/No dialog becomes an unclosable modal trap. {@code CANCEL_CLOSE}
+   * both satisfies that gate and is what {@code Dialog.close()} prefers when substituting a result
+   * on an abnormal close, so a window/ESC close resolves to this button — not the yes- or
+   * no-labelled one — and {@link #confirmAsync(String, String, String, String, String, Runnable,
+   * Runnable)} correctly runs neither handler.
    */
   private static final ButtonType LATER =
       new ButtonType("Later", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -70,31 +60,45 @@ public class Alerts {
   }
 
   /**
-   * Shows a confirmation dialog without blocking, distinguishing an explicit Yes/No answer from the
+   * Shows a confirmation dialog without blocking, distinguishing an explicit yes/no answer from the
    * user closing the dialog without choosing (e.g. via the window's close button or ESC), for which
    * neither handler runs. Adds a third "Later" button so the window remains closable via X / ESC
    * (see {@link #LATER}'s javadoc) — closing it that way behaves the same as clicking "Later":
    * neither handler runs. Use this instead of {@link #confirmAsync(String, String, String,
-   * Consumer)} whenever a No answer has a side effect (such as remembering a dismissal) that a
-   * plain "didn't say Yes" must not trigger.
+   * Consumer)} whenever a "no" answer has a side effect (such as remembering a dismissal) that a
+   * plain "didn't say yes" must not trigger.
+   *
+   * <p>{@code yesLabel}/{@code noLabel} should state each button's effect (e.g. "Open release page"
+   * / "Skip this version") rather than a bare "Yes"/"No" — a plain "No" reads as "not right now",
+   * which invites the user into a side effect the dialog text doesn't otherwise hint at.
    *
    * @param title the dialog window title
    * @param headerText the dialog header
    * @param contentText the dialog body
-   * @param onYes run when the user clicks Yes
-   * @param onNo run when the user clicks No
+   * @param yesLabel the label of the button that runs {@code onYes}
+   * @param noLabel the label of the button that runs {@code onNo}
+   * @param onYes run when the user clicks the yes-labelled button
+   * @param onNo run when the user clicks the no-labelled button
    */
   public static void confirmAsync(
-      String title, String headerText, String contentText, Runnable onYes, Runnable onNo) {
-    List<ButtonType> buttons = explicitConfirmButtons();
+      String title,
+      String headerText,
+      String contentText,
+      String yesLabel,
+      String noLabel,
+      Runnable onYes,
+      Runnable onNo) {
+    List<ButtonType> buttons = explicitConfirmButtons(yesLabel, noLabel);
+    ButtonType yes = buttons.get(0);
+    ButtonType no = buttons.get(1);
     Alert alert =
         createConfirmation(title, headerText, contentText, buttons.toArray(new ButtonType[0]));
     alert.setOnHidden(
         event -> {
           ButtonType result = alert.getResult();
-          if (result == ButtonType.YES) {
+          if (result == yes) {
             onYes.run();
-          } else if (result == NO_EXPLICIT) {
+          } else if (result == no) {
             onNo.run();
           }
         });
@@ -102,13 +106,22 @@ public class Alerts {
   }
 
   /**
-   * The Yes/No/Later button set used by {@link #confirmAsync(String, String, String, Runnable,
-   * Runnable)}. Exposed only so tests can assert on the real button list — closable via X/ESC, and
-   * unambiguous between "closed" and "clicked No" — without constructing a live {@code Alert}
-   * (which requires an initialized JavaFX toolkit).
+   * The yes/no/Later button set used by {@link #confirmAsync(String, String, String, String,
+   * String, Runnable, Runnable)}, with caller-supplied labels for the first two. The {@code
+   * ButtonBar.ButtonData} assigned to each — {@code YES}, {@code OTHER}, {@code CANCEL_CLOSE} — is
+   * fixed regardless of label, which is what keeps the dialog closable via X/ESC and keeps that
+   * close unambiguous from clicking the no-labelled button (see {@link #LATER}'s javadoc). Exposed
+   * so tests can assert on the real button list without constructing a live {@code Alert} (which
+   * requires an initialized JavaFX toolkit).
+   *
+   * @param yesLabel the label for the affirmative button
+   * @param noLabel the label for the negative button
    */
-  public static List<ButtonType> explicitConfirmButtons() {
-    return List.of(ButtonType.YES, NO_EXPLICIT, LATER);
+  public static List<ButtonType> explicitConfirmButtons(String yesLabel, String noLabel) {
+    return List.of(
+        new ButtonType(yesLabel, ButtonBar.ButtonData.YES),
+        new ButtonType(noLabel, ButtonBar.ButtonData.OTHER),
+        LATER);
   }
 
   private static Alert createConfirmation(

@@ -1174,6 +1174,8 @@ public class MarkdownToPdf extends Application {
             + currentVersion
             + ").",
         "Open the release page in your browser?",
+        "Open release page",
+        "Skip this version",
         () -> openUri(info.releaseHtmlUrl()),
         () -> preferences().put(PREF_DISMISSED_VERSION, info.latestVersion()));
   }
