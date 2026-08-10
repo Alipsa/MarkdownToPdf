@@ -15,6 +15,7 @@ import java.awt.Taskbar;
 import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,6 +57,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.appender.FileAppender;
 import se.alipsa.md2pdf.Md2PdfException;
+import se.alipsa.md2pdf.gui.update.UpdateChecker;
+import se.alipsa.md2pdf.gui.update.UpdateInfo;
 import se.alipsa.md2pdf.gui.widgets.Alerts;
 import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
 import se.alipsa.md2pdf.model.Project;
@@ -70,6 +73,11 @@ public class MarkdownToPdf extends Application {
   private static final String JAVA2D_UI_SCALE = "sun.java2d.uiScale";
   private static volatile JWindow splashWindow;
   private static final int SPLASH_LOGO_SIZE = 96;
+
+  private static final String PREF_AUTO_CHECK_UPDATES = "autoCheckForUpdates";
+  private static final String PREF_LAST_UPDATE_CHECK = "lastUpdateCheck";
+  private static final String PREF_DISMISSED_VERSION = "dismissedVersion";
+  private static final long UPDATE_CHECK_INTERVAL_MILLIS = 20L * 60 * 60 * 1000; // 20 hours
 
   private final DateTimeFormatter dateFormat =
       DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
@@ -437,6 +445,9 @@ public class MarkdownToPdf extends Application {
     primaryStage.setScene(scene);
     primaryStage.show();
     hideStartupSplash();
+    if (preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true)) {
+      checkForUpdates(false);
+    }
   }
 
   /**
@@ -621,7 +632,18 @@ public class MarkdownToPdf extends Application {
     viewLogMi.setOnAction(this::viewLogFile);
     MenuItem aboutMi = new MenuItem("About");
     aboutMi.setOnAction(a -> showAbout());
-    helpMenu.getItems().addAll(viewLogMi, aboutMi);
+    MenuItem checkForUpdatesMi = new MenuItem("Check for Updates…");
+    checkForUpdatesMi.setOnAction(a -> checkForUpdates(true));
+    CheckMenuItem autoCheckUpdatesMi = new CheckMenuItem("Automatically check for updates");
+    autoCheckUpdatesMi.setSelected(preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true));
+    autoCheckUpdatesMi
+        .selectedProperty()
+        .addListener(
+            (obs, wasSelected, isSelected) ->
+                preferences().putBoolean(PREF_AUTO_CHECK_UPDATES, isSelected));
+    helpMenu
+        .getItems()
+        .addAll(viewLogMi, aboutMi, new SeparatorMenuItem(), checkForUpdatesMi, autoCheckUpdatesMi);
 
     menuBar.getMenus().addAll(fileMenu, projectMenu, editMenu, helpMenu);
     return menuBar;
@@ -1053,6 +1075,101 @@ public class MarkdownToPdf extends Application {
     } catch (Exception e) {
       ExceptionAlert.showAlert("Failed to show log file", e);
     }
+  }
+
+  // ── Updates ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Checks GitHub for a newer release. Background checks (triggered on startup) are throttled and
+   * silent on failure, and skip an update the user already dismissed; a check triggered from the
+   * Help menu always runs and always reports its result.
+   *
+   * @param interactive whether this check was explicitly requested by the user
+   */
+  private void checkForUpdates(boolean interactive) {
+    if (!interactive) {
+      long lastCheck = preferences().getLong(PREF_LAST_UPDATE_CHECK, 0);
+      if (System.currentTimeMillis() - lastCheck < UPDATE_CHECK_INTERVAL_MILLIS) {
+        return;
+      }
+    }
+    String currentVersion = readCurrentVersion();
+    Task<Optional<UpdateInfo>> task =
+        new Task<>() {
+          @Override
+          protected Optional<UpdateInfo> call() throws Exception {
+            return new UpdateChecker().checkForUpdate(currentVersion);
+          }
+        };
+    task.setOnSucceeded(
+        e -> {
+          preferences().putLong(PREF_LAST_UPDATE_CHECK, System.currentTimeMillis());
+          Optional<UpdateInfo> info = task.getValue();
+          if (info.isPresent()) {
+            String dismissedVersion = preferences().get(PREF_DISMISSED_VERSION, "");
+            if (interactive || !dismissedVersion.equals(info.get().latestVersion())) {
+              handleUpdateAvailable(info.get(), currentVersion);
+            }
+          } else if (interactive) {
+            Alerts.info(
+                "Check for Updates",
+                "You are running the latest version (" + currentVersion + ").");
+          }
+        });
+    task.setOnFailed(
+        e -> {
+          logger().warn("Update check failed", task.getException());
+          if (interactive) {
+            ExceptionAlert.showAlert("Failed to check for updates", task.getException());
+          }
+        });
+    new Thread(task).start();
+  }
+
+  private void handleUpdateAvailable(UpdateInfo info, String currentVersion) {
+    setStatus("Update available: " + info.latestVersion() + " — see Help > Check for Updates");
+    Alerts.confirmAsync(
+        "Update available",
+        "MarkdownToPdf "
+            + info.latestVersion()
+            + " is available (you have "
+            + currentVersion
+            + ").",
+        "Open the release page in your browser?",
+        confirmed -> {
+          if (confirmed) {
+            openUri(info.releaseHtmlUrl());
+          } else {
+            preferences().put(PREF_DISMISSED_VERSION, info.latestVersion());
+          }
+        });
+  }
+
+  private String readCurrentVersion() {
+    try (InputStream is = getClass().getResourceAsStream("/MarkdownToPdf.properties")) {
+      if (is == null) {
+        return "unknown";
+      }
+      Properties props = new Properties();
+      props.load(is);
+      return props.getProperty("Implementation-Version", "unknown");
+    } catch (IOException e) {
+      logger().warn("Failed to read MarkdownToPdf.properties for update check", e);
+      return "unknown";
+    }
+  }
+
+  private void openUri(String uri) {
+    Task<Void> task =
+        new Task<>() {
+          @Override
+          protected Void call() throws Exception {
+            Desktop.getDesktop().browse(URI.create(uri));
+            return null;
+          }
+        };
+    task.setOnFailed(e -> ExceptionAlert.showAlert("Failed to open " + uri, task.getException()));
+    new Thread(task).start();
   }
 
   // ── Public accessors / helpers ─────────────────────────────────────────────
