@@ -79,12 +79,12 @@ require_arch() {
 # The version comes from the built jar's manifest rather than from the POM, so the
 # archive name can never disagree with the jar inside it.
 app_version() {
-  local version
-  version="$(unzip -p "$(app_jar)" META-INF/MANIFEST.MF | tr -d '\r' \
+  local jar="$1" version
+  version="$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r' \
     | awk -F': ' '/^Implementation-Version: /{print $2; exit}')"
   # addDefaultImplementationEntries writes this; an empty value means the manifest is not
   # the one maven-jar-plugin produces, and every archive name downstream would be wrong.
-  [ -n "$version" ] || die "no Implementation-Version in $(app_jar) manifest"
+  [ -n "$version" ] || die "no Implementation-Version in $jar manifest"
   printf '%s\n' "$version"
 }
 
@@ -141,7 +141,10 @@ build_runtime() {
 require_tools
 require_arch
 [ -d "$TARGET/lib" ] || die "$TARGET/lib is missing — run 'mvn install' first"
-VERSION="$(app_version)"
+# Resolved once, as a plain top-level assignment: app_jar()'s die() on ambiguity only
+# aborts the script if its failure isn't swallowed by a nested command substitution.
+APP_JAR="$(app_jar)"
+VERSION="$(app_version "$APP_JAR")"
 echo "Building MarkdownToPdf $VERSION for $ARCH_LABEL"
 
 STAGE="$TARGET/stage-$ARCH_LABEL"
@@ -152,7 +155,7 @@ rm -rf "$STAGE"
 # readable from the manifest's Implementation-Version.
 stage_app() {                 # stage_app <dir-to-put-jar-and-lib-in>
   mkdir -p "$1"
-  cp "$(app_jar)" "$1/MarkdownToPdf.jar"
+  cp "$APP_JAR" "$1/MarkdownToPdf.jar"
   cp -R "$TARGET/lib" "$1/lib"
 }
 
