@@ -7,18 +7,27 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Isolated;
 import se.alipsa.md2pdf.gui.update.UpdateCheckException;
 import se.alipsa.md2pdf.gui.update.UpdateChecker;
+import se.alipsa.md2pdf.gui.update.UpdateInfo;
+import se.alipsa.md2pdf.gui.update.UpdatePlatform;
 
 /**
  * Exercises {@link UpdateChecker#checkForUpdate(String)} end-to-end against a real local HTTP
  * server (JDK-bundled {@code com.sun.net.httpserver}, so this adds no dependency) via the {@link
  * UpdateChecker#API_URL_PROPERTY} override seam — the same seam intended for manual QA against a
  * fixture server.
+ *
+ * <p>{@code @Isolated}: this test mutates the {@code md2pdf.update.apiUrl} system property, which
+ * is global JVM state. Harmless with this project's default sequential test execution, but
+ * isolating it keeps that true even if parallel execution is ever enabled.
  */
+@Isolated
 public class UpdateCheckerHttpTest {
 
   private HttpServer server;
@@ -34,7 +43,9 @@ public class UpdateCheckerHttpTest {
 
   @AfterEach
   void stopServer() {
-    server.stop(0);
+    if (server != null) {
+      server.stop(0);
+    }
     System.clearProperty(UpdateChecker.API_URL_PROPERTY);
   }
 
@@ -43,9 +54,14 @@ public class UpdateCheckerHttpTest {
         "/releases/latest",
         exchange -> {
           byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-          exchange.sendResponseHeaders(status, bytes.length);
+          // sendResponseHeaders' responseLength contract: 0 means chunked with unspecified
+          // length, -1 means no response body at all. A genuinely empty body must send -1, not
+          // 0, or the client is left waiting on a chunked stream that never starts.
+          exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
           try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
+            if (bytes.length > 0) {
+              os.write(bytes);
+            }
           }
         });
   }
@@ -73,6 +89,8 @@ public class UpdateCheckerHttpTest {
 
   @Test
   void wellFormedNewerReleaseIsReturned() throws UpdateCheckException {
+    UpdatePlatform platform = UpdatePlatform.detectCurrent();
+    String assetName = "md2pdf-99.0.0" + platform.assetSuffix();
     respond(
         200,
         """
@@ -80,15 +98,16 @@ public class UpdateCheckerHttpTest {
           "tag_name": "v99.0.0",
           "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/v99.0.0",
           "assets": [
-            {"name": "md2pdf-99.0.0-linux-x64.zip",
-             "browser_download_url": "https://example.com/md2pdf-99.0.0-linux-x64.zip"}
+            {"name": "%s", "browser_download_url": "https://example.com/%s"}
           ]
         }
-        """);
-    UpdateChecker checker = new UpdateChecker();
-    // The result depends on the platform this test runs on (only Linux x64 will see the asset
-    // above match); either way it must not throw, which is what this end-to-end path exists to
-    // cover — the pure-logic asset matching itself is already covered by UpdateCheckerTest.
-    assertDoesNotThrow(() -> checker.checkForUpdate("0.1.0"));
+        """
+            .formatted(assetName, assetName));
+
+    Optional<UpdateInfo> result = new UpdateChecker().checkForUpdate("0.1.0");
+
+    // Deterministic on every platform CI runs on: UNSUPPORTED never matches (no asset suffix to
+    // build a real file name from), every supported platform matches the asset built above.
+    assertEquals(platform != UpdatePlatform.UNSUPPORTED, result.isPresent());
   }
 }

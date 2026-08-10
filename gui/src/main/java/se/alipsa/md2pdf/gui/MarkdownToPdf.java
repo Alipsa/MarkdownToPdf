@@ -1190,6 +1190,10 @@ public class MarkdownToPdf extends Application {
   private static final Set<String> ALLOWED_URI_SCHEMES = Set.of("http", "https");
 
   private void openUri(String uri) {
+    if (uri == null) {
+      ExceptionAlert.showAlert("Invalid update URL", new NullPointerException("uri is null"));
+      return;
+    }
     URI target;
     try {
       target = URI.create(uri);
