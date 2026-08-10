@@ -83,11 +83,35 @@ public class UpdateCheckerTest {
   }
 
   @Test
-  void missingChecksumsAssetReturnsEmpty() {
+  void missingChecksumsAssetStillReturnsUpdate() {
+    // The current latest release (v0.1.0) ships no platform zip and no SHA256SUMS — a release
+    // that adds the platform zip before (or without) SHA256SUMS must still be able to notify.
+    // Verifying the checksum is the self-apply follow-up's concern, not this check-only PR's.
     String json =
         releaseJson(
             "v0.1.2",
             asset("md2pdf-0.1.2-linux-x64.zip", "https://example.com/md2pdf-0.1.2-linux-x64.zip"));
+
+    Optional<UpdateInfo> result =
+        UpdateChecker.parseAndEvaluate("0.1.1", UpdatePlatform.LINUX_X64, json);
+
+    assertTrue(result.isPresent());
+    assertNull(result.get().checksumsUrl());
+  }
+
+  @Test
+  void missingHtmlUrlReturnsEmpty() {
+    String json =
+        """
+        {
+          "tag_name": "v0.1.2",
+          "assets": [%s]
+        }
+        """
+            .formatted(
+                asset(
+                    "md2pdf-0.1.2-linux-x64.zip",
+                    "https://example.com/md2pdf-0.1.2-linux-x64.zip"));
 
     assertTrue(UpdateChecker.parseAndEvaluate("0.1.1", UpdatePlatform.LINUX_X64, json).isEmpty());
   }

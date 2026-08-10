@@ -34,8 +34,9 @@ public enum UpdatePlatform {
 
   /**
    * Maps raw {@code os.name}/{@code os.arch} values to the release archive that matches this
-   * machine. There is no Intel-Mac or non-x64-Windows build, so those combinations resolve to
-   * {@link #UNSUPPORTED} rather than guessing.
+   * machine. There is no ARM-Linux, Intel-Mac, or non-x64-Windows build ({@code createApp.sh} pins
+   * {@code EXPECTED_ARCH} per platform), so those combinations resolve to {@link #UNSUPPORTED}
+   * rather than guessing — a mismatched archive would bundle a JRE that can't run.
    */
   public static UpdatePlatform detect(String osName, String osArch) {
     if (osName == null) {
@@ -44,7 +45,7 @@ public enum UpdatePlatform {
     String name = osName.toLowerCase(Locale.ROOT);
     String arch = osArch == null ? "" : osArch.toLowerCase(Locale.ROOT);
     if (name.contains("linux")) {
-      return LINUX_X64;
+      return isX64(arch) ? LINUX_X64 : UNSUPPORTED;
     }
     if (name.contains("mac") || name.contains("darwin")) {
       return isArm(arch) ? MACOS_AARCH64 : UNSUPPORTED;

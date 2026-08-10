@@ -29,6 +29,7 @@ import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -78,6 +79,7 @@ public class MarkdownToPdf extends Application {
   private static final String PREF_LAST_UPDATE_CHECK = "lastUpdateCheck";
   private static final String PREF_DISMISSED_VERSION = "dismissedVersion";
   private static final long UPDATE_CHECK_INTERVAL_MILLIS = 20L * 60 * 60 * 1000; // 20 hours
+  private final SimpleBooleanProperty updateCheckInProgress = new SimpleBooleanProperty(false);
 
   private final DateTimeFormatter dateFormat =
       DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
@@ -634,6 +636,7 @@ public class MarkdownToPdf extends Application {
     aboutMi.setOnAction(a -> showAbout());
     MenuItem checkForUpdatesMi = new MenuItem("Check for Updates…");
     checkForUpdatesMi.setOnAction(a -> checkForUpdates(true));
+    checkForUpdatesMi.disableProperty().bind(updateCheckInProgress);
     CheckMenuItem autoCheckUpdatesMi = new CheckMenuItem("Automatically check for updates");
     autoCheckUpdatesMi.setSelected(preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true));
     autoCheckUpdatesMi
@@ -1005,32 +1008,22 @@ public class MarkdownToPdf extends Application {
   // ── About / log ────────────────────────────────────────────────────────────
 
   private void showAbout() {
-    StringBuilder content = new StringBuilder();
-    String version = "unknown";
+    Properties props = loadBuildProperties();
+    String version = props.getProperty("Implementation-Version", "unknown");
     String buildTime = "unknown";
-    String batikVersion = "unknown";
-    String jsoupVersion = "unknown";
-    String openHtmlVersion = "unknown";
-    Properties props = new Properties();
-    try (InputStream is = getClass().getResourceAsStream("/MarkdownToPdf.properties")) {
-      if (is != null) {
-        props.load(is);
-        version = props.getProperty("Implementation-Version", version);
-        String dt = props.getProperty("Build-Time");
-        if (dt != null) {
-          try {
-            buildTime = dateFormat.format(ZonedDateTime.parse(dt.trim(), isoFormat));
-          } catch (DateTimeParseException e) {
-            buildTime = dt;
-          }
-        }
-        batikVersion = props.getProperty("Batik-Version", batikVersion);
-        jsoupVersion = props.getProperty("Jsoup-Version", jsoupVersion);
-        openHtmlVersion = props.getProperty("Openhtmltopdf-Version", openHtmlVersion);
+    String dt = props.getProperty("Build-Time");
+    if (dt != null) {
+      try {
+        buildTime = dateFormat.format(ZonedDateTime.parse(dt.trim(), isoFormat));
+      } catch (DateTimeParseException e) {
+        buildTime = dt;
       }
-    } catch (IOException e) {
-      ExceptionAlert.showAlert("Error reading MarkdownToPdf.properties", e);
     }
+    String batikVersion = props.getProperty("Batik-Version", "unknown");
+    String jsoupVersion = props.getProperty("Jsoup-Version", "unknown");
+    String openHtmlVersion = props.getProperty("Openhtmltopdf-Version", "unknown");
+
+    StringBuilder content = new StringBuilder();
     content
         .append("MarkdownToPdf version: ")
         .append(version)
@@ -1051,6 +1044,25 @@ public class MarkdownToPdf extends Application {
     Alert dialog = new Alert(Alert.AlertType.INFORMATION, content.toString());
     dialog.setHeaderText("About MarkdownToPdf");
     dialog.show();
+  }
+
+  /**
+   * Loads {@code /MarkdownToPdf.properties} (generated at build time with {@code
+   * Implementation-Version}, {@code Build-Time}, and library versions). Returns an empty {@link
+   * Properties} — never {@code null} and never throws — if the resource is missing or unreadable;
+   * callers fall back to per-key defaults. Shared by {@link #showAbout()} and {@link
+   * #readCurrentVersion()} so the two can't drift on how the resource is read.
+   */
+  private Properties loadBuildProperties() {
+    Properties props = new Properties();
+    try (InputStream is = getClass().getResourceAsStream("/MarkdownToPdf.properties")) {
+      if (is != null) {
+        props.load(is);
+      }
+    } catch (IOException e) {
+      logger().warn("Failed to read MarkdownToPdf.properties", e);
+    }
+    return props;
   }
 
   private void viewLogFile(javafx.event.ActionEvent actionEvent) {
@@ -1087,13 +1099,31 @@ public class MarkdownToPdf extends Application {
    * @param interactive whether this check was explicitly requested by the user
    */
   private void checkForUpdates(boolean interactive) {
+    if (updateCheckInProgress.get()) {
+      return;
+    }
     if (!interactive) {
       long lastCheck = preferences().getLong(PREF_LAST_UPDATE_CHECK, 0);
-      if (System.currentTimeMillis() - lastCheck < UPDATE_CHECK_INTERVAL_MILLIS) {
+      long elapsed = System.currentTimeMillis() - lastCheck;
+      // elapsed < 0 means the clock moved backwards since the last check (or lastCheck was
+      // never set) — treat that as "due", not as "just checked", so a clock adjustment can't
+      // suppress checks indefinitely.
+      if (lastCheck > 0 && elapsed >= 0 && elapsed < UPDATE_CHECK_INTERVAL_MILLIS) {
         return;
       }
     }
-    String currentVersion = readCurrentVersion();
+    Optional<String> currentVersionOpt = readCurrentVersion();
+    if (currentVersionOpt.isEmpty()) {
+      logger().warn("Could not determine the running version; skipping the update check.");
+      if (interactive) {
+        Alerts.warn(
+            "Check for Updates",
+            "Could not determine the running app version, so the update check was skipped.");
+      }
+      return;
+    }
+    String currentVersion = currentVersionOpt.get();
+    updateCheckInProgress.set(true);
     Task<Optional<UpdateInfo>> task =
         new Task<>() {
           @Override
@@ -1103,6 +1133,7 @@ public class MarkdownToPdf extends Application {
         };
     task.setOnSucceeded(
         e -> {
+          updateCheckInProgress.set(false);
           preferences().putLong(PREF_LAST_UPDATE_CHECK, System.currentTimeMillis());
           Optional<UpdateInfo> info = task.getValue();
           if (info.isPresent()) {
@@ -1118,12 +1149,19 @@ public class MarkdownToPdf extends Application {
         });
     task.setOnFailed(
         e -> {
+          updateCheckInProgress.set(false);
+          // Recorded on failure too, not just success — otherwise an offline machine pays a
+          // fresh 10s-timeout request on every launch instead of being throttled like any other
+          // outcome.
+          preferences().putLong(PREF_LAST_UPDATE_CHECK, System.currentTimeMillis());
           logger().warn("Update check failed", task.getException());
           if (interactive) {
             ExceptionAlert.showAlert("Failed to check for updates", task.getException());
           }
         });
-    new Thread(task).start();
+    Thread thread = new Thread(task);
+    thread.setDaemon(true);
+    thread.start();
   }
 
   private void handleUpdateAvailable(UpdateInfo info, String currentVersion) {
@@ -1136,40 +1174,47 @@ public class MarkdownToPdf extends Application {
             + currentVersion
             + ").",
         "Open the release page in your browser?",
-        confirmed -> {
-          if (confirmed) {
-            openUri(info.releaseHtmlUrl());
-          } else {
-            preferences().put(PREF_DISMISSED_VERSION, info.latestVersion());
-          }
-        });
+        () -> openUri(info.releaseHtmlUrl()),
+        () -> preferences().put(PREF_DISMISSED_VERSION, info.latestVersion()));
   }
 
-  private String readCurrentVersion() {
-    try (InputStream is = getClass().getResourceAsStream("/MarkdownToPdf.properties")) {
-      if (is == null) {
-        return "unknown";
-      }
-      Properties props = new Properties();
-      props.load(is);
-      return props.getProperty("Implementation-Version", "unknown");
-    } catch (IOException e) {
-      logger().warn("Failed to read MarkdownToPdf.properties for update check", e);
-      return "unknown";
-    }
+  /**
+   * Returns the running {@code Implementation-Version}, or {@link Optional#empty()} if it can't be
+   * determined — never the literal string {@code "unknown"}, so callers can't mistake a detection
+   * failure for a real version and silently report "you're up to date."
+   */
+  private Optional<String> readCurrentVersion() {
+    return Optional.ofNullable(loadBuildProperties().getProperty("Implementation-Version"));
   }
+
+  private static final Set<String> ALLOWED_URI_SCHEMES = Set.of("http", "https");
 
   private void openUri(String uri) {
+    URI target;
+    try {
+      target = URI.create(uri);
+    } catch (IllegalArgumentException e) {
+      ExceptionAlert.showAlert("Invalid update URL: " + uri, e);
+      return;
+    }
+    if (!ALLOWED_URI_SCHEMES.contains(
+        target.getScheme() == null ? "" : target.getScheme().toLowerCase(Locale.ROOT))) {
+      logger().warn("Refusing to open a non-http(s) URL: {}", uri);
+      Alerts.warn("Blocked URL", "Refusing to open a non-http(s) URL: " + uri);
+      return;
+    }
     Task<Void> task =
         new Task<>() {
           @Override
           protected Void call() throws Exception {
-            Desktop.getDesktop().browse(URI.create(uri));
+            Desktop.getDesktop().browse(target);
             return null;
           }
         };
     task.setOnFailed(e -> ExceptionAlert.showAlert("Failed to open " + uri, task.getException()));
-    new Thread(task).start();
+    Thread thread = new Thread(task);
+    thread.setDaemon(true);
+    thread.start();
   }
 
   // ── Public accessors / helpers ─────────────────────────────────────────────

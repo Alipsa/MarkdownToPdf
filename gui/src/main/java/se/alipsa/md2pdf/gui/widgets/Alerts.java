@@ -44,6 +44,34 @@ public class Alerts {
     alert.show();
   }
 
+  /**
+   * Shows a confirmation dialog without blocking, distinguishing an explicit Yes/No answer from the
+   * user closing the dialog without choosing (e.g. via the window's close button), for which
+   * neither handler runs. Use this instead of {@link #confirmAsync(String, String, String,
+   * Consumer)} whenever a No answer has a side effect (such as remembering a dismissal) that a
+   * plain "didn't say Yes" must not trigger.
+   *
+   * @param title the dialog window title
+   * @param headerText the dialog header
+   * @param contentText the dialog body
+   * @param onYes run when the user clicks Yes
+   * @param onNo run when the user clicks No
+   */
+  public static void confirmAsync(
+      String title, String headerText, String contentText, Runnable onYes, Runnable onNo) {
+    Alert alert = createConfirmation(title, headerText, contentText);
+    alert.setOnHidden(
+        event -> {
+          ButtonType result = alert.getResult();
+          if (result == ButtonType.YES) {
+            onYes.run();
+          } else if (result == ButtonType.NO) {
+            onNo.run();
+          }
+        });
+    alert.show();
+  }
+
   private static Alert createConfirmation(String title, String headerText, String contentText) {
     Alert alert =
         new Alert(Alert.AlertType.CONFIRMATION, contentText, ButtonType.YES, ButtonType.NO);

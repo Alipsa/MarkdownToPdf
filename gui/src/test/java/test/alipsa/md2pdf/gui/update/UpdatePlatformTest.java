@@ -8,9 +8,15 @@ import se.alipsa.md2pdf.gui.update.UpdatePlatform;
 public class UpdatePlatformTest {
 
   @Test
-  void linuxAnyArchDetectsLinuxX64() {
+  void linuxX64DetectsLinuxX64() {
     assertEquals(UpdatePlatform.LINUX_X64, UpdatePlatform.detect("Linux", "amd64"));
-    assertEquals(UpdatePlatform.LINUX_X64, UpdatePlatform.detect("Linux", "aarch64"));
+    assertEquals(UpdatePlatform.LINUX_X64, UpdatePlatform.detect("Linux", "x86_64"));
+  }
+
+  @Test
+  void linuxArmIsUnsupported() {
+    assertEquals(UpdatePlatform.UNSUPPORTED, UpdatePlatform.detect("Linux", "aarch64"));
+    assertEquals(UpdatePlatform.UNSUPPORTED, UpdatePlatform.detect("Linux", "arm64"));
   }
 
   @Test

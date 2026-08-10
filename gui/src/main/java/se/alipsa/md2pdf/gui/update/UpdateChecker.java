@@ -8,6 +8,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Checks GitHub Releases for a MarkdownToPdf version newer than the one currently running. Uses
@@ -23,11 +25,7 @@ public class UpdateChecker {
   private static final String DEFAULT_API_URL =
       "https://api.github.com/repos/Alipsa/MarkdownToPdf/releases/latest";
 
-  private final HttpClient httpClient;
-
-  public UpdateChecker() {
-    this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-  }
+  private static final Logger LOGGER = LogManager.getLogger(UpdateChecker.class);
 
   /**
    * Fetches the latest GitHub release and returns update info if it is newer than {@code
@@ -45,7 +43,8 @@ public class UpdateChecker {
             .GET()
             .build();
     HttpResponse<String> response;
-    try {
+    try (HttpClient httpClient =
+        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()) {
       response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     } catch (IOException e) {
       throw new UpdateCheckException("Failed to reach " + apiUrl, e);
@@ -63,28 +62,48 @@ public class UpdateChecker {
   /**
    * Pure evaluation of a GitHub releases/latest JSON response against the currently running version
    * and platform. No network access — used directly by tests.
+   *
+   * <p>Only the platform's own release asset and the release page URL are required; the {@code
+   * SHA256SUMS} checksum asset is captured when present but not required, since nothing in this
+   * check-only feature downloads or verifies it yet (that lands with the self-apply follow-up) —
+   * requiring it here would silently suppress every notification against a release that predates
+   * checksum publishing, such as the current {@code v0.1.0}.
    */
   public static Optional<UpdateInfo> parseAndEvaluate(
       String currentVersion, UpdatePlatform platform, String responseJson) {
     if (platform == UpdatePlatform.UNSUPPORTED) {
+      LOGGER.info("Skipping update check: no release archive for this platform.");
       return Optional.empty();
     }
     String tagName = GitHubReleaseJson.extractTagName(responseJson);
     if (tagName == null) {
+      LOGGER.info("Skipping update check: release response had no tag_name.");
       return Optional.empty();
     }
     String latestVersion = tagName.startsWith("v") ? tagName.substring(1) : tagName;
     if (!VersionComparator.isNewer(latestVersion, currentVersion)) {
+      LOGGER.info(
+          "No update available: latest release {} is not newer than the running {}.",
+          latestVersion,
+          currentVersion);
       return Optional.empty();
     }
     String htmlUrl = GitHubReleaseJson.extractHtmlUrl(responseJson);
+    if (htmlUrl == null) {
+      LOGGER.info("Skipping update check: release {} had no html_url.", tagName);
+      return Optional.empty();
+    }
     List<GitHubReleaseJson.Asset> assets = GitHubReleaseJson.extractAssets(responseJson);
     String expectedAssetName = "md2pdf-" + latestVersion + platform.assetSuffix();
     String downloadUrl = findAssetUrl(assets, expectedAssetName);
-    String checksumsUrl = findAssetUrl(assets, "SHA256SUMS");
-    if (downloadUrl == null || checksumsUrl == null) {
+    if (downloadUrl == null) {
+      LOGGER.info(
+          "Release {} is newer but ships no '{}' asset for this platform.",
+          tagName,
+          expectedAssetName);
       return Optional.empty();
     }
+    String checksumsUrl = findAssetUrl(assets, "SHA256SUMS");
     return Optional.of(
         new UpdateInfo(
             latestVersion, tagName, expectedAssetName, downloadUrl, checksumsUrl, htmlUrl));
