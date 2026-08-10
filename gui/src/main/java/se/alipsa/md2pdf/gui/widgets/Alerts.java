@@ -88,21 +88,34 @@ public class Alerts {
       String noLabel,
       Runnable onYes,
       Runnable onNo) {
-    List<ButtonType> buttons = explicitConfirmButtons(yesLabel, noLabel);
-    ButtonType yes = buttons.get(0);
-    ButtonType no = buttons.get(1);
+    ConfirmButtons buttons = explicitConfirmButtons(yesLabel, noLabel);
     Alert alert =
-        createConfirmation(title, headerText, contentText, buttons.toArray(new ButtonType[0]));
+        createConfirmation(
+            title, headerText, contentText, buttons.asList().toArray(new ButtonType[0]));
     alert.setOnHidden(
         event -> {
           ButtonType result = alert.getResult();
-          if (result == yes) {
+          if (result == buttons.yes()) {
             onYes.run();
-          } else if (result == no) {
+          } else if (result == buttons.no()) {
             onNo.run();
           }
         });
     alert.show();
+  }
+
+  /**
+   * The yes/no/Later buttons built by {@link #explicitConfirmButtons(String, String)}, named so
+   * callers never have to index a list positionally to recover which button means what — a
+   * reordering of {@link #asList()} would otherwise silently swap which button runs {@code onYes}
+   * vs. {@code onNo}, and {@code ButtonData}-based tests like {@code AlertsButtonDataTest} wouldn't
+   * catch it, since the {@code ButtonData} values would still be exactly right.
+   */
+  public record ConfirmButtons(ButtonType yes, ButtonType no, ButtonType later) {
+    /** The three buttons in the order the dialog should display them. */
+    public List<ButtonType> asList() {
+      return List.of(yes, no, later);
+    }
   }
 
   /**
@@ -117,8 +130,8 @@ public class Alerts {
    * @param yesLabel the label for the affirmative button
    * @param noLabel the label for the negative button
    */
-  public static List<ButtonType> explicitConfirmButtons(String yesLabel, String noLabel) {
-    return List.of(
+  public static ConfirmButtons explicitConfirmButtons(String yesLabel, String noLabel) {
+    return new ConfirmButtons(
         new ButtonType(yesLabel, ButtonBar.ButtonData.YES),
         new ButtonType(noLabel, ButtonBar.ButtonData.OTHER),
         LATER);

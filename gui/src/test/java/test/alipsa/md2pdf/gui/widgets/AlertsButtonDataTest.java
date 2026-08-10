@@ -37,7 +37,7 @@ public class AlertsButtonDataTest {
 
   @Test
   void buttonsAreBothClosableAndUnambiguous() {
-    List<ButtonType> buttons = Alerts.explicitConfirmButtons("Yes", "No");
+    List<ButtonType> buttons = Alerts.explicitConfirmButtons("Yes", "No").asList();
 
     List<ButtonType> substitutableOnClose =
         buttons.stream()
