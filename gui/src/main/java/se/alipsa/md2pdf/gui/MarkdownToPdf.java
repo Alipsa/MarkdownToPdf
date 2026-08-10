@@ -15,6 +15,7 @@ import java.awt.Taskbar;
 import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +29,7 @@ import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -56,6 +58,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.appender.FileAppender;
 import se.alipsa.md2pdf.Md2PdfException;
+import se.alipsa.md2pdf.gui.update.UpdateChecker;
+import se.alipsa.md2pdf.gui.update.UpdateInfo;
 import se.alipsa.md2pdf.gui.widgets.Alerts;
 import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
 import se.alipsa.md2pdf.model.Project;
@@ -70,6 +74,12 @@ public class MarkdownToPdf extends Application {
   private static final String JAVA2D_UI_SCALE = "sun.java2d.uiScale";
   private static volatile JWindow splashWindow;
   private static final int SPLASH_LOGO_SIZE = 96;
+
+  private static final String PREF_AUTO_CHECK_UPDATES = "autoCheckForUpdates";
+  private static final String PREF_LAST_UPDATE_CHECK = "lastUpdateCheck";
+  private static final String PREF_DISMISSED_VERSION = "dismissedVersion";
+  private static final long UPDATE_CHECK_INTERVAL_MILLIS = 20L * 60 * 60 * 1000; // 20 hours
+  private final SimpleBooleanProperty updateCheckInProgress = new SimpleBooleanProperty(false);
 
   private final DateTimeFormatter dateFormat =
       DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm:ss");
@@ -437,6 +447,9 @@ public class MarkdownToPdf extends Application {
     primaryStage.setScene(scene);
     primaryStage.show();
     hideStartupSplash();
+    if (preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true)) {
+      checkForUpdates(false);
+    }
   }
 
   /**
@@ -621,7 +634,19 @@ public class MarkdownToPdf extends Application {
     viewLogMi.setOnAction(this::viewLogFile);
     MenuItem aboutMi = new MenuItem("About");
     aboutMi.setOnAction(a -> showAbout());
-    helpMenu.getItems().addAll(viewLogMi, aboutMi);
+    MenuItem checkForUpdatesMi = new MenuItem("Check for Updates…");
+    checkForUpdatesMi.setOnAction(a -> checkForUpdates(true));
+    checkForUpdatesMi.disableProperty().bind(updateCheckInProgress);
+    CheckMenuItem autoCheckUpdatesMi = new CheckMenuItem("Automatically check for updates");
+    autoCheckUpdatesMi.setSelected(preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true));
+    autoCheckUpdatesMi
+        .selectedProperty()
+        .addListener(
+            (obs, wasSelected, isSelected) ->
+                preferences().putBoolean(PREF_AUTO_CHECK_UPDATES, isSelected));
+    helpMenu
+        .getItems()
+        .addAll(viewLogMi, aboutMi, new SeparatorMenuItem(), checkForUpdatesMi, autoCheckUpdatesMi);
 
     menuBar.getMenus().addAll(fileMenu, projectMenu, editMenu, helpMenu);
     return menuBar;
@@ -983,32 +1008,22 @@ public class MarkdownToPdf extends Application {
   // ── About / log ────────────────────────────────────────────────────────────
 
   private void showAbout() {
-    StringBuilder content = new StringBuilder();
-    String version = "unknown";
+    Properties props = loadBuildProperties();
+    String version = props.getProperty("Implementation-Version", "unknown");
     String buildTime = "unknown";
-    String batikVersion = "unknown";
-    String jsoupVersion = "unknown";
-    String openHtmlVersion = "unknown";
-    Properties props = new Properties();
-    try (InputStream is = getClass().getResourceAsStream("/MarkdownToPdf.properties")) {
-      if (is != null) {
-        props.load(is);
-        version = props.getProperty("Implementation-Version", version);
-        String dt = props.getProperty("Build-Time");
-        if (dt != null) {
-          try {
-            buildTime = dateFormat.format(ZonedDateTime.parse(dt.trim(), isoFormat));
-          } catch (DateTimeParseException e) {
-            buildTime = dt;
-          }
-        }
-        batikVersion = props.getProperty("Batik-Version", batikVersion);
-        jsoupVersion = props.getProperty("Jsoup-Version", jsoupVersion);
-        openHtmlVersion = props.getProperty("Openhtmltopdf-Version", openHtmlVersion);
+    String dt = props.getProperty("Build-Time");
+    if (dt != null) {
+      try {
+        buildTime = dateFormat.format(ZonedDateTime.parse(dt.trim(), isoFormat));
+      } catch (DateTimeParseException e) {
+        buildTime = dt;
       }
-    } catch (IOException e) {
-      ExceptionAlert.showAlert("Error reading MarkdownToPdf.properties", e);
     }
+    String batikVersion = props.getProperty("Batik-Version", "unknown");
+    String jsoupVersion = props.getProperty("Jsoup-Version", "unknown");
+    String openHtmlVersion = props.getProperty("Openhtmltopdf-Version", "unknown");
+
+    StringBuilder content = new StringBuilder();
     content
         .append("MarkdownToPdf version: ")
         .append(version)
@@ -1029,6 +1044,25 @@ public class MarkdownToPdf extends Application {
     Alert dialog = new Alert(Alert.AlertType.INFORMATION, content.toString());
     dialog.setHeaderText("About MarkdownToPdf");
     dialog.show();
+  }
+
+  /**
+   * Loads {@code /MarkdownToPdf.properties} (generated at build time with {@code
+   * Implementation-Version}, {@code Build-Time}, and library versions). Returns an empty {@link
+   * Properties} — never {@code null} and never throws — if the resource is missing or unreadable;
+   * callers fall back to per-key defaults. Shared by {@link #showAbout()} and {@link
+   * #readCurrentVersion()} so the two can't drift on how the resource is read.
+   */
+  private Properties loadBuildProperties() {
+    Properties props = new Properties();
+    try (InputStream is = getClass().getResourceAsStream("/MarkdownToPdf.properties")) {
+      if (is != null) {
+        props.load(is);
+      }
+    } catch (IOException e) {
+      logger().warn("Failed to read MarkdownToPdf.properties", e);
+    }
+    return props;
   }
 
   private void viewLogFile(javafx.event.ActionEvent actionEvent) {
@@ -1053,6 +1087,143 @@ public class MarkdownToPdf extends Application {
     } catch (Exception e) {
       ExceptionAlert.showAlert("Failed to show log file", e);
     }
+  }
+
+  // ── Updates ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Checks GitHub for a newer release. Background checks (triggered on startup) are throttled and
+   * silent on failure, and skip an update the user already dismissed; a check triggered from the
+   * Help menu always runs and always reports its result.
+   *
+   * @param interactive whether this check was explicitly requested by the user
+   */
+  private void checkForUpdates(boolean interactive) {
+    if (updateCheckInProgress.get()) {
+      return;
+    }
+    if (!interactive) {
+      long lastCheck = preferences().getLong(PREF_LAST_UPDATE_CHECK, 0);
+      long elapsed = System.currentTimeMillis() - lastCheck;
+      // elapsed < 0 means the clock moved backwards since the last check (or lastCheck was
+      // never set) — treat that as "due", not as "just checked", so a clock adjustment can't
+      // suppress checks indefinitely.
+      if (lastCheck > 0 && elapsed >= 0 && elapsed < UPDATE_CHECK_INTERVAL_MILLIS) {
+        return;
+      }
+    }
+    Optional<String> currentVersionOpt = readCurrentVersion();
+    if (currentVersionOpt.isEmpty()) {
+      logger().warn("Could not determine the running version; skipping the update check.");
+      if (interactive) {
+        Alerts.warn(
+            "Check for Updates",
+            "Could not determine the running app version, so the update check was skipped.");
+      }
+      return;
+    }
+    String currentVersion = currentVersionOpt.get();
+    updateCheckInProgress.set(true);
+    Task<Optional<UpdateInfo>> task =
+        new Task<>() {
+          @Override
+          protected Optional<UpdateInfo> call() throws Exception {
+            return new UpdateChecker().checkForUpdate(currentVersion);
+          }
+        };
+    task.setOnSucceeded(
+        e -> {
+          updateCheckInProgress.set(false);
+          preferences().putLong(PREF_LAST_UPDATE_CHECK, System.currentTimeMillis());
+          Optional<UpdateInfo> info = task.getValue();
+          if (info.isPresent()) {
+            String dismissedVersion = preferences().get(PREF_DISMISSED_VERSION, "");
+            if (interactive || !dismissedVersion.equals(info.get().latestVersion())) {
+              handleUpdateAvailable(info.get(), currentVersion);
+            }
+          } else if (interactive) {
+            Alerts.info(
+                "Check for Updates",
+                "You are running the latest version (" + currentVersion + ").");
+          }
+        });
+    task.setOnFailed(
+        e -> {
+          updateCheckInProgress.set(false);
+          // Recorded on failure too, not just success — otherwise an offline machine pays a
+          // fresh 10s-timeout request on every launch instead of being throttled like any other
+          // outcome.
+          preferences().putLong(PREF_LAST_UPDATE_CHECK, System.currentTimeMillis());
+          logger().warn("Update check failed", task.getException());
+          if (interactive) {
+            ExceptionAlert.showAlert("Failed to check for updates", task.getException());
+          }
+        });
+    Thread thread = new Thread(task);
+    thread.setDaemon(true);
+    thread.start();
+  }
+
+  private void handleUpdateAvailable(UpdateInfo info, String currentVersion) {
+    setStatus("Update available: " + info.latestVersion() + " — see Help > Check for Updates");
+    Alerts.confirmAsync(
+        "Update available",
+        "MarkdownToPdf "
+            + info.latestVersion()
+            + " is available (you have "
+            + currentVersion
+            + ").",
+        "Open the release page in your browser?",
+        "Open release page",
+        "Skip this version",
+        () -> openUri(info.releaseHtmlUrl()),
+        () -> preferences().put(PREF_DISMISSED_VERSION, info.latestVersion()));
+  }
+
+  /**
+   * Returns the running {@code Implementation-Version}, or {@link Optional#empty()} if it can't be
+   * determined — never the literal string {@code "unknown"}, so callers can't mistake a detection
+   * failure for a real version and silently report "you're up to date."
+   */
+  private Optional<String> readCurrentVersion() {
+    return Optional.ofNullable(loadBuildProperties().getProperty("Implementation-Version"));
+  }
+
+  private static final Set<String> ALLOWED_URI_SCHEMES = Set.of("http", "https");
+
+  private void openUri(String uri) {
+    if (uri == null) {
+      // Unreachable via the update-check path (parseAndEvaluate already rejects a null
+      // html_url) — this is a programmer-error guard, not something to show the user a
+      // fabricated stack trace for.
+      logger().error("openUri called with a null URI");
+      return;
+    }
+    URI target;
+    try {
+      target = URI.create(uri);
+    } catch (IllegalArgumentException e) {
+      ExceptionAlert.showAlert("Invalid update URL: " + uri, e);
+      return;
+    }
+    if (!ALLOWED_URI_SCHEMES.contains(
+        target.getScheme() == null ? "" : target.getScheme().toLowerCase(Locale.ROOT))) {
+      logger().warn("Refusing to open a non-http(s) URL: {}", uri);
+      Alerts.warn("Blocked URL", "Refusing to open a non-http(s) URL: " + uri);
+      return;
+    }
+    Task<Void> task =
+        new Task<>() {
+          @Override
+          protected Void call() throws Exception {
+            Desktop.getDesktop().browse(target);
+            return null;
+          }
+        };
+    task.setOnFailed(e -> ExceptionAlert.showAlert("Failed to open " + uri, task.getException()));
+    Thread thread = new Thread(task);
+    thread.setDaemon(true);
+    thread.start();
   }
 
   // ── Public accessors / helpers ─────────────────────────────────────────────
