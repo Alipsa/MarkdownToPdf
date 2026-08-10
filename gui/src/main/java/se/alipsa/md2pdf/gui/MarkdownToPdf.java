@@ -1191,7 +1191,10 @@ public class MarkdownToPdf extends Application {
 
   private void openUri(String uri) {
     if (uri == null) {
-      ExceptionAlert.showAlert("Invalid update URL", new NullPointerException("uri is null"));
+      // Unreachable via the update-check path (parseAndEvaluate already rejects a null
+      // html_url) — this is a programmer-error guard, not something to show the user a
+      // fabricated stack trace for.
+      logger().error("openUri called with a null URI");
       return;
     }
     URI target;

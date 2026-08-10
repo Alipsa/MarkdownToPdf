@@ -1,6 +1,7 @@
 package se.alipsa.md2pdf.gui.widgets;
 
 import java.net.URL;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 import javafx.scene.control.Alert;
@@ -16,14 +17,26 @@ public class Alerts {
 
   /**
    * A "No" button whose {@link ButtonBar.ButtonData} is {@code OTHER} rather than the built-in
-   * {@link ButtonType#NO} (whose data is {@code ButtonData.NO}, which {@link
-   * ButtonBar.ButtonData#isCancelButton()} reports as a cancel button). {@code Dialog.close()}
-   * substitutes any cancel-button as the result when the window is closed via the X button or ESC
-   * with no button clicked — so a dialog built with the built-in {@code ButtonType.NO} cannot
-   * distinguish "the user clicked No" from "the user closed the window without answering". {@code
-   * OTHER} is not a cancel button, so a close leaves {@code getResult()} {@code null} instead.
+   * {@link ButtonType#NO} (whose data is {@code ButtonData.NO}, a cancel button). {@code
+   * Dialog.close()} substitutes any cancel-button as the result when the window is closed (X or
+   * ESC) with nothing clicked, so a "No" built on a cancel-type button is indistinguishable from
+   * the user not answering at all. {@code OTHER} is not a cancel button, so it can't be substituted
+   * that way.
    */
   private static final ButtonType NO_EXPLICIT = new ButtonType("No", ButtonBar.ButtonData.OTHER);
+
+  /**
+   * A third button, present purely so the dialog remains closable. {@code
+   * FXDialog.requestPermissionToClose} refuses to let the X button or ESC close a multi-button
+   * dialog unless at least one button is {@code CANCEL_CLOSE} or otherwise a cancel button — with
+   * only {@link ButtonType#YES} and {@link #NO_EXPLICIT} (neither a cancel button), the dialog
+   * became an unclosable modal trap. {@code CANCEL_CLOSE} both satisfies that gate and is what
+   * {@code Dialog.close()} prefers when substituting a result on an abnormal close, so a window/ESC
+   * close resolves to this button — not {@code YES}, not {@code NO_EXPLICIT} — and {@link
+   * #confirmAsync(String, String, String, Runnable, Runnable)} correctly runs neither handler.
+   */
+  private static final ButtonType LATER =
+      new ButtonType("Later", ButtonBar.ButtonData.CANCEL_CLOSE);
 
   private Alerts() {}
 
@@ -59,6 +72,8 @@ public class Alerts {
   /**
    * Shows a confirmation dialog without blocking, distinguishing an explicit Yes/No answer from the
    * user closing the dialog without choosing (e.g. via the window's close button or ESC), for which
+   * neither handler runs. Adds a third "Later" button so the window remains closable via X / ESC
+   * (see {@link #LATER}'s javadoc) — closing it that way behaves the same as clicking "Later":
    * neither handler runs. Use this instead of {@link #confirmAsync(String, String, String,
    * Consumer)} whenever a No answer has a side effect (such as remembering a dismissal) that a
    * plain "didn't say Yes" must not trigger.
@@ -71,7 +86,9 @@ public class Alerts {
    */
   public static void confirmAsync(
       String title, String headerText, String contentText, Runnable onYes, Runnable onNo) {
-    Alert alert = createConfirmation(title, headerText, contentText, ButtonType.YES, NO_EXPLICIT);
+    List<ButtonType> buttons = explicitConfirmButtons();
+    Alert alert =
+        createConfirmation(title, headerText, contentText, buttons.toArray(new ButtonType[0]));
     alert.setOnHidden(
         event -> {
           ButtonType result = alert.getResult();
@@ -82,6 +99,16 @@ public class Alerts {
           }
         });
     alert.show();
+  }
+
+  /**
+   * The Yes/No/Later button set used by {@link #confirmAsync(String, String, String, Runnable,
+   * Runnable)}. Exposed only so tests can assert on the real button list — closable via X/ESC, and
+   * unambiguous between "closed" and "clicked No" — without constructing a live {@code Alert}
+   * (which requires an initialized JavaFX toolkit).
+   */
+  public static List<ButtonType> explicitConfirmButtons() {
+    return List.of(ButtonType.YES, NO_EXPLICIT, LATER);
   }
 
   private static Alert createConfirmation(
