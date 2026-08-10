@@ -115,7 +115,9 @@ jobs:
             windows) dest="$(cygpath -u "$LOCALAPPDATA")/Programs/MarkdownToPdf" ;;
           esac
           fx="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=javafx.version -DforceStdout)"
-          java_major="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=maven.compiler.target -DforceStdout)"
+          # The bundled runtime's major version comes from LIBERICA_VERSION, not the GUI's
+          # bytecode target — they only happen to agree while both are pinned at 25.
+          java_major="${LIBERICA_VERSION%%.*}"
           case "${{ matrix.platform }}" in
             # macos-14's virtualized Metal device crashes JavaFX 25's renderer. The
             # shipped launcher keeps the native pipeline; CI only needs a stable

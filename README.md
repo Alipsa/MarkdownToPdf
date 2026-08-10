@@ -1,6 +1,6 @@
 # MarkdownToPdf — Markdown to PDF toolset
 [![Maven Central](https://img.shields.io/maven-central/v/se.alipsa/md2pdf)](https://central.sonatype.com/artifact/se.alipsa/md2pdf)
-[![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/0.1.1/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
+[![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/0.1.0/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
 
 MarkdownToPdf is a Java-based toolkit for converting Markdown to PDF. It consists of
 two modules:

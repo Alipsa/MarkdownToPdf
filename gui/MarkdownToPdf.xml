@@ -3,12 +3,14 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <!--
-  Standalone launcher POM — runs the MarkdownToPdf GUI via the javafx-maven-plugin:
+  Launcher POM — runs the MarkdownToPdf GUI via the javafx-maven-plugin:
 
     mvn -f MarkdownToPdf.xml javafx:run
 
   This is an alternative to the fat-jar distribution that does not require a
   JavaFX-bundled JDK; the javafx-maven-plugin downloads and wires JavaFX automatically.
+  It inherits ../pom.xml as its parent, so it is not copyable out of the repo as a
+  standalone file — it must stay alongside the rest of the project.
 
   Prerequisites:
   - JDK 25 or higher

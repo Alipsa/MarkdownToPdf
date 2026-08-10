@@ -45,7 +45,7 @@ This is a Maven multi-module project with `${revision}` CI-friendly versioning (
 ### `lib` — the engine library (`se.alipsa:md2pdf`)
 
 Four source files:
-- **`Md2PdfEngine`** — the entire public API. Entry point is `engine.markdown(...)` which returns an inner `Job` for fluent configuration. Job chain: `css()`, `addCss()`, `font()`, `pageHeader()`, `pageFooter()`, `pageMargins()`, `basePath()`, plus PDF metadata setters. Terminal methods: `toPdf()` (returns `byte[]` or writes to file/stream) and `toHtml()`.
+- **`Md2PdfEngine`** — the entire public API. Entry point is `engine.markdown(...)` which returns an inner `Renderer` for fluent configuration. Renderer chain: `css()`, `addCss()`, `font()`, `pageHeader()`, `pageFooter()`, `pageMargins()`, `basePath()`, plus PDF metadata setters. Terminal methods: `toPdf()` (returns `byte[]` or writes to file/stream) and `toHtml()`.
 - **`Md2PdfException`** — checked exception thrown by all rendering operations.
 - **`Slf4jXRLogger`** — bridges OpenHTMLtoPDF's internal `XRLog` system to SLF4J. Supports both Logback and Log4j2 via reflection.
 - **`ImageUtil`** — helper for encoding images as base64 data URLs.
