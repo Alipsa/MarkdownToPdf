@@ -117,6 +117,28 @@ public class UpdateCheckerTest {
   }
 
   @Test
+  void authorProfileShapedHtmlUrlReturnsEmpty() {
+    // Guards extractScalarBeforeAssets's reliance on GitHub's field ordering: if a future
+    // response ever put an author/uploader object (which also carries an "html_url") before the
+    // release's own field, this must be treated the same as a missing html_url, not silently
+    // surfaced as the release page.
+    String json =
+        """
+        {
+          "tag_name": "v0.1.2",
+          "html_url": "https://github.com/someuser",
+          "assets": [%s]
+        }
+        """
+            .formatted(
+                asset(
+                    "md2pdf-0.1.2-linux-x64.zip",
+                    "https://example.com/md2pdf-0.1.2-linux-x64.zip"));
+
+    assertTrue(UpdateChecker.parseAndEvaluate("0.1.1", UpdatePlatform.LINUX_X64, json).isEmpty());
+  }
+
+  @Test
   void unsupportedPlatformReturnsEmpty() {
     String json =
         releaseJson(

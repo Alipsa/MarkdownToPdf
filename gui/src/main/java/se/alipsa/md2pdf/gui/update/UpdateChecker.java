@@ -88,9 +88,15 @@ public class UpdateChecker {
           currentVersion);
       return Optional.empty();
     }
+    // extractHtmlUrl takes the first "html_url" before "assets", which is the release's own
+    // field only because it precedes the "assets" array in GitHub's current (but spec-unordered)
+    // response — nothing stops a future field reorder from handing back the uploader's profile
+    // URL instead. A release page URL always contains "/releases/"; a profile URL never does, so
+    // this converts a reorder from silently opening the wrong page into a skipped notification.
     String htmlUrl = GitHubReleaseJson.extractHtmlUrl(responseJson);
-    if (htmlUrl == null) {
-      LOGGER.info("Skipping update check: release {} had no html_url.", tagName);
+    if (htmlUrl == null || !htmlUrl.contains("/releases/")) {
+      LOGGER.info(
+          "Skipping update check: release {} had no usable html_url ({}).", tagName, htmlUrl);
       return Optional.empty();
     }
     List<GitHubReleaseJson.Asset> assets = GitHubReleaseJson.extractAssets(responseJson);
