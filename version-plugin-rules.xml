@@ -23,4 +23,14 @@
     <ignoreVersion type="regex">.*jre23</ignoreVersion>
     <ignoreVersion type="regex">.*jre24</ignoreVersion>
   </ignoreVersions>
+
+  <!-- Allow only JavaFX 25.x for the JDK 25 build -->
+  <rules>
+    <rule groupId="org.openjfx" artifactId="*">
+      <ignoreVersions>
+        <ignoreVersion type="range">[,25)</ignoreVersion>
+        <ignoreVersion type="range">[26,)</ignoreVersion>
+      </ignoreVersions>
+    </rule>
+  </rules>
 </ruleset>

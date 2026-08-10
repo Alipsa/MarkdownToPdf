@@ -22,7 +22,7 @@ JDK_HOME="${3:-${JAVA_HOME:-}}"
 SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 
 [ -n "$JDK_HOME" ] \
-  || { echo "pass a jdk-home or set JAVA_HOME to a JavaFX-bundled JDK 21" >&2; exit 1; }
+  || { echo "pass a jdk-home or set JAVA_HOME to a JavaFX-bundled JDK 25" >&2; exit 1; }
 JAVAC="$JDK_HOME/bin/javac"
 [ -x "$JAVAC" ] || [ -x "$JAVAC.exe" ] || { echo "no javac in $JDK_HOME/bin" >&2; exit 1; }
 [ -f "$JAR" ] || { echo "no such jar: $JAR" >&2; exit 1; }

@@ -26,7 +26,7 @@ Every task's requirements implicitly include this section.
 - **`copy-dependencies` must set `includeScope=runtime`.** The default copies `provided` and `test` too, which would put JavaFX jars in `lib/` beside a runtime that already contains the JavaFX modules.
 - **Zero new Maven dependencies** in `lib` core or the `gui` model layer. New Maven *plugins* are fine.
 - **Google Java Format via Spotless.** Run `mvn spotless:apply` before committing Java changes. Never run `spotless:apply` and `verify` in the same command.
-- **`JAVA_HOME` must point at a JavaFX-bundled JDK 21** to build locally. On the maintainer's machine: `export JAVA_HOME=/home/per/.sdkman/candidates/java/21.0.12.fx-librca`. A plain JDK cannot compile `gui`; JDK 25 breaks `google-java-format`.
+- **`JAVA_HOME` must point at a JavaFX-bundled JDK 21** to build locally. On the maintainer's machine: `export JAVA_HOME=/home/per/.sdkman/candidates/java/21.0.12.fx-librca`. A plain JDK cannot compile `gui`. (At the time this plan was written, JDK 25 broke `google-java-format`; the subsequent Java 25 upgrade bumped GJF to 1.28.0, which fixed that.)
 - **Targets and artifact names:** `md2pdf-<version>-linux-x64.zip`, `md2pdf-<version>-macos-aarch64.zip`, `md2pdf-<version>-windows-x64.zip`, `md2pdf-<version>-no-jdk.zip`, `md2pdf-<version>-javadoc.jar`. `<version>` is the full `${revision}`, e.g. `0.1.1-SNAPSHOT`. **The CI artifact name equals the file's basename without extension.**
 - **`BUNDLE_VERSION` = `${revision}` with any `-qualifier` suffix removed** (`0.1.1-SNAPSHOT` → `0.1.1`), and must match `^[0-9]+(\.[0-9]+){0,2}$`. macOS only; Apple rejects anything else in the version keys.
 - **`actions/setup-java@v5`.** v1–v4 are deprecated.

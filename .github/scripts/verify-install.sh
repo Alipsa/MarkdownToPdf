@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Asserts an installed MarkdownToPdf is complete and runnable.
 #
-#   verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version>
+#   verify-install.sh <linux|macos|windows> <install-dir> <expected-javafx-version> <java-major>
 #
 # Runs against the installed tree, never the build tree, and always on the bundled
 # runtime with the ambient JDK scrubbed — otherwise a missing runtime would be masked
 # by whatever java happens to be on PATH.
 set -euo pipefail
 
-PLATFORM="${1:?usage: verify-install.sh <platform> <install-dir> <javafx-version>}"
-DEST="${2:?usage: verify-install.sh <platform> <install-dir> <javafx-version>}"
-FX_VERSION="${3:?usage: verify-install.sh <platform> <install-dir> <javafx-version>}"
+PLATFORM="${1:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
+DEST="${2:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
+FX_VERSION="${3:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
+JAVA_MAJOR="${4:?usage: verify-install.sh <platform> <install-dir> <javafx-version> <java-major>}"
 
 SCRIPTS="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -43,8 +44,16 @@ if [ "$PLATFORM" != "windows" ]; then
   ok "execute bits re-applied"
 fi
 
-version="$("$JAVA" -version 2>&1 | head -1 | cut -d'"' -f2)"
-case "$version" in 21.*) ok "runtime java $version" ;; *) fail "expected java 21, got $version" ;; esac
+version="$(
+  "$JAVA" -version 2>&1 |
+    grep -m1 ' version ' |
+    cut -d'"' -f2 || true
+)"
+case "$version" in
+  "$JAVA_MAJOR") ok "runtime java $version" ;;
+  "$JAVA_MAJOR".*) ok "runtime java $version" ;;
+  *) fail "expected java $JAVA_MAJOR, got $version" ;;
+esac
 
 modules="$("$JAVA" --list-modules)"
 printf '%s\n' "$modules" | grep -q '^javafx.web@' || fail "javafx.web is not in the runtime"
@@ -104,14 +113,16 @@ CP="$("$SCRIPTS/compile-smoke.sh" "$APP/MarkdownToPdf.jar" "$SMOKE")"
 
 # PATH is set explicitly rather than left to env's built-in default, so that what is kept
 # (xvfb-run, the system utilities) and what is dropped (any JDK on the caller's PATH) is
-# visible in the script rather than a property of env.
+# visible in the script rather than a property of env. JAVA_TOOL_OPTIONS is forwarded
+# explicitly too — env -i would otherwise drop it, silently defeating callers (e.g. CI's
+# macOS -Dprism.order=sw workaround) that rely on it reaching the scrubbed process.
 scrub() {
   if [ "$PLATFORM" = "windows" ]; then
     # Clear JAVA_HOME so the bundled runtime is used, not the runner's setup-java JDK.
     # shellcheck disable=SC1007
     JAVA_HOME= "$@"
   else
-    env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" "$@"
+    env -i PATH=/usr/bin:/bin HOME="$HOME" DISPLAY="${DISPLAY:-}" JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-}" "$@"
   fi
 }
 

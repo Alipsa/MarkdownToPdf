@@ -28,7 +28,7 @@ esac
 # jdk.crypto.ec is required for TLS: WebView can load https: resources in a preview. The
 # smoke tests intentionally do not cover this lazily-loaded provider; they use local or
 # inline content and open no sockets, so this module must not be inferred from their result.
-MODULES="javafx.controls,javafx.swing,javafx.web,\
+MODULES="javafx.controls,javafx.swing,javafx.web,javafx.media,\
 java.desktop,java.logging,java.management,java.naming,\
 java.net.http,java.prefs,java.scripting,java.sql,java.xml,\
 jdk.charsets,jdk.crypto.ec,jdk.unsupported,jdk.zipfs"
@@ -114,13 +114,27 @@ build_runtime() {
   [ -d "$JAVA_HOME/jmods" ] \
     || die "$JAVA_HOME has no jmods/ — a Liberica *Full* JDK is required, not a JRE"
 
+  local java_version java_major
+  java_version="$(
+    "$JAVA_HOME/bin/java" -version 2>&1 |
+      grep -m1 ' version ' |
+      sed -E 's/.*"([^"]+)".*/\1/' || true
+  )"
+  java_major="$(printf '%s\n' "$java_version" \
+    | sed -E 's/^1\.([0-9]+).*/\1/; s/^([0-9]+).*/\1/')"
+  case "$java_major" in
+    ''|*[!0-9]*) die "cannot determine Java major version from $JAVA_HOME/bin/java" ;;
+  esac
+  [ "$java_major" -ge 25 ] \
+    || die "$JAVA_HOME provides Java $java_version, but the GUI requires Java 25 or higher"
+
   rm -rf "$out"
-  # --compress=2 is ZIP and is the strongest level JDK 21 accepts. The zip-<n> syntax is
-  # JDK 22+ and makes JDK 21 jlink fail rather than fall back.
+  # JDK 25 supports the explicit ZIP compression-level syntax. Keep this aligned with the
+  # JDK used by CI and release packaging rather than relying on the deprecated numeric form.
   "$JAVA_HOME/bin/jlink" \
     --module-path "$JAVA_HOME/jmods" \
     --add-modules "$MODULES" \
-    --strip-debug --no-header-files --no-man-pages --compress=2 \
+    --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
     --output "$out"
 }
 

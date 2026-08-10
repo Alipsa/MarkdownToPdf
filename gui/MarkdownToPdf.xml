@@ -3,29 +3,31 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <!--
-  Standalone launcher POM — runs the MarkdownToPdf GUI via the javafx-maven-plugin:
+  Launcher POM — runs the MarkdownToPdf GUI via the javafx-maven-plugin:
 
     mvn -f MarkdownToPdf.xml javafx:run
 
   This is an alternative to the fat-jar distribution that does not require a
   JavaFX-bundled JDK; the javafx-maven-plugin downloads and wires JavaFX automatically.
+  It inherits ../pom.xml as its parent, so it is not copyable out of the repo as a
+  standalone file — it must stay alongside the rest of the project.
 
   Prerequisites:
-  - JDK 21 or higher
+  - JDK 25 or higher
   - Maven 3.9.9 or higher
-  - se.alipsa:MarkdownToPdf:0.1.0 installed in the local Maven repository
+  - the matching se.alipsa:MarkdownToPdf version installed in the local Maven repository
     (run "mvn install" from the project root first)
   -->
   <modelVersion>4.0.0</modelVersion>
-  <groupId>se.alipsa</groupId>
+  <parent>
+    <groupId>se.alipsa</groupId>
+    <artifactId>md2pdf-parent</artifactId>
+    <version>${revision}</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
   <artifactId>MarkdownToPdf-launcher</artifactId>
-  <version>0.1.0</version>
   <packaging>pom</packaging>
   <name>MarkdownToPdf Launcher</name>
-
-  <properties>
-    <javafx.version>23.0.2</javafx.version>
-  </properties>
 
   <dependencies>
     <dependency>
@@ -70,9 +72,9 @@
                   <message>Please use maven version 3.9.9 or higher</message>
                 </requireMavenVersion>
                 <requireJavaVersion>
-                  <version>[21,)</version>
+                  <version>[25,)</version>
                   <level>ERROR</level>
-                  <message>Please use Java 21 or higher</message>
+                  <message>Please use Java 25 or higher</message>
                 </requireJavaVersion>
               </rules>
             </configuration>
@@ -95,6 +97,14 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <configuration>
+          <!-- This standalone POM shares gui/ with the reactor GUI module. -->
+          <skip>true</skip>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.openjfx</groupId>

@@ -21,8 +21,8 @@ with named style profiles, and a CSS power-user mode.
 
 ## Requirements
 
-The platform archives bundle their own Java runtime, so no JDK is required. The `-no-jdk`
-archive needs a **JavaFX-bundled JDK 21 or later** (e.g. [Liberica Full](https://bell-sw.com/pages/downloads/)
+The platform archives bundle their own Java 25 runtime, so no JDK is required. The `-no-jdk`
+archive needs a **JavaFX-bundled JDK 25 or later** (e.g. [Liberica Full](https://bell-sw.com/pages/downloads/)
 or [Azul Zulu FX](https://www.azul.com/downloads/)); a plain OpenJDK will not work.
 
 ### Linux prerequisites
@@ -43,7 +43,7 @@ The installer checks for these and reports what is missing, but cannot install t
 | `md2pdf-<version>-linux-x64.zip` | unzip, then `bash md2pdf-install.sh` |
 | `md2pdf-<version>-macos-aarch64.zip` | unzip, then `zsh md2pdf-install.zsh` |
 | `md2pdf-<version>-windows-x64.zip` | unzip, then double-click `md2pdf-install.cmd` |
-| `md2pdf-<version>-no-jdk.zip` | unzip, then `java -jar MarkdownToPdf.jar` |
+| `md2pdf-<version>-no-jdk.zip` | unzip, then `java --enable-native-access=javafx.graphics,javafx.web,javafx.media -jar MarkdownToPdf.jar` |
 
 The installer will:
 
@@ -59,7 +59,7 @@ interactive, the installer cancels. Re-run with `MD2PDF_REPLACE_EXISTING=1` to r
 
 ## Building from source
 
-Prerequisites: a JavaFX-bundled JDK 21+ and Maven 3.9.9+.
+Prerequisites: a JavaFX-bundled JDK 25+ and Maven 3.9.9+.
 
 ```bash
 # Standard build (compile + test)

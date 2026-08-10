@@ -16,7 +16,7 @@ if (Test-Path -Path "$env:USERPROFILE\Desktop") {
 $WScriptObj = New-Object -ComObject WScript.Shell
 $shortcut = $WScriptObj.CreateShortcut("$desktop\MarkdownToPdf.lnk")
 $shortcut.TargetPath = "$scriptDir\runtime\bin\javaw.exe"
-$shortcut.Arguments = "-Xmx8g -jar `"$scriptDir\MarkdownToPdf.jar`""
+$shortcut.Arguments = "--enable-native-access=javafx.graphics,javafx.web,javafx.media -Xmx8g -jar `"$scriptDir\MarkdownToPdf.jar`""
 $shortcut.WorkingDirectory = "$scriptDir"
 $shortcut.IconLocation = "$scriptDir\MarkdownToPdf-rounded.ico, 0"
 $shortcut.Save()
