@@ -8,14 +8,14 @@ follow the recovery procedure in `gui/readme.md`, then run `./release.sh --skip-
 
 ## Release history
 
-### 0.1.1-SNAPSHOT (unreleased)
+### 0.1.1 (2026-08-11)
 - Updated dependencies
   - spotless 3.5.1 -> 3.6.0
   - surefire 3.5.5 -> 3.5.6
 - Improved documentation
 - Added platform archives with bundled Java 25 runtimes for Linux, macOS and Windows.
 - Added a runtime-free `-no-jdk` archive for JavaFX-bundled JDK 25+ users.
-- Release artifacts are built and tested by CI; `./release.sh` downloads those artifacts,
+- Release artefacts are built and tested by CI; `./release.sh` downloads those artefacts,
   publishes the library to Maven Central, tags the commit and creates the GitHub release.
 
 ### 0.1.0 (2026-05-17)
