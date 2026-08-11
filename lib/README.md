@@ -1,6 +1,6 @@
 # md2pdf — Markdown to PDF library
 [![Maven Central](https://img.shields.io/maven-central/v/se.alipsa/md2pdf)](https://central.sonatype.com/artifact/se.alipsa/md2pdf)
-[![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/0.1.0/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
+[![javadoc](https://javadoc.io/badge2/se.alipsa/md2pdf/0.1.1/javadoc.svg)](https://javadoc.io/doc/se.alipsa/md2pdf)
 
 md2pdf is a Java library that converts Markdown to PDF. See the
 [project overview](../README.md) for information about the GUI desktop application.
@@ -33,7 +33,7 @@ new Md2PdfEngine()
 <dependency>
     <groupId>se.alipsa</groupId>
     <artifactId>md2pdf</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
