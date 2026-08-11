@@ -55,6 +55,53 @@ if curl -sfI "$CENTRAL" > /dev/null; then
     || die "$VERSION is already on Maven Central. Maven Central cannot be overwritten; re-run with --skip-deploy to finish the rest of the release."
 fi
 
+# ── 1b. release notes ───────────────────────────────────────────────
+# Composed here rather than at step 8: a module whose changelog still heads its section
+# -SNAPSHOT has nothing to say about $VERSION, and that has to stop the release before the
+# irreversible deploy — not surface as a published release page with a section missing.
+step "Composing release notes"
+
+# All three changelogs head every version section "## <version>", optionally followed by a
+# date, so a section runs from that heading to the next "## " one. Only "## " closes a
+# section: a deeper "### " subheading inside one is part of it and is kept. Leading and
+# trailing blank lines are dropped so the composed file has no ragged gaps between sections.
+extract_section() {
+  awk -v ver="$2" '
+    /^## / {
+      if (started) { exit }
+      heading = $0
+      sub(/^##[[:space:]]+/, "", heading)
+      if (heading == ver || index(heading, ver " ") == 1) { started = 1 }
+      next
+    }
+    started {
+      if (NF == 0) { if (printed) pending++; next }
+      while (pending > 0) { print ""; pending-- }
+      print; printed = 1
+    }
+  ' "$1"
+}
+
+# Outside $STAGING on purpose: step 3 empties that directory, and step 8 uploads every file
+# in it as a release asset. .release-staging itself is gitignored.
+NOTES="$BASEDIR/.release-staging/release-notes-$VERSION.md"
+mkdir -p "$(dirname "$NOTES")"
+: > "$NOTES"
+
+# One section per published artifact, named as the artifact is: an aggregator whose notes
+# cover the shared build, and the two modules a user actually consumes.
+add_section() {
+  local title="$1" file="$2" body
+  body="$(extract_section "$file" "$VERSION")"
+  [ -n "$body" ] \
+    || die "$file has no section for $VERSION — bump its heading from -SNAPSHOT before releasing"
+  printf '## %s\n\n%s\n\n' "$title" "$body" >> "$NOTES"
+}
+add_section "md2pdf-parent — build and release tooling" release.md
+add_section "md2pdf — library"                          lib/release.md
+add_section "MarkdownToPdf — desktop application"       gui/release.md
+cat "$NOTES"
+
 # ── 2. wait for CI ──────────────────────────────────────────────────
 step "Waiting for CI"
 SHA="$(git rev-parse HEAD)"
@@ -155,6 +202,6 @@ count="$(find "$STAGING" -maxdepth 1 -type f | wc -l | tr -d ' ')"
 # gh release create takes filenames or globs, never a directory.
 gh release create "$TAG" "$STAGING"/* \
   --title "MarkdownToPdf $VERSION" \
-  --generate-notes
+  --notes-file "$NOTES"
 
 printf '\nReleased %s\n' "$VERSION"
