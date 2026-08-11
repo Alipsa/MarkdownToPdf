@@ -16,6 +16,10 @@ public final class VersionComparator {
    * segments are compared; if the numeric segments are otherwise equal, the side that had a suffix
    * stripped is treated as older (so a locally built {@code 0.1.1-SNAPSHOT} is reported as older
    * than a released {@code 0.1.1}, never as ahead of it).
+   *
+   * @param candidate the version to test
+   * @param current the currently running version
+   * @return {@code true} when {@code candidate} is newer than {@code current}
    */
   public static boolean isNewer(String candidate, String current) {
     int[] candidateParts = parse(candidate);

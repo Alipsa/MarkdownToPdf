@@ -110,9 +110,17 @@ public class Alerts {
    * reordering of {@link #asList()} would otherwise silently swap which button runs {@code onYes}
    * vs. {@code onNo}, and {@code ButtonData}-based tests like {@code AlertsButtonDataTest} wouldn't
    * catch it, since the {@code ButtonData} values would still be exactly right.
+   *
+   * @param yes the affirmative button
+   * @param no the negative button
+   * @param later the button used to dismiss the dialog without an answer
    */
   public record ConfirmButtons(ButtonType yes, ButtonType no, ButtonType later) {
-    /** The three buttons in the order the dialog should display them. */
+    /**
+     * Returns the three buttons in the order the dialog should display them.
+     *
+     * @return the yes, no, and later buttons
+     */
     public List<ButtonType> asList() {
       return List.of(yes, no, later);
     }
@@ -129,6 +137,7 @@ public class Alerts {
    *
    * @param yesLabel the label for the affirmative button
    * @param noLabel the label for the negative button
+   * @return the labeled yes, no, and later buttons
    */
   public static ConfirmButtons explicitConfirmButtons(String yesLabel, String noLabel) {
     return new ConfirmButtons(

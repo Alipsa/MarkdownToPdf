@@ -9,9 +9,13 @@ import java.util.Locale;
  * win/md2pdf-install.cmd}).
  */
 public enum UpdatePlatform {
+  /** Linux x64 release archive. */
   LINUX_X64("-linux-x64.zip", "md2pdf-install.sh"),
+  /** macOS aarch64 release archive. */
   MACOS_AARCH64("-macos-aarch64.zip", "md2pdf-install.zsh"),
+  /** Windows x64 release archive. */
   WINDOWS_X64("-windows-x64.zip", "md2pdf-install.cmd"),
+  /** No supported release archive for the current platform. */
   UNSUPPORTED("", "");
 
   private final String assetSuffix;
@@ -22,12 +26,20 @@ public enum UpdatePlatform {
     this.installerScriptName = installerScriptName;
   }
 
-  /** The release-asset file-name suffix for this platform, e.g. {@code "-linux-x64.zip"}. */
+  /**
+   * Returns the release-asset file-name suffix for this platform.
+   *
+   * @return the release-asset suffix, e.g. {@code "-linux-x64.zip"}
+   */
   public String assetSuffix() {
     return assetSuffix;
   }
 
-  /** The installer script file name shipped inside this platform's release archive. */
+  /**
+   * Returns the installer script file name shipped inside this platform's release archive.
+   *
+   * @return the installer script file name
+   */
   public String installerScriptName() {
     return installerScriptName;
   }
@@ -37,6 +49,10 @@ public enum UpdatePlatform {
    * machine. There is no ARM-Linux, Intel-Mac, or non-x64-Windows build ({@code createApp.sh} pins
    * {@code EXPECTED_ARCH} per platform), so those combinations resolve to {@link #UNSUPPORTED}
    * rather than guessing — a mismatched archive would bundle a JRE that can't run.
+   *
+   * @param osName the operating-system name, normally {@code os.name}
+   * @param osArch the architecture name, normally {@code os.arch}
+   * @return the matching release platform, or {@link #UNSUPPORTED}
    */
   public static UpdatePlatform detect(String osName, String osArch) {
     if (osName == null) {
@@ -56,7 +72,11 @@ public enum UpdatePlatform {
     return UNSUPPORTED;
   }
 
-  /** Convenience overload that reads the live {@code os.name}/{@code os.arch} properties. */
+  /**
+   * Detects the release platform from the live {@code os.name}/{@code os.arch} properties.
+   *
+   * @return the matching release platform, or {@link #UNSUPPORTED}
+   */
   public static UpdatePlatform detectCurrent() {
     return detect(System.getProperty("os.name"), System.getProperty("os.arch"));
   }

@@ -163,10 +163,10 @@ for asset in "${ASSETS[@]}"; do
   [ "$size" -gt "$floor" ] || die "$asset is only $size bytes (expected more than $floor)"
 done
 for label in linux-x64 macos-aarch64 windows-x64; do
-  unzip -l "$STAGING/md2pdf-$VERSION-$label.zip" | grep -q 'MarkdownToPdf' \
+  unzip -l "$STAGING/md2pdf-$VERSION-$label.zip" | grep -F 'MarkdownToPdf' > /dev/null \
     || die "md2pdf-$VERSION-$label.zip has no MarkdownToPdf entry"
 done
-unzip -l "$STAGING/md2pdf-$VERSION-no-jdk.zip" | grep -q 'MarkdownToPdf.jar' \
+unzip -l "$STAGING/md2pdf-$VERSION-no-jdk.zip" | grep -F 'MarkdownToPdf.jar' > /dev/null \
   || die "the no-jdk zip has no MarkdownToPdf.jar"
 echo "  5 assets OK"
 

@@ -23,17 +23,40 @@ public final class GitHubReleaseJson {
 
   private GitHubReleaseJson() {}
 
-  /** A single release asset: its file name and direct download URL. */
+  /**
+   * A single release asset: its file name and direct download URL.
+   *
+   * @param name the release asset file name
+   * @param browserDownloadUrl the direct download URL for the asset
+   */
   public record Asset(String name, String browserDownloadUrl) {}
 
+  /**
+   * Extracts the release tag name from a GitHub Releases API response.
+   *
+   * @param json the GitHub Releases API response
+   * @return the tag name, or {@code null} if it is absent
+   */
   public static String extractTagName(String json) {
     return extractScalarBeforeAssets(json, "tag_name");
   }
 
+  /**
+   * Extracts the release page URL from a GitHub Releases API response.
+   *
+   * @param json the GitHub Releases API response
+   * @return the release page URL, or {@code null} if it is absent
+   */
   public static String extractHtmlUrl(String json) {
     return extractScalarBeforeAssets(json, "html_url");
   }
 
+  /**
+   * Extracts release assets from a GitHub Releases API response.
+   *
+   * @param json the GitHub Releases API response
+   * @return the assets with both a name and direct download URL
+   */
   public static List<Asset> extractAssets(String json) {
     List<Asset> assets = new ArrayList<>();
     Matcher keyMatcher = ASSETS_KEY.matcher(json);
@@ -61,6 +84,10 @@ public final class GitHubReleaseJson {
    * Scans a scalar top-level field, restricted to the JSON text preceding the {@code assets} array
    * so a release's own {@code html_url}/{@code tag_name} is never confused with the
    * identically-named field GitHub nests inside each asset's {@code uploader} object.
+   *
+   * @param json the JSON response to scan
+   * @param key the scalar field name to extract
+   * @return the first matching field value, or {@code null} if it is absent
    */
   public static String extractScalarBeforeAssets(String json, String key) {
     int assetsIndex = json.indexOf("\"assets\"");
@@ -68,7 +95,13 @@ public final class GitHubReleaseJson {
     return extractField(scope, key);
   }
 
-  /** First {@code "key": "value"} match in {@code json}, unescaped, or {@code null} if absent. */
+  /**
+   * Finds the first {@code "key": "value"} match in {@code json}.
+   *
+   * @param json the JSON text to scan
+   * @param key the field name to find
+   * @return the unescaped field value, or {@code null} if absent
+   */
   public static String extractField(String json, String key) {
     Pattern pattern =
         Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
@@ -80,6 +113,10 @@ public final class GitHubReleaseJson {
    * Given the index of an opening bracket/brace, returns the text strictly between it and its
    * matching close, tracking nesting depth and skipping over string literals so a bracket inside a
    * quoted value (e.g. a URL) never desynchronizes the count.
+   *
+   * @param json the JSON text containing the bracketed region
+   * @param openIndex the index of the opening bracket or brace
+   * @return the text strictly between the matching delimiters, or an empty string if none matches
    */
   public static String extractBracketedRegion(String json, int openIndex) {
     char open = json.charAt(openIndex);
@@ -117,6 +154,9 @@ public final class GitHubReleaseJson {
    * Splits the body of a JSON array of objects (as returned by {@link #extractBracketedRegion})
    * into one string per top-level {@code {...}} object, ignoring braces nested inside string
    * literals or inside a nested object (such as each asset's {@code uploader} object).
+   *
+   * @param arrayBody the body of the JSON array
+   * @return one JSON string per top-level object
    */
   public static List<String> splitTopLevelObjects(String arrayBody) {
     List<String> objects = new ArrayList<>();
@@ -154,7 +194,12 @@ public final class GitHubReleaseJson {
     return objects;
   }
 
-  /** Resolves the small set of escapes needed for tags, file names and URLs. */
+  /**
+   * Resolves the small set of escapes needed for tags, file names and URLs.
+   *
+   * @param raw the escaped JSON string value
+   * @return the unescaped value, or {@code null} when {@code raw} is {@code null}
+   */
   public static String unescape(String raw) {
     if (raw == null) {
       return null;

@@ -19,6 +19,9 @@ import org.apache.logging.log4j.Logger;
  */
 public class UpdateChecker {
 
+  /** Creates an update checker. */
+  public UpdateChecker() {}
+
   /** System property that overrides the GitHub API URL, for manual QA against a local fixture. */
   public static final String API_URL_PROPERTY = "md2pdf.update.apiUrl";
 
@@ -31,6 +34,8 @@ public class UpdateChecker {
    * Fetches the latest GitHub release and returns update info if it is newer than {@code
    * currentVersion} and ships an asset for this platform.
    *
+   * @param currentVersion the version currently running
+   * @return update information when a newer platform release is available
    * @throws UpdateCheckException on any network, HTTP-status or interrupt failure
    */
   public Optional<UpdateInfo> checkForUpdate(String currentVersion) throws UpdateCheckException {
@@ -68,6 +73,11 @@ public class UpdateChecker {
    * check-only feature downloads or verifies it yet (that lands with the self-apply follow-up) —
    * requiring it here would silently suppress every notification against a release that predates
    * checksum publishing, such as the current {@code v0.1.0}.
+   *
+   * @param currentVersion the version currently running
+   * @param platform the platform whose release asset should be selected
+   * @param responseJson the GitHub Releases API response
+   * @return update information when a newer matching release is available
    */
   public static Optional<UpdateInfo> parseAndEvaluate(
       String currentVersion, UpdatePlatform platform, String responseJson) {
