@@ -58,8 +58,11 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.appender.FileAppender;
 import se.alipsa.md2pdf.Md2PdfException;
+import se.alipsa.md2pdf.gui.fs.FileAccessBroker;
+import se.alipsa.md2pdf.gui.fs.PersistedFileState;
 import se.alipsa.md2pdf.gui.update.UpdateChecker;
 import se.alipsa.md2pdf.gui.update.UpdateInfo;
+import se.alipsa.md2pdf.gui.update.UpdatePolicy;
 import se.alipsa.md2pdf.gui.widgets.Alerts;
 import se.alipsa.md2pdf.gui.widgets.ExceptionAlert;
 import se.alipsa.md2pdf.model.Project;
@@ -101,6 +104,13 @@ public class MarkdownToPdf extends Application {
   private Button viewExternalButton;
 
   private final StyleProfileManager profileManager = new StyleProfileManager();
+
+  /**
+   * Keeps stored file paths readable across sessions. A no-op in the open source build; a sandboxed
+   * distribution registers a real implementation through {@link java.util.ServiceLoader}.
+   */
+  private final FileAccessBroker fileAccess = FileAccessBroker.get();
+
   private final List<String> searchStrings = new UniqueList<>();
 
   /** Creates the JavaFX application instance. */
@@ -447,7 +457,7 @@ public class MarkdownToPdf extends Application {
     primaryStage.setScene(scene);
     primaryStage.show();
     hideStartupSplash();
-    if (preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true)) {
+    if (UpdatePolicy.isEnabled() && preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true)) {
       checkForUpdates(false);
     }
   }
@@ -634,19 +644,23 @@ public class MarkdownToPdf extends Application {
     viewLogMi.setOnAction(this::viewLogFile);
     MenuItem aboutMi = new MenuItem("About");
     aboutMi.setOnAction(a -> showAbout());
-    MenuItem checkForUpdatesMi = new MenuItem("Check for Updates…");
-    checkForUpdatesMi.setOnAction(a -> checkForUpdates(true));
-    checkForUpdatesMi.disableProperty().bind(updateCheckInProgress);
-    CheckMenuItem autoCheckUpdatesMi = new CheckMenuItem("Automatically check for updates");
-    autoCheckUpdatesMi.setSelected(preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true));
-    autoCheckUpdatesMi
-        .selectedProperty()
-        .addListener(
-            (obs, wasSelected, isSelected) ->
-                preferences().putBoolean(PREF_AUTO_CHECK_UPDATES, isSelected));
-    helpMenu
-        .getItems()
-        .addAll(viewLogMi, aboutMi, new SeparatorMenuItem(), checkForUpdatesMi, autoCheckUpdatesMi);
+    helpMenu.getItems().addAll(viewLogMi, aboutMi);
+    // A build distributed through a store that updates the application itself must not offer to
+    // fetch releases from anywhere else, so it omits these items entirely rather than disabling
+    // them.
+    if (UpdatePolicy.isEnabled()) {
+      MenuItem checkForUpdatesMi = new MenuItem("Check for Updates…");
+      checkForUpdatesMi.setOnAction(a -> checkForUpdates(true));
+      checkForUpdatesMi.disableProperty().bind(updateCheckInProgress);
+      CheckMenuItem autoCheckUpdatesMi = new CheckMenuItem("Automatically check for updates");
+      autoCheckUpdatesMi.setSelected(preferences().getBoolean(PREF_AUTO_CHECK_UPDATES, true));
+      autoCheckUpdatesMi
+          .selectedProperty()
+          .addListener(
+              (obs, wasSelected, isSelected) ->
+                  preferences().putBoolean(PREF_AUTO_CHECK_UPDATES, isSelected));
+      helpMenu.getItems().addAll(new SeparatorMenuItem(), checkForUpdatesMi, autoCheckUpdatesMi);
+    }
 
     menuBar.getMenus().addAll(fileMenu, projectMenu, editMenu, helpMenu);
     return menuBar;
@@ -792,6 +806,7 @@ public class MarkdownToPdf extends Application {
         projectCombo.getItems().add(p);
         projectCombo.setValue(p);
         Preferences projects = preferences().node("projects");
+        rememberProjectPaths(p, projectFile.toPath());
         projects.node(p.getName()).put("projectFile", projectFile.toPath().toString());
         projects.flush();
         setActiveProject(p);
@@ -804,9 +819,17 @@ public class MarkdownToPdf extends Application {
   private void setActiveProject(Project p) {
     logger().info("Activating project: {}", p.getName());
     Path markdownFile = p.getMarkdownFile();
-    if (markdownFile != null && !markdownTab.loadFile(markdownFile)) {
-      logger().warn("Could not load Markdown file for project {}", p.getName());
-      return;
+    if (markdownFile != null) {
+      // The project file was chosen in a dialog, but the Markdown file it points at was not, so a
+      // sandboxed build has to regain access to it explicitly before reading.
+      if (!fileAccess.restore(markdownFile)) {
+        logger().warn("Could not access the Markdown file for project {}", p.getName());
+        return;
+      }
+      if (!markdownTab.loadFile(markdownFile)) {
+        logger().warn("Could not load Markdown file for project {}", p.getName());
+        return;
+      }
     }
     String styleName = p.getStyleProfileName();
     if (styleName != null && !styleName.isBlank()) {
@@ -833,23 +856,49 @@ public class MarkdownToPdf extends Application {
         continue;
       }
       Path projectFilePath = Paths.get(path);
-      if (Files.exists(projectFilePath)) {
-        try {
-          list.add(Project.load(projectFilePath));
-        } catch (Exception e) {
-          ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
+      // A path that cannot be reached is not the same as one that is gone. Under a sandbox an
+      // ungranted path reports Files.exists() == false, so testing existence alone would delete
+      // every stored project on the first launch — and off a sandbox the same happens whenever the
+      // volume holding them is not mounted.
+      switch (PersistedFileState.of(fileAccess, projectFilePath)) {
+        case LOADABLE -> {
+          try {
+            list.add(Project.load(projectFilePath));
+          } catch (Exception e) {
+            ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
+          }
         }
-      } else {
-        logger().info("{} does not exist, removing preference", projectFilePath);
-        projects.node(name).removeNode();
+        case MISSING -> {
+          logger().info("{} does not exist, removing preference", projectFilePath);
+          projects.node(name).removeNode();
+        }
+        case INACCESSIBLE ->
+            logger().info("{} is currently unreachable, keeping preference", projectFilePath);
       }
     }
   }
 
   void saveProject(Project p, String path) throws IOException {
     Preferences projects = preferences().node("projects");
+    rememberProjectPaths(p, Paths.get(path));
     projects.node(p.getName()).put("projectFile", path);
     Project.save(p, Paths.get(path));
+  }
+
+  /**
+   * Records the paths this project stores, so a sandboxed build can still read them in a later
+   * session. Called while the user's selection still grants access — once that lapses a token can
+   * no longer be created.
+   *
+   * @param p the project being persisted
+   * @param projectFilePath where the project file itself is written
+   */
+  private void rememberProjectPaths(Project p, Path projectFilePath) {
+    fileAccess.remember(projectFilePath);
+    Path markdownFile = p.getMarkdownFile();
+    if (markdownFile != null) {
+      fileAccess.remember(markdownFile);
+    }
   }
 
   void saveProject(Project p) throws IOException {
@@ -872,6 +921,7 @@ public class MarkdownToPdf extends Application {
       p.setStyleProfileName(styleCombo.getValue());
     }
     Project.save(p, projectFilePath);
+    rememberProjectPaths(p, projectFilePath);
     projects.node(p.getName()).put("projectFile", projectFilePath.toString());
   }
 
@@ -1092,13 +1142,19 @@ public class MarkdownToPdf extends Application {
   // ── Updates ──────────────────────────────────────────────────────────────────
 
   /**
-   * Checks GitHub for a newer release. Background checks (triggered on startup) are throttled and
-   * silent on failure, and skip an update the user already dismissed; a check triggered from the
-   * Help menu always runs and always reports its result.
+   * Checks GitHub for a newer release, unless {@link UpdatePolicy} forbids it for this build.
+   * Background checks (triggered on startup) are throttled and silent on failure, and skip an
+   * update the user already dismissed; a check triggered from the Help menu always runs and always
+   * reports its result.
    *
    * @param interactive whether this check was explicitly requested by the user
    */
   private void checkForUpdates(boolean interactive) {
+    // Guarded here as well as at both call sites: this is the only place a request leaves the
+    // application, so a future caller cannot reintroduce one in a build that forbids it.
+    if (!UpdatePolicy.isEnabled()) {
+      return;
+    }
     if (updateCheckInProgress.get()) {
       return;
     }
