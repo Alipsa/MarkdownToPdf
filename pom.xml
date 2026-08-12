@@ -23,7 +23,7 @@
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!-- Bump revision here when releasing; GUI packaging uses the JavaFX version below. -->
-    <revision>0.1.1</revision>
+    <revision>0.2.0-SNAPSHOT</revision>
     <!-- Must match the JavaFX modules in LIBERICA_VERSION's jdk+fx image; CI asserts it. -->
     <javafx.version>25.0.4</javafx.version>
     <batik.version>1.19</batik.version>
