@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ServiceConfigurationError;
 import org.junit.jupiter.api.Test;
 import se.alipsa.md2pdf.gui.fs.FileAccessBroker;
 
@@ -42,6 +43,23 @@ public class FileAccessBrokerTest {
     RecordingFileAccessBroker second = new RecordingFileAccessBroker();
 
     assertSame(first, FileAccessBroker.firstOrNoop(List.of(first, second)));
+  }
+
+  @Test
+  public void aBrokenProviderFallsBackToTheNoOpInsteadOfKillingStartup() {
+    // ServiceLoader reports a missing or unconstructable provider as an Error, and the broker is
+    // resolved from a field initialiser on the Application subclass — so without this the whole
+    // application fails to launch, before any UI or logging exists, in exactly the build that
+    // registers a provider.
+    Iterable<FileAccessBroker> broken =
+        () -> {
+          throw new ServiceConfigurationError("provider blew up");
+        };
+
+    FileAccessBroker broker = FileAccessBroker.firstOrNoop(broken);
+
+    assertNotNull(broker);
+    assertTrue(broker.restore(ANY), "the fallback must behave like the no-op broker");
   }
 
   @Test

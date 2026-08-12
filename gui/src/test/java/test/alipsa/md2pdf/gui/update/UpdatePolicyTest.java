@@ -35,4 +35,29 @@ public class UpdatePolicyTest {
   public void thePropertyNameIsTheOneTheStoreBuildSets() {
     assertEquals("md2pdf.update.enabled", UpdatePolicy.ENABLED_PROPERTY);
   }
+
+  @Test
+  public void onlyAnExplicitFalseDisablesUpdates() {
+    // Removing the update UI is a deliberate act for one distribution, so it takes an explicit
+    // "false". Treating every unrecognised value as "off" would let a typo quietly strip the Help
+    // menu items from an ordinary build.
+    for (String value : new String[] {"1", "yes", "off", "no", "", "  "}) {
+      System.setProperty(UpdatePolicy.ENABLED_PROPERTY, value);
+      assertTrue(UpdatePolicy.isEnabled(), "value \"" + value + "\" must not disable updates");
+    }
+  }
+
+  @Test
+  public void disablingIsCaseInsensitive() {
+    System.setProperty(UpdatePolicy.ENABLED_PROPERTY, "FALSE");
+    assertFalse(UpdatePolicy.isEnabled());
+    System.setProperty(UpdatePolicy.ENABLED_PROPERTY, "False");
+    assertFalse(UpdatePolicy.isEnabled());
+  }
+
+  @Test
+  public void surroundingWhitespaceDoesNotDefeatDisabling() {
+    System.setProperty(UpdatePolicy.ENABLED_PROPERTY, " false ");
+    assertFalse(UpdatePolicy.isEnabled());
+  }
 }

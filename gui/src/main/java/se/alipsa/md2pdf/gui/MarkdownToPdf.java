@@ -870,6 +870,7 @@ public class MarkdownToPdf extends Application {
         }
         case MISSING -> {
           logger().info("{} does not exist, removing preference", projectFilePath);
+          fileAccess.forget(projectFilePath);
           projects.node(name).removeNode();
         }
         case INACCESSIBLE ->
@@ -880,9 +881,11 @@ public class MarkdownToPdf extends Application {
 
   void saveProject(Project p, String path) throws IOException {
     Preferences projects = preferences().node("projects");
+    // The project file must exist before it is remembered: a token can only be minted for a file
+    // that is actually there, and this overload creates the file rather than updating it.
+    Project.save(p, Paths.get(path));
     rememberProjectPaths(p, Paths.get(path));
     projects.node(p.getName()).put("projectFile", path);
-    Project.save(p, Paths.get(path));
   }
 
   /**

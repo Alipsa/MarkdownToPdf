@@ -19,9 +19,14 @@ public final class UpdatePolicy {
   /**
    * Returns whether this build may check for updates.
    *
+   * <p>Only an explicit {@code false} disables them. Anything else — including an unrecognised
+   * value or an empty one — leaves them on, because removing the update UI is a deliberate act for
+   * one distribution and a typo should not quietly strip it from an ordinary build.
+   *
    * @return {@code true} unless {@link #ENABLED_PROPERTY} is set to {@code false}
    */
   public static boolean isEnabled() {
-    return Boolean.parseBoolean(System.getProperty(ENABLED_PROPERTY, "true"));
+    String value = System.getProperty(ENABLED_PROPERTY);
+    return value == null || !"false".equalsIgnoreCase(value.trim());
   }
 }

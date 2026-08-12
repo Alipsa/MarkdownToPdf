@@ -32,14 +32,4 @@ public enum PersistedFileState {
     }
     return Files.exists(path) ? LOADABLE : MISSING;
   }
-
-  /**
-   * Returns whether the stored path may be discarded. Only true for {@link #MISSING}: the file was
-   * reachable and is not there, which is the one case that proves the setting is stale.
-   *
-   * @return whether the caller may forget this path
-   */
-  public boolean canForget() {
-    return this == MISSING;
-  }
 }

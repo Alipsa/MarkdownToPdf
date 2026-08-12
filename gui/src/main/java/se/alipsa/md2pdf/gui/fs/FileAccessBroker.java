@@ -2,7 +2,9 @@ package se.alipsa.md2pdf.gui.fs;
 
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
+import org.apache.logging.log4j.LogManager;
 
 /**
  * Grants the application continued access to file paths it stores and re-reads in a later session.
@@ -57,13 +59,29 @@ public interface FileAccessBroker {
   }
 
   /**
-   * Returns the first available broker, or a no-op broker when there is none.
+   * Returns the first available broker, or a no-op broker when there is none — or when resolving
+   * one fails.
+   *
+   * <p>A provider that cannot be found or constructed surfaces as {@link
+   * ServiceConfigurationError}, an {@code Error} rather than an exception. Since the application
+   * resolves its broker while constructing the JavaFX {@code Application}, letting that propagate
+   * would abort startup before any window or log file exists — in precisely the build that ships a
+   * provider. Degrading to the no-op broker instead costs the user their reopened projects and
+   * nothing else.
    *
    * @param candidates the brokers to choose from
-   * @return the first candidate, or a no-op broker if {@code candidates} is empty
+   * @return the first candidate, or a no-op broker if there is none or it could not be loaded
    */
   static FileAccessBroker firstOrNoop(Iterable<FileAccessBroker> candidates) {
-    Iterator<FileAccessBroker> it = candidates.iterator();
-    return it.hasNext() ? it.next() : new NoOpFileAccessBroker();
+    try {
+      Iterator<FileAccessBroker> it = candidates.iterator();
+      if (it.hasNext()) {
+        return it.next();
+      }
+    } catch (ServiceConfigurationError e) {
+      LogManager.getLogger(FileAccessBroker.class)
+          .warn("Could not load a FileAccessBroker; stored file paths may not reopen", e);
+    }
+    return new NoOpFileAccessBroker();
   }
 }

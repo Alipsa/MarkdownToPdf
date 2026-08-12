@@ -61,11 +61,4 @@ public class PersistedFileStateTest {
 
     assertTrue(broker.restoreRequests().contains(file));
   }
-
-  @Test
-  public void onlyMissingMeansTheStoredPathCanBeForgotten() {
-    assertTrue(PersistedFileState.MISSING.canForget());
-    assertFalse(PersistedFileState.LOADABLE.canForget());
-    assertFalse(PersistedFileState.INACCESSIBLE.canForget());
-  }
 }

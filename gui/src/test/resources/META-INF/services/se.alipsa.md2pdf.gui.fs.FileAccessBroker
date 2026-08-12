@@ -1,1 +1,9 @@
+# Test-classpath only; never packaged into the shipped jar. It exists so that
+# FileAccessBrokerTest can prove FileAccessBroker.get() really resolves a provider — the
+# mechanism the Mac App Store build uses to supply its security-scoped bookmark implementation.
+#
+# Two consequences: NoOpFileAccessBroker is never exercised through get() by any test (it is
+# covered directly via firstOrNoop), and registering a second provider here would break
+# FileAccessBrokerTest.getResolvesAProviderFromTheClasspath, since ServiceLoader order is not
+# specified.
 test.alipsa.md2pdf.gui.fs.RecordingFileAccessBroker
