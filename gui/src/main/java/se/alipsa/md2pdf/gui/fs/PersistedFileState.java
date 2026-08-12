@@ -20,14 +20,18 @@ public enum PersistedFileState {
   INACCESSIBLE;
 
   /**
-   * Classifies a stored path, asking the broker to regain access first.
+   * Classifies a stored path in the light of the access obtained for it.
    *
-   * @param broker the broker for this build
+   * <p>The caller opens the access rather than this method, because the answer alone is not enough:
+   * a {@link #LOADABLE} path still has to be read, and that read must happen while the access is
+   * open.
+   *
+   * @param access access obtained from {@link FileAccessBroker#restore(Path)} for {@code path}
    * @param path a path read back from stored settings
    * @return what the caller may conclude about {@code path}
    */
-  public static PersistedFileState of(FileAccessBroker broker, Path path) {
-    if (!broker.restore(path)) {
+  public static PersistedFileState of(FileAccess access, Path path) {
+    if (!access.isGranted()) {
       return INACCESSIBLE;
     }
     return Files.exists(path) ? LOADABLE : MISSING;

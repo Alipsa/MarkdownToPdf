@@ -15,8 +15,8 @@ final class NoOpFileAccessBroker implements FileAccessBroker {
   }
 
   @Override
-  public boolean restore(Path path) {
-    return true;
+  public FileAccess restore(Path path) {
+    return FileAccess.granted();
   }
 
   @Override

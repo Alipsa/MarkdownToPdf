@@ -3,6 +3,7 @@ package test.alipsa.md2pdf.gui.fs;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import se.alipsa.md2pdf.gui.fs.FileAccess;
 import se.alipsa.md2pdf.gui.fs.FileAccessBroker;
 
 /**
@@ -39,9 +40,9 @@ public class RecordingFileAccessBroker implements FileAccessBroker {
   }
 
   @Override
-  public boolean restore(Path path) {
+  public FileAccess restore(Path path) {
     restoreRequests.add(path);
-    return restorable;
+    return restorable ? FileAccess.granted() : FileAccess.denied();
   }
 
   @Override

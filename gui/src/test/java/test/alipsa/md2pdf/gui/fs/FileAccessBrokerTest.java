@@ -16,7 +16,9 @@ public class FileAccessBrokerTest {
   public void withNoProviderTheNoOpBrokerIsUsed() {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(List.of());
     assertNotNull(broker);
-    assertTrue(broker.restore(ANY), "without a provider every path must be treated as accessible");
+    assertTrue(
+        broker.restore(ANY).isGranted(),
+        "without a provider every path must be treated as accessible");
   }
 
   @Test
@@ -34,7 +36,7 @@ public class FileAccessBrokerTest {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(List.of(provided));
 
     assertSame(provided, broker);
-    assertFalse(broker.restore(ANY));
+    assertFalse(broker.restore(ANY).isGranted());
   }
 
   @Test
@@ -59,7 +61,7 @@ public class FileAccessBrokerTest {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(broken);
 
     assertNotNull(broker);
-    assertTrue(broker.restore(ANY), "the fallback must behave like the no-op broker");
+    assertTrue(broker.restore(ANY).isGranted(), "the fallback must behave like the no-op broker");
   }
 
   @Test

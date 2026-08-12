@@ -58,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.appender.FileAppender;
 import se.alipsa.md2pdf.Md2PdfException;
+import se.alipsa.md2pdf.gui.fs.FileAccess;
 import se.alipsa.md2pdf.gui.fs.FileAccessBroker;
 import se.alipsa.md2pdf.gui.fs.PersistedFileState;
 import se.alipsa.md2pdf.gui.update.UpdateChecker;
@@ -110,6 +111,12 @@ public class MarkdownToPdf extends Application {
    * distribution registers a real implementation through {@link java.util.ServiceLoader}.
    */
   private final FileAccessBroker fileAccess = FileAccessBroker.get();
+
+  /**
+   * Access held for the Markdown file of the active project, for as long as the editor may write
+   * back to it. Replaced when another project is activated and released when the application stops.
+   */
+  private FileAccess markdownAccess = FileAccess.granted();
 
   private final List<String> searchStrings = new UniqueList<>();
 
@@ -820,17 +827,11 @@ public class MarkdownToPdf extends Application {
     logger().info("Activating project: {}", p.getName());
     Path markdownFile = p.getMarkdownFile();
     if (markdownFile != null) {
-      // The project file was chosen in a dialog, but the Markdown file it points at was not, so a
-      // sandboxed build has to regain access to it explicitly before reading.
-      if (!fileAccess.restore(markdownFile)) {
-        logger().warn("Could not access the Markdown file for project {}", p.getName());
-        return;
-      }
-      if (!markdownTab.loadFile(markdownFile)) {
-        logger().warn("Could not load Markdown file for project {}", p.getName());
-        return;
-      }
+      openProjectMarkdown(p, markdownFile);
     }
+    // The style profile, project directory and tooltip are applied whether or not the Markdown
+    // file opened. The combo already shows this project, so stopping here would leave the window
+    // describing one project while displaying another.
     String styleName = p.getStyleProfileName();
     if (styleName != null && !styleName.isBlank()) {
       if (styleCombo != null) styleCombo.setValue(styleName);
@@ -843,6 +844,82 @@ public class MarkdownToPdf extends Application {
       setProjectDir(new File(path).getParentFile());
       projectCombo.setTooltip(new Tooltip(path));
     }
+  }
+
+  /**
+   * Opens a project's Markdown file, offering to locate it when it cannot be read.
+   *
+   * <p>Unlike the project file, this access is held open rather than released straight away: the
+   * editor writes back to this file when the user saves, so access has to outlive the load. It is
+   * released when another project is activated, or when the application stops.
+   *
+   * <p>The failure this recovers from is ordinary in a sandboxed build. Opening a project file
+   * grants access to that file alone, not to the Markdown file named inside it, so a project
+   * created on another machine arrives with no way to reach its own document. Letting the user
+   * point at it grants access and lets the path be remembered for next time.
+   *
+   * @param p the project being activated
+   * @param markdownFile the Markdown file it names
+   */
+  private void openProjectMarkdown(Project p, Path markdownFile) {
+    FileAccess access = fileAccess.restore(markdownFile);
+    if (access.isGranted() && markdownTab.loadFile(markdownFile)) {
+      holdMarkdownAccess(access);
+      return;
+    }
+    access.close();
+    logger().warn("Could not open the Markdown file {} for project {}", markdownFile, p.getName());
+
+    if (!Alerts.confirm(
+        "Project " + p.getName(),
+        "Cannot open " + markdownFile.getFileName(),
+        markdownFile
+            + "\n\ncould not be opened. It may have been moved, or this copy of the project may"
+            + " have come from another machine.\n\nLocate it now?")) {
+      return;
+    }
+
+    FileChooser fc = new FileChooser();
+    fc.setTitle("Locate the Markdown file for " + p.getName());
+    fc.getExtensionFilters()
+        .add(new FileChooser.ExtensionFilter("Markdown files", "*.md", "*.markdown"));
+    Path parent = markdownFile.getParent();
+    if (parent != null && Files.isDirectory(parent)) {
+      fc.setInitialDirectory(parent.toFile());
+    }
+    File chosen = fc.showOpenDialog(stage);
+    if (chosen == null) {
+      return;
+    }
+
+    // Choosing the file in a dialog is what grants access to it, so this is the one moment a token
+    // for it can be created.
+    Path located = chosen.toPath();
+    fileAccess.remember(located);
+    FileAccess relocated = fileAccess.restore(located);
+    if (relocated.isGranted() && markdownTab.loadFile(located)) {
+      p.setMarkdownFile(located);
+      holdMarkdownAccess(relocated);
+    } else {
+      relocated.close();
+      Alerts.warn("Project " + p.getName(), "Could not open " + located + " either.");
+    }
+  }
+
+  /**
+   * Takes ownership of the access held for the open Markdown file, releasing whatever was held
+   * before.
+   *
+   * @param access access to the newly opened file
+   */
+  private void holdMarkdownAccess(FileAccess access) {
+    markdownAccess.close();
+    markdownAccess = access;
+  }
+
+  @Override
+  public void stop() {
+    markdownAccess.close();
   }
 
   void populateProjectCombo(ComboBox<Project> projectCombo)
@@ -860,21 +937,25 @@ public class MarkdownToPdf extends Application {
       // ungranted path reports Files.exists() == false, so testing existence alone would delete
       // every stored project on the first launch — and off a sandbox the same happens whenever the
       // volume holding them is not mounted.
-      switch (PersistedFileState.of(fileAccess, projectFilePath)) {
-        case LOADABLE -> {
-          try {
-            list.add(Project.load(projectFilePath));
-          } catch (Exception e) {
-            ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
+      //
+      // The project file is only read here, so access is released as soon as that read is done.
+      try (FileAccess access = fileAccess.restore(projectFilePath)) {
+        switch (PersistedFileState.of(access, projectFilePath)) {
+          case LOADABLE -> {
+            try {
+              list.add(Project.load(projectFilePath));
+            } catch (Exception e) {
+              ExceptionAlert.showAlert("Failed to load project from " + projectFilePath, e);
+            }
           }
+          case MISSING -> {
+            logger().info("{} does not exist, removing preference", projectFilePath);
+            fileAccess.forget(projectFilePath);
+            projects.node(name).removeNode();
+          }
+          case INACCESSIBLE ->
+              logger().info("{} is currently unreachable, keeping preference", projectFilePath);
         }
-        case MISSING -> {
-          logger().info("{} does not exist, removing preference", projectFilePath);
-          fileAccess.forget(projectFilePath);
-          projects.node(name).removeNode();
-        }
-        case INACCESSIBLE ->
-            logger().info("{} is currently unreachable, keeping preference", projectFilePath);
       }
     }
   }

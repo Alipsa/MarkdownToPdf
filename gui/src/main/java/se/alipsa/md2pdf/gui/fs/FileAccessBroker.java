@@ -35,11 +35,17 @@ public interface FileAccessBroker {
   /**
    * Regains access to a previously remembered path.
    *
+   * <p>The caller owns the returned {@link FileAccess} and must close it once the file no longer
+   * needs reading — immediately for a one-off read, or when the document is closed for one the
+   * editor writes back to. Closing is what releases the underlying grant on platforms that have
+   * one; leaving it open for the process lifetime is exactly the leak the type exists to prevent.
+   *
    * @param path a path read back from stored settings
-   * @return whether the path can now be read; {@code false} means access could not be regained, and
-   *     the caller must not conclude from a failed {@code Files.exists} that the file is gone
+   * @return access to the path, granted or not; never {@code null}. Access that was not granted
+   *     says nothing about the file — in particular the caller must not conclude from a failed
+   *     {@code Files.exists} that the file is gone
    */
-  boolean restore(Path path);
+  FileAccess restore(Path path);
 
   /**
    * Discards anything held for this path.
