@@ -2,7 +2,9 @@ package test.alipsa.md2pdf.gui.fs;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import se.alipsa.md2pdf.gui.fs.FileAccess;
 import se.alipsa.md2pdf.gui.fs.FileAccessBroker;
 
@@ -16,10 +18,23 @@ public class RecordingFileAccessBroker implements FileAccessBroker {
   private final List<Path> remembered = new ArrayList<>();
   private final List<Path> forgotten = new ArrayList<>();
   private final List<Path> restoreRequests = new ArrayList<>();
+  private final Map<Path, Boolean> restorableByPath = new HashMap<>();
   private boolean restorable = true;
 
   public void setRestorable(boolean restorable) {
     this.restorable = restorable;
+  }
+
+  /**
+   * Overrides restorability for one specific path, independently of every other path — needed to
+   * drive a scenario with several stored projects that must be classified differently from one
+   * another in the same call.
+   *
+   * @param path the path this override applies to
+   * @param restorable whether {@link #restore} grants access to {@code path}
+   */
+  public void setRestorable(Path path, boolean restorable) {
+    restorableByPath.put(path, restorable);
   }
 
   public List<Path> remembered() {
@@ -42,7 +57,8 @@ public class RecordingFileAccessBroker implements FileAccessBroker {
   @Override
   public FileAccess restore(Path path) {
     restoreRequests.add(path);
-    return restorable ? FileAccess.granted() : FileAccess.denied();
+    boolean granted = restorableByPath.getOrDefault(path, restorable);
+    return granted ? FileAccess.granted() : FileAccess.denied();
   }
 
   @Override

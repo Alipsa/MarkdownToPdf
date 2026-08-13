@@ -69,11 +69,12 @@ public interface FileAccessBroker {
    * one fails.
    *
    * <p>A provider that cannot be found or constructed surfaces as {@link
-   * ServiceConfigurationError}, an {@code Error} rather than an exception. Since the application
-   * resolves its broker while constructing the JavaFX {@code Application}, letting that propagate
-   * would abort startup before any window or log file exists — in precisely the build that ships a
-   * provider. Degrading to the no-op broker instead costs the user their reopened projects and
-   * nothing else.
+   * ServiceConfigurationError}, an {@code Error} rather than an exception; one with a missing or
+   * incompatible superclass or interface surfaces as {@link LinkageError} instead. Since the
+   * application resolves its broker while constructing the JavaFX {@code Application}, letting
+   * either propagate would abort startup before any window or log file exists — in precisely the
+   * build that ships a provider. Degrading to the no-op broker instead costs the user their
+   * reopened projects and nothing else.
    *
    * @param candidates the brokers to choose from
    * @return the first candidate, or a no-op broker if there is none or it could not be loaded
@@ -84,7 +85,7 @@ public interface FileAccessBroker {
       if (it.hasNext()) {
         return it.next();
       }
-    } catch (ServiceConfigurationError e) {
+    } catch (ServiceConfigurationError | LinkageError e) {
       LogManager.getLogger(FileAccessBroker.class)
           .warn("Could not load a FileAccessBroker; stored file paths may not reopen", e);
     }

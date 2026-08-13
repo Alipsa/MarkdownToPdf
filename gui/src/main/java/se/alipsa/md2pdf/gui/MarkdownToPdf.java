@@ -30,7 +30,6 @@ import java.util.prefs.Preferences;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -114,7 +113,9 @@ public class MarkdownToPdf extends Application {
 
   /**
    * Access held for the Markdown file of the active project, for as long as the editor may write
-   * back to it. Replaced when another project is activated and released when the application stops.
+   * back to it. Released at the start of every activation — whether or not the incoming project has
+   * a Markdown file it can open — and when the application stops, so a project that failed to open
+   * can never leave the previous one's grant open underneath it.
    */
   private FileAccess markdownAccess = FileAccess.granted();
 
@@ -810,13 +811,15 @@ public class MarkdownToPdf extends Application {
     if (projectFile != null) {
       try {
         Project p = Project.load(projectFile.toPath());
-        projectCombo.getItems().add(p);
-        projectCombo.setValue(p);
+        // Remembered and stored before the combo is updated: setValue below fires the same
+        // action handler that activates a project chosen from the dropdown, so activation must
+        // not run before there is a token to restore access with.
         Preferences projects = preferences().node("projects");
         rememberProjectPaths(p, projectFile.toPath());
         projects.node(p.getName()).put("projectFile", projectFile.toPath().toString());
         projects.flush();
-        setActiveProject(p);
+        projectCombo.getItems().add(p);
+        projectCombo.setValue(p);
       } catch (Exception e) {
         ExceptionAlert.showAlert("Failed to load " + projectFile, e);
       }
@@ -825,6 +828,10 @@ public class MarkdownToPdf extends Application {
 
   private void setActiveProject(Project p) {
     logger().info("Activating project: {}", p.getName());
+    // Released here rather than only on success: if this project has no Markdown file, restore
+    // is denied, loading fails, or the user cancels relocation, the access held for whatever was
+    // active before must not linger just because openProjectMarkdown never got to reassign it.
+    holdMarkdownAccess(FileAccess.granted());
     Path markdownFile = p.getMarkdownFile();
     if (markdownFile != null) {
       openProjectMarkdown(p, markdownFile);
@@ -900,9 +907,35 @@ public class MarkdownToPdf extends Application {
     if (relocated.isGranted() && markdownTab.loadFile(located)) {
       p.setMarkdownFile(located);
       holdMarkdownAccess(relocated);
+      persistRelocatedMarkdownFile(p);
     } else {
       relocated.close();
       Alerts.warn("Project " + p.getName(), "Could not open " + located + " either.");
+    }
+  }
+
+  /**
+   * Writes the project's newly located Markdown path back to its stored {@code .jpr} file. Without
+   * this, {@link Project#setMarkdownFile} only updates the in-memory {@link Project}, so the next
+   * launch reads the stale path again and prompts to locate it once more despite the new token
+   * already being remembered.
+   *
+   * @param p the project whose Markdown file was just relocated
+   */
+  private void persistRelocatedMarkdownFile(Project p) {
+    String projectFilePref =
+        preferences().node("projects").node(p.getName()).get("projectFile", null);
+    if (projectFilePref == null) {
+      return;
+    }
+    Path projectFilePath = Paths.get(projectFilePref);
+    // The project file's own access was released as soon as it was read at startup (or the last
+    // time it was written), so it must be restored before writing to it again.
+    try (FileAccess access = fileAccess.restore(projectFilePath)) {
+      Project.save(p, projectFilePath);
+    } catch (IOException e) {
+      ExceptionAlert.showAlert(
+          "Failed to save the located Markdown file to project " + p.getName(), e);
     }
   }
 
@@ -913,6 +946,12 @@ public class MarkdownToPdf extends Application {
    * @param access access to the newly opened file
    */
   private void holdMarkdownAccess(FileAccess access) {
+    if (access == markdownAccess) {
+      // A broker that caches or ref-counts access per path is free to hand back the same
+      // instance for the same path across two calls; closing it here would revoke the access
+      // just installed instead of the access actually being replaced.
+      return;
+    }
     markdownAccess.close();
     markdownAccess = access;
   }
@@ -924,12 +963,28 @@ public class MarkdownToPdf extends Application {
 
   void populateProjectCombo(ComboBox<Project> projectCombo)
       throws BackingStoreException, IOException {
-    Preferences projects = preferences().node("projects");
-    ObservableList<Project> list = projectCombo.getItems();
-    for (String name : projects.childrenNames()) {
-      String path = projects.node(name).get("projectFile", null);
+    populateProjects(projectCombo.getItems(), preferences().node("projects"), fileAccess);
+  }
+
+  /**
+   * Loads projects from {@code projectsNode} into {@code list}, dropping the preference for one
+   * that is genuinely missing and keeping one that is merely unreachable right now.
+   *
+   * <p>Factored out of {@link #populateProjectCombo(ComboBox)} as a plain function of a {@link
+   * List}, a {@link Preferences} node and a {@link FileAccessBroker} — none of them JavaFX types —
+   * so the classification this method drives can be exercised directly.
+   *
+   * @param list where loaded projects are added
+   * @param projectsNode the {@code Preferences} node holding one child per stored project
+   * @param fileAccess broker used to regain access to each stored path
+   */
+  static void populateProjects(
+      List<Project> list, Preferences projectsNode, FileAccessBroker fileAccess)
+      throws BackingStoreException, IOException {
+    for (String name : projectsNode.childrenNames()) {
+      String path = projectsNode.node(name).get("projectFile", null);
       if (path == null) {
-        projects.node(name).removeNode();
+        projectsNode.node(name).removeNode();
         continue;
       }
       Path projectFilePath = Paths.get(path);
@@ -951,7 +1006,7 @@ public class MarkdownToPdf extends Application {
           case MISSING -> {
             logger().info("{} does not exist, removing preference", projectFilePath);
             fileAccess.forget(projectFilePath);
-            projects.node(name).removeNode();
+            projectsNode.node(name).removeNode();
           }
           case INACCESSIBLE ->
               logger().info("{} is currently unreachable, keeping preference", projectFilePath);
@@ -969,15 +1024,20 @@ public class MarkdownToPdf extends Application {
     projects.node(p.getName()).put("projectFile", path);
   }
 
+  private void rememberProjectPaths(Project p, Path projectFilePath) {
+    rememberProjectPaths(fileAccess, p, projectFilePath);
+  }
+
   /**
    * Records the paths this project stores, so a sandboxed build can still read them in a later
    * session. Called while the user's selection still grants access — once that lapses a token can
    * no longer be created.
    *
+   * @param fileAccess broker used to remember each path
    * @param p the project being persisted
    * @param projectFilePath where the project file itself is written
    */
-  private void rememberProjectPaths(Project p, Path projectFilePath) {
+  static void rememberProjectPaths(FileAccessBroker fileAccess, Project p, Path projectFilePath) {
     fileAccess.remember(projectFilePath);
     Path markdownFile = p.getMarkdownFile();
     if (markdownFile != null) {
@@ -989,7 +1049,8 @@ public class MarkdownToPdf extends Application {
     Preferences projects = preferences().node("projects");
     String projectFilePref = projects.node(p.getName()).get("projectFile", null);
     Path projectFilePath;
-    if (projectFilePref == null) {
+    boolean pathIsFreshlyChosen = projectFilePref == null;
+    if (pathIsFreshlyChosen) {
       FileChooser fc = new FileChooser();
       fc.setTitle("Save project file");
       fc.setInitialDirectory(getProjectDir());
@@ -1004,8 +1065,18 @@ public class MarkdownToPdf extends Application {
     if (styleCombo != null && styleCombo.getValue() != null) {
       p.setStyleProfileName(styleCombo.getValue());
     }
-    Project.save(p, projectFilePath);
-    rememberProjectPaths(p, projectFilePath);
+    if (pathIsFreshlyChosen) {
+      // A path just chosen in the save dialog above is already accessible; no need to restore it.
+      Project.save(p, projectFilePath);
+      rememberProjectPaths(p, projectFilePath);
+    } else {
+      // A path read back from preferences had its access released as soon as it was last read
+      // or written, so writing to it again needs access restored first.
+      try (FileAccess access = fileAccess.restore(projectFilePath)) {
+        Project.save(p, projectFilePath);
+        rememberProjectPaths(p, projectFilePath);
+      }
+    }
     projects.node(p.getName()).put("projectFile", projectFilePath.toString());
   }
 
@@ -1407,11 +1478,20 @@ public class MarkdownToPdf extends Application {
   /**
    * Updates the Markdown file path on the currently active project.
    *
+   * <p>Called right after the file was chosen in a dialog or dropped onto the editor — exactly the
+   * moment access to it can be granted — so this is also where it is remembered and where the
+   * editor's held access is switched to it.
+   *
    * @param file the new Markdown file path; ignored if no project is active or {@code file} is null
    */
   public void setProjectMarkdownFile(Path file) {
     Project p = projectCombo.getValue();
-    if (p != null && file != null) p.setMarkdownFile(file);
+    if (p == null || file == null) {
+      return;
+    }
+    p.setMarkdownFile(file);
+    fileAccess.remember(file);
+    holdMarkdownAccess(fileAccess.restore(file));
   }
 
   /**

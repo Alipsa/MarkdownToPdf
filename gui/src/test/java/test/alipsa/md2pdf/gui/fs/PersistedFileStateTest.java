@@ -48,6 +48,18 @@ public class PersistedFileStateTest {
   }
 
   @Test
+  public void aMissingParentIsInaccessibleRatherThanMissing() {
+    // The regression Copilot flagged: the default no-op broker grants unconditionally, so
+    // unplugging the drive holding a project makes Files.exists() report false exactly as it
+    // would for a deleted file. A parent directory that is gone too is evidence the whole volume
+    // is unreachable, not that this one file was deleted.
+    Path file = dir.resolve("unmounted-volume/project.jpr");
+
+    assertEquals(
+        PersistedFileState.INACCESSIBLE, PersistedFileState.of(FileAccess.granted(), file));
+  }
+
+  @Test
   public void theBrokerHandsBackAccessThatClassifyingCanUse() throws IOException {
     Path file = Files.writeString(dir.resolve("project.jpr"), "name=demo");
     RecordingFileAccessBroker broker = new RecordingFileAccessBroker();

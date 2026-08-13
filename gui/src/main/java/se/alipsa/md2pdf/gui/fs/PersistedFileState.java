@@ -26,6 +26,14 @@ public enum PersistedFileState {
    * a {@link #LOADABLE} path still has to be read, and that read must happen while the access is
    * open.
    *
+   * <p>A granted access says nothing about whether the volume holding the file is actually mounted
+   * — the no-op broker used by every open source build grants unconditionally, so unplugging a
+   * drive makes {@link Files#exists} report {@code false} exactly as if the file had been deleted.
+   * A missing parent directory is evidence of the former rather than the latter: the file's own
+   * containment vanished too, not just the file, so that case is reported as {@link #INACCESSIBLE}
+   * rather than {@link #MISSING}. This is a heuristic, not a guarantee — a mount point that a
+   * desktop leaves behind as an empty directory after unmounting still passes this check.
+   *
    * @param access access obtained from {@link FileAccessBroker#restore(Path)} for {@code path}
    * @param path a path read back from stored settings
    * @return what the caller may conclude about {@code path}
@@ -34,6 +42,10 @@ public enum PersistedFileState {
     if (!access.isGranted()) {
       return INACCESSIBLE;
     }
-    return Files.exists(path) ? LOADABLE : MISSING;
+    if (Files.exists(path)) {
+      return LOADABLE;
+    }
+    Path parent = path.getParent();
+    return parent == null || Files.exists(parent) ? MISSING : INACCESSIBLE;
   }
 }
