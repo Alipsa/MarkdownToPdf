@@ -789,9 +789,7 @@ public class MarkdownToPdf extends Application {
   private File pdfInitialDirectory() {
     File markdownFile = markdownTab.getFile();
     File markdownParent = markdownFile == null ? null : markdownFile.getParentFile();
-    return markdownParent != null && markdownParent.isDirectory()
-        ? markdownParent
-        : getProjectDir();
+    return markdownParent != null ? markdownParent : getProjectDir();
   }
 
   private String suggestedPdfFileName() {
