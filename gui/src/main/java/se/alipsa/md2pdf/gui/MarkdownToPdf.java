@@ -712,8 +712,7 @@ public class MarkdownToPdf extends Application {
   private void exportPdf() {
     FileChooser fc = new FileChooser();
     fc.setTitle("Export PDF");
-    fc.setInitialDirectory(getProjectDir());
-    fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+    configurePdfSaveDialog(fc);
     File file = fc.showSaveDialog(stage);
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
@@ -749,9 +748,7 @@ public class MarkdownToPdf extends Application {
     if (needsUserSelectedPath) {
       FileChooser fc = new FileChooser();
       fc.setTitle("Save PDF to view externally");
-      fc.setInitialDirectory(pdfInitialDirectory());
-      fc.setInitialFileName(suggestedPdfFileName());
-      fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+      configurePdfSaveDialog(fc);
       file = fc.showSaveDialog(stage);
       if (file == null) {
         return;
@@ -769,9 +766,11 @@ public class MarkdownToPdf extends Application {
     try {
       if (needsUserSelectedPath) {
         try {
-          writeToFile(file, markdownTab.renderPdf());
-        } catch (IOException e) {
-          ExceptionAlert.showAlert("Failed to write PDF", e);
+          writeRenderedPdf(file);
+        } catch (Md2PdfException e) {
+          String title =
+              e.getCause() instanceof IOException ? "Failed to write PDF" : "Failed to render PDF";
+          ExceptionAlert.showAlert(title, e);
           return;
         }
         setStatus("Wrote PDF to " + file.getAbsolutePath());
@@ -789,7 +788,23 @@ public class MarkdownToPdf extends Application {
   private File pdfInitialDirectory() {
     File markdownFile = markdownTab.getFile();
     File markdownParent = markdownFile == null ? null : markdownFile.getParentFile();
-    return markdownParent != null ? markdownParent : getProjectDir();
+    if (markdownParent != null) {
+      return markdownParent;
+    }
+    Project active = getActiveProject();
+    if (active != null && active.getMarkdownFile() != null) {
+      File projectMarkdownParent = active.getMarkdownFile().toFile().getParentFile();
+      if (projectMarkdownParent != null) {
+        return projectMarkdownParent;
+      }
+    }
+    return new File(System.getProperty("user.home"));
+  }
+
+  private void configurePdfSaveDialog(FileChooser chooser) {
+    chooser.setInitialDirectory(pdfInitialDirectory());
+    chooser.setInitialFileName(suggestedPdfFileName());
+    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
   }
 
   private String suggestedPdfFileName() {
@@ -1152,8 +1167,7 @@ public class MarkdownToPdf extends Application {
     saveButton.setOnAction(
         a -> {
           FileChooser fc = new FileChooser();
-          fc.setInitialDirectory(getProjectDir());
-          fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+          configurePdfSaveDialog(fc);
           File file = fc.showSaveDialog(stage);
           if (file != null) {
             try {
