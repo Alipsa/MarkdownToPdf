@@ -17,11 +17,8 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URI;
 import java.net.URL;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -720,7 +717,7 @@ public class MarkdownToPdf extends Application {
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
       try {
-        renderPdfAtomically(file, false);
+        writeRenderedPdf(file);
         setStatus("Exported PDF to " + file.getName());
       } catch (Md2PdfException e) {
         ExceptionAlert.showAlert("Failed to export PDF", e);
@@ -769,11 +766,12 @@ public class MarkdownToPdf extends Application {
     }
     scene.setCursor(Cursor.WAIT);
     try {
-      File renderedFile = renderPdfAtomically(file, needsUserSelectedPath);
-      openInExternalApp(renderedFile);
-      if (!needsUserSelectedPath) {
-        renderedFile.deleteOnExit();
+      if (needsUserSelectedPath) {
+        writeRenderedPdf(file);
+      } else {
+        markdownTab.renderPdf(file);
       }
+      openInExternalApp(file);
     } catch (Md2PdfException e) {
       ExceptionAlert.showAlert("Failed to render PDF", e);
     } finally {
@@ -792,77 +790,12 @@ public class MarkdownToPdf extends Application {
     return baseName + ".pdf";
   }
 
-  /**
-   * Renders beside the destination and replaces it only after the whole PDF has been written. This
-   * preserves an existing export when rendering fails. When an external viewer locks the requested
-   * path, an externally viewed PDF falls back to a numbered sibling instead.
-   */
-  private File renderPdfAtomically(File destination, boolean useAlternateOnReplaceFailure)
-      throws Md2PdfException {
-    Path destinationPath = destination.toPath().toAbsolutePath();
-    Path parent = destinationPath.getParent();
-    Path temporary = null;
+  /** Renders fully before replacing the contents of the selected file. */
+  private void writeRenderedPdf(File destination) throws Md2PdfException {
     try {
-      temporary = Files.createTempFile(parent, ".md2pdf-", ".pdf");
-      markdownTab.renderPdf(temporary.toFile());
-      try {
-        moveReplacing(temporary, destinationPath);
-        return destinationPath.toFile();
-      } catch (IOException replaceFailure) {
-        if (!useAlternateOnReplaceFailure) {
-          throw replaceFailure;
-        }
-        Path alternate = nextAvailablePdfPath(destinationPath);
-        moveWithoutReplacing(temporary, alternate);
-        setStatus(
-            "Opened "
-                + alternate.getFileName()
-                + " because "
-                + destination.getName()
-                + " is in use");
-        return alternate.toFile();
-      }
+      Files.write(destination.toPath(), markdownTab.renderPdf());
     } catch (IOException e) {
       throw new Md2PdfException(e);
-    } finally {
-      if (temporary != null) {
-        try {
-          Files.deleteIfExists(temporary);
-        } catch (IOException e) {
-          logger().debug("Could not remove temporary PDF {}", temporary, e);
-        }
-      }
-    }
-  }
-
-  private static void moveReplacing(Path source, Path destination) throws IOException {
-    try {
-      Files.move(
-          source, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-    } catch (AtomicMoveNotSupportedException e) {
-      Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
-    }
-  }
-
-  private static void moveWithoutReplacing(Path source, Path destination) throws IOException {
-    try {
-      Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE);
-    } catch (AtomicMoveNotSupportedException e) {
-      Files.move(source, destination);
-    }
-  }
-
-  private static Path nextAvailablePdfPath(Path destination) {
-    String name = destination.getFileName().toString();
-    int extension = name.lastIndexOf('.');
-    String baseName = extension > 0 ? name.substring(0, extension) : name;
-    String suffix = extension > 0 ? name.substring(extension) : ".pdf";
-    Path parent = destination.getParent();
-    for (int number = 1; ; number++) {
-      Path candidate = parent.resolve(baseName + "-" + number + suffix);
-      if (!Files.exists(candidate)) {
-        return candidate;
-      }
     }
   }
 
