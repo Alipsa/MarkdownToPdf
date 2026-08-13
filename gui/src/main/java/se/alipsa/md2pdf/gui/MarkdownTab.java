@@ -159,7 +159,7 @@ public class MarkdownTab extends BaseTab {
     fc.setInitialDirectory(gui.getProjectDir());
     fc.getExtensionFilters()
         .add(new FileChooser.ExtensionFilter("Markdown files", "*.md", "*.markdown"));
-    File targetFile = fc.showOpenDialog(gui.getStage());
+    File targetFile = gui.showOpenDialog(fc);
     if (targetFile != null) {
       try {
         markdownArea.setText(Files.readString(targetFile.toPath()));

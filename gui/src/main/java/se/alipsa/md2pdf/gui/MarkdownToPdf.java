@@ -834,8 +834,29 @@ public class MarkdownToPdf extends Application {
     }
   }
 
+  File showOpenDialog(FileChooser chooser) {
+    try {
+      return chooser.showOpenDialog(stage);
+    } catch (IllegalArgumentException e) {
+      logger().warn("Open dialog rejected its initial directory; retrying without one", e);
+      chooser.setInitialDirectory(null);
+      try {
+        return chooser.showOpenDialog(stage);
+      } catch (IllegalArgumentException retryFailure) {
+        ExceptionAlert.showAlert("Failed to open file dialog", retryFailure);
+        return null;
+      }
+    }
+  }
+
   private String suggestedPdfFileName() {
     File markdownFile = markdownTab.getFile();
+    if (markdownFile == null) {
+      Project active = getActiveProject();
+      if (active != null && active.getMarkdownFile() != null) {
+        markdownFile = active.getMarkdownFile().toFile();
+      }
+    }
     if (markdownFile == null) {
       return "document.pdf";
     }
@@ -895,7 +916,7 @@ public class MarkdownToPdf extends Application {
     FileChooser fc = new FileChooser();
     fc.setInitialDirectory(getProjectDir());
     fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Project files", "*.jpr"));
-    File projectFile = fc.showOpenDialog(stage);
+    File projectFile = showOpenDialog(fc);
     if (projectFile != null) {
       try {
         Project p = Project.load(projectFile.toPath());
@@ -982,7 +1003,7 @@ public class MarkdownToPdf extends Application {
     if (parent != null && Files.isDirectory(parent)) {
       fc.setInitialDirectory(parent.toFile());
     }
-    File chosen = fc.showOpenDialog(stage);
+    File chosen = showOpenDialog(fc);
     if (chosen == null) {
       return;
     }
