@@ -18,6 +18,7 @@ import java.io.*;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -793,7 +794,7 @@ public class MarkdownToPdf extends Application {
   /** Renders fully before replacing the contents of the selected file. */
   private void writeRenderedPdf(File destination) throws Md2PdfException {
     try {
-      Files.write(destination.toPath(), markdownTab.renderPdf());
+      writeToFile(destination, markdownTab.renderPdf());
     } catch (IOException e) {
       throw new Md2PdfException(e);
     }
