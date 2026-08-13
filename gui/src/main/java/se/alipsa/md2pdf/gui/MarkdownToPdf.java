@@ -749,7 +749,7 @@ public class MarkdownToPdf extends Application {
     if (needsUserSelectedPath) {
       FileChooser fc = new FileChooser();
       fc.setTitle("Save PDF to view externally");
-      fc.setInitialDirectory(getProjectDir());
+      fc.setInitialDirectory(pdfInitialDirectory());
       fc.setInitialFileName(suggestedPdfFileName());
       fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
       file = fc.showSaveDialog(stage);
@@ -768,7 +768,13 @@ public class MarkdownToPdf extends Application {
     scene.setCursor(Cursor.WAIT);
     try {
       if (needsUserSelectedPath) {
-        writeRenderedPdf(file);
+        try {
+          writeToFile(file, markdownTab.renderPdf());
+        } catch (IOException e) {
+          ExceptionAlert.showAlert("Failed to write PDF", e);
+          return;
+        }
+        setStatus("Wrote PDF to " + file.getAbsolutePath());
       } else {
         markdownTab.renderPdf(file);
       }
@@ -778,6 +784,14 @@ public class MarkdownToPdf extends Application {
     } finally {
       scene.setCursor(Cursor.DEFAULT);
     }
+  }
+
+  private File pdfInitialDirectory() {
+    File markdownFile = markdownTab.getFile();
+    File markdownParent = markdownFile == null ? null : markdownFile.getParentFile();
+    return markdownParent != null && markdownParent.isDirectory()
+        ? markdownParent
+        : getProjectDir();
   }
 
   private String suggestedPdfFileName() {
