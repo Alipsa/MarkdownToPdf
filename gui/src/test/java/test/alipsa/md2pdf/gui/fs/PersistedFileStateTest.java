@@ -1,11 +1,15 @@
 package test.alipsa.md2pdf.gui.fs;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import se.alipsa.md2pdf.gui.fs.FileAccess;
 import se.alipsa.md2pdf.gui.fs.PersistedFileState;
@@ -57,6 +61,30 @@ public class PersistedFileStateTest {
 
     assertEquals(
         PersistedFileState.INACCESSIBLE, PersistedFileState.of(FileAccess.granted(), file));
+  }
+
+  @Test
+  @DisabledOnOs(OS.WINDOWS)
+  public void anIndeterminateExistenceCheckIsInaccessibleEvenWithAVisibleParent()
+      throws IOException {
+    // Files.exists() and Files.notExists() are not complements: both report false when
+    // existence cannot be determined at all, e.g. because an ACL blocks the check partway
+    // through. That must not be read as "the file was deleted" just because the parent directory
+    // that holds it is still visible.
+    Path locked = dir.resolve("locked");
+    Files.createDirectory(locked);
+    Path file = locked.resolve("project.jpr");
+    Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("---------"));
+    try {
+      assumeTrue(
+          !Files.exists(file) && !Files.notExists(file),
+          "the current user can still traverse a directory with no permissions (e.g. running as root)");
+
+      assertEquals(
+          PersistedFileState.INACCESSIBLE, PersistedFileState.of(FileAccess.granted(), file));
+    } finally {
+      Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("rwxr-xr-x"));
+    }
   }
 
   @Test

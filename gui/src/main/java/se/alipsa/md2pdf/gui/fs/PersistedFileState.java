@@ -34,6 +34,12 @@ public enum PersistedFileState {
    * rather than {@link #MISSING}. This is a heuristic, not a guarantee — a mount point that a
    * desktop leaves behind as an empty directory after unmounting still passes this check.
    *
+   * <p>{@link Files#exists} and {@link Files#notExists} are not complements: both report {@code
+   * false} when existence could not be determined at all, for example because an ACL or a flaky
+   * mount raised an I/O error partway through the check. That is a reachability problem, not
+   * evidence of deletion, so it is reported as {@link #INACCESSIBLE} even when the parent directory
+   * is visible.
+   *
    * @param access access obtained from {@link FileAccessBroker#restore(Path)} for {@code path}
    * @param path a path read back from stored settings
    * @return what the caller may conclude about {@code path}
@@ -44,6 +50,9 @@ public enum PersistedFileState {
     }
     if (Files.exists(path)) {
       return LOADABLE;
+    }
+    if (!Files.notExists(path)) {
+      return INACCESSIBLE;
     }
     Path parent = path.getParent();
     return parent == null || Files.exists(parent) ? MISSING : INACCESSIBLE;

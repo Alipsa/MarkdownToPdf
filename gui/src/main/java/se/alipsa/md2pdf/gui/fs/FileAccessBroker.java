@@ -65,19 +65,26 @@ public interface FileAccessBroker {
   }
 
   /**
-   * Returns the first available broker, or a no-op broker when there is none — or when resolving
-   * one fails.
+   * Returns the first available broker, a no-op broker when there is none, or a fail-closed broker
+   * when resolving one fails.
    *
    * <p>A provider that cannot be found or constructed surfaces as {@link
    * ServiceConfigurationError}, an {@code Error} rather than an exception; one with a missing or
    * incompatible superclass or interface surfaces as {@link LinkageError} instead. Since the
    * application resolves its broker while constructing the JavaFX {@code Application}, letting
    * either propagate would abort startup before any window or log file exists — in precisely the
-   * build that ships a provider. Degrading to the no-op broker instead costs the user their
-   * reopened projects and nothing else.
+   * build that ships a provider.
+   *
+   * <p>A load failure is not the same as no provider being registered at all: it is evidence that
+   * this build does need one, so it must not fall back to {@link NoOpFileAccessBroker}, which
+   * grants every path unconditionally — that would let a merely unreachable stored path be
+   * classified {@link PersistedFileState#MISSING} and silently discarded, the very data loss this
+   * type exists to prevent. A {@link FailClosedFileAccessBroker} denies every path instead, which
+   * keeps it {@link PersistedFileState#INACCESSIBLE} until the broker is fixed.
    *
    * @param candidates the brokers to choose from
-   * @return the first candidate, or a no-op broker if there is none or it could not be loaded
+   * @return the first candidate; a no-op broker if there is none; a fail-closed broker if resolving
+   *     one failed
    */
   static FileAccessBroker firstOrNoop(Iterable<FileAccessBroker> candidates) {
     try {
@@ -87,7 +94,11 @@ public interface FileAccessBroker {
       }
     } catch (ServiceConfigurationError | LinkageError e) {
       LogManager.getLogger(FileAccessBroker.class)
-          .warn("Could not load a FileAccessBroker; stored file paths may not reopen", e);
+          .warn(
+              "Could not load a FileAccessBroker; treating every stored path as inaccessible until"
+                  + " this is fixed",
+              e);
+      return new FailClosedFileAccessBroker();
     }
     return new NoOpFileAccessBroker();
   }
