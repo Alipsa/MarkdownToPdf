@@ -264,7 +264,7 @@ public class MarkdownTab extends BaseTab {
       if (projectName != null) {
         fc.setInitialFileName(projectName + ".md");
       }
-      File targetFile = fc.showSaveDialog(gui.getStage());
+      File targetFile = gui.showSaveDialog(fc);
       if (targetFile != null) {
         Path filePath = targetFile.toPath();
         try {

@@ -694,7 +694,7 @@ public class MarkdownToPdf extends Application {
     fc.setTitle("Export HTML");
     fc.setInitialDirectory(getProjectDir());
     fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html"));
-    File file = fc.showSaveDialog(stage);
+    File file = showSaveDialog(fc);
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
       try {
@@ -713,7 +713,7 @@ public class MarkdownToPdf extends Application {
     FileChooser fc = new FileChooser();
     fc.setTitle("Export PDF");
     configurePdfSaveDialog(fc);
-    File file = showPdfSaveDialog(fc);
+    File file = showSaveDialog(fc);
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
       try {
@@ -749,7 +749,7 @@ public class MarkdownToPdf extends Application {
       FileChooser fc = new FileChooser();
       fc.setTitle("Save PDF to view externally");
       configurePdfSaveDialog(fc);
-      file = showPdfSaveDialog(fc);
+      file = showSaveDialog(fc);
       if (file == null) {
         return;
       }
@@ -819,16 +819,16 @@ public class MarkdownToPdf extends Application {
     chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
   }
 
-  private File showPdfSaveDialog(FileChooser chooser) {
+  File showSaveDialog(FileChooser chooser) {
     try {
       return chooser.showSaveDialog(stage);
     } catch (IllegalArgumentException e) {
-      logger().warn("PDF save dialog rejected its initial directory; retrying without one", e);
+      logger().warn("Save dialog rejected its initial directory; retrying without one", e);
       chooser.setInitialDirectory(null);
       try {
         return chooser.showSaveDialog(stage);
       } catch (IllegalArgumentException retryFailure) {
-        ExceptionAlert.showAlert("Failed to open PDF save dialog", retryFailure);
+        ExceptionAlert.showAlert("Failed to open save dialog", retryFailure);
         return null;
       }
     }
@@ -874,7 +874,7 @@ public class MarkdownToPdf extends Application {
           fc.setInitialDirectory(getProjectDir());
           fc.setInitialFileName(name + ".jpr");
           fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Project files", "*.jpr"));
-          File projectFile = fc.showSaveDialog(stage);
+          File projectFile = showSaveDialog(fc);
           if (projectFile != null) {
             Project p = new Project();
             p.setName(name);
@@ -1143,7 +1143,7 @@ public class MarkdownToPdf extends Application {
       fc.setTitle("Save project file");
       fc.setInitialDirectory(getProjectDir());
       fc.setInitialFileName(p.getName() + ".jpr");
-      File file = fc.showSaveDialog(stage);
+      File file = showSaveDialog(fc);
       if (file == null) return;
       projectFilePath = file.toPath();
     } else {
@@ -1190,7 +1190,7 @@ public class MarkdownToPdf extends Application {
           }
           FileChooser fc = new FileChooser();
           configurePdfSaveDialog(fc);
-          File file = showPdfSaveDialog(fc);
+          File file = showSaveDialog(fc);
           if (file != null) {
             try {
               writeToFile(file, pdfViewer.getContent());

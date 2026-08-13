@@ -79,9 +79,9 @@ public class FileAccessBrokerTest {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(broken);
 
     assertNotNull(broker);
-    assertFalse(
+    assertTrue(
         broker.requiresUserSelectedOutputPath(),
-        "a broken provider must not change the ordinary desktop preview workflow");
+        "a broken provider must retain the sandbox-safe external preview workflow");
     // Unlike an absent provider, a broken one is evidence this build needs sandboxing — falling
     // back to the no-op broker would grant every path and let an unreachable stored path be
     // classified MISSING and discarded instead of INACCESSIBLE.

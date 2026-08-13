@@ -13,11 +13,6 @@ import java.nio.file.Path;
 final class FailClosedFileAccessBroker implements FileAccessBroker {
 
   @Override
-  public boolean requiresUserSelectedOutputPath() {
-    return false;
-  }
-
-  @Override
   public void remember(Path path) {
     // Nothing can be remembered: the provider that would have minted a token never loaded.
   }
