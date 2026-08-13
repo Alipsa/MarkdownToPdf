@@ -753,7 +753,6 @@ public class MarkdownToPdf extends Application {
       if (file == null) {
         return;
       }
-      file = ensurePdfExtension(file);
     } else {
       try {
         file = File.createTempFile("md2pdf_", ".pdf");
@@ -816,12 +815,6 @@ public class MarkdownToPdf extends Application {
     chooser.setInitialDirectory(pdfInitialDirectory());
     chooser.setInitialFileName(suggestedPdfFileName());
     chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
-  }
-
-  private static File ensurePdfExtension(File file) {
-    return file.getName().toLowerCase(Locale.ROOT).endsWith(".pdf")
-        ? file
-        : new File(file.getPath() + ".pdf");
   }
 
   private String suggestedPdfFileName() {
@@ -1175,8 +1168,7 @@ public class MarkdownToPdf extends Application {
     saveButton.setOnAction(
         a -> {
           if (pdfViewer.getContent() == null) {
-            ExceptionAlert.showAlert(
-                "No PDF to save", new IllegalStateException("Render a PDF first."));
+            Alerts.info("No PDF to save", "Render a PDF first.");
             return;
           }
           FileChooser fc = new FileChooser();
