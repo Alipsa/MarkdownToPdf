@@ -713,7 +713,7 @@ public class MarkdownToPdf extends Application {
     FileChooser fc = new FileChooser();
     fc.setTitle("Export PDF");
     configurePdfSaveDialog(fc);
-    File file = fc.showSaveDialog(stage);
+    File file = showPdfSaveDialog(fc);
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
       try {
@@ -749,7 +749,7 @@ public class MarkdownToPdf extends Application {
       FileChooser fc = new FileChooser();
       fc.setTitle("Save PDF to view externally");
       configurePdfSaveDialog(fc);
-      file = fc.showSaveDialog(stage);
+      file = showPdfSaveDialog(fc);
       if (file == null) {
         return;
       }
@@ -798,23 +798,40 @@ public class MarkdownToPdf extends Application {
       }
     }
     File projectDirectory = getProjectDir();
-    if (projectDirectory != null
-        && projectDirectory.getParentFile() != null
-        && isUsablePdfDirectory(projectDirectory)) {
+    if (isUsablePdfDirectory(projectDirectory)) {
       return projectDirectory;
     }
-    return new File(System.getProperty("user.home"));
+    String home = System.getProperty("user.home");
+    File homeDirectory = home == null ? null : new File(home);
+    return isUsablePdfDirectory(homeDirectory) ? homeDirectory : null;
   }
 
   private boolean isUsablePdfDirectory(File directory) {
-    return directory != null
-        && (fileAccess.requiresUserSelectedOutputPath() || directory.isDirectory());
+    return directory != null && directory.isDirectory();
   }
 
   private void configurePdfSaveDialog(FileChooser chooser) {
-    chooser.setInitialDirectory(pdfInitialDirectory());
+    File initialDirectory = pdfInitialDirectory();
+    if (initialDirectory != null) {
+      chooser.setInitialDirectory(initialDirectory);
+    }
     chooser.setInitialFileName(suggestedPdfFileName());
     chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+  }
+
+  private File showPdfSaveDialog(FileChooser chooser) {
+    try {
+      return chooser.showSaveDialog(stage);
+    } catch (IllegalArgumentException e) {
+      logger().warn("PDF save dialog rejected its initial directory; retrying without one", e);
+      chooser.setInitialDirectory(null);
+      try {
+        return chooser.showSaveDialog(stage);
+      } catch (IllegalArgumentException retryFailure) {
+        ExceptionAlert.showAlert("Failed to open PDF save dialog", retryFailure);
+        return null;
+      }
+    }
   }
 
   private String suggestedPdfFileName() {
@@ -1173,7 +1190,7 @@ public class MarkdownToPdf extends Application {
           }
           FileChooser fc = new FileChooser();
           configurePdfSaveDialog(fc);
-          File file = fc.showSaveDialog(stage);
+          File file = showPdfSaveDialog(fc);
           if (file != null) {
             try {
               writeToFile(file, pdfViewer.getContent());
