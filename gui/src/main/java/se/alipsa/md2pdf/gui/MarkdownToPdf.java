@@ -797,13 +797,7 @@ public class MarkdownToPdf extends Application {
         return projectMarkdownParent;
       }
     }
-    File projectDirectory = getProjectDir();
-    if (isUsablePdfDirectory(projectDirectory)) {
-      return projectDirectory;
-    }
-    String home = System.getProperty("user.home");
-    File homeDirectory = home == null ? null : new File(home);
-    return isUsablePdfDirectory(homeDirectory) ? homeDirectory : null;
+    return null;
   }
 
   private boolean isUsablePdfDirectory(File directory) {
