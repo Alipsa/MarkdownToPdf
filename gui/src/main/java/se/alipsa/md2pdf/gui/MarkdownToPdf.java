@@ -743,14 +743,23 @@ public class MarkdownToPdf extends Application {
     }
   }
 
+  // Renders to a location the user just chose in a dialog, rather than java.io.tmpdir: under App
+  // Sandbox the temp directory resolves inside this app's own container, which the external PDF
+  // viewer has no access to, while a freshly dialog-granted path is reachable by any app.
   void viewExternal() {
+    FileChooser fc = new FileChooser();
+    fc.setTitle("View external");
+    fc.setInitialDirectory(getProjectDir());
+    fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+    File file = fc.showSaveDialog(stage);
+    if (file == null) {
+      return;
+    }
     scene.setCursor(Cursor.WAIT);
     try {
-      File tmpFile = File.createTempFile("md2pdf_", ".pdf");
-      markdownTab.renderPdf(tmpFile);
-      openInExternalApp(tmpFile);
-      tmpFile.deleteOnExit();
-    } catch (IOException | Md2PdfException e) {
+      markdownTab.renderPdf(file);
+      openInExternalApp(file);
+    } catch (Md2PdfException e) {
       ExceptionAlert.showAlert("Failed to render PDF", e);
     } finally {
       scene.setCursor(Cursor.DEFAULT);
