@@ -10,9 +10,12 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -692,19 +695,31 @@ public class Md2PdfEngine {
     /**
      * Render the job to a PDF file.
      *
+     * <p>When the parent directory permits it, this renders to a temporary sibling and atomically
+     * replaces the destination only after success. If a pre-existing destination is writable but
+     * its directory does not allow temporary files, the PDF is rendered in memory and written
+     * directly to that file. That fallback preserves the file's attributes but cannot be atomic if
+     * writing the rendered bytes fails.
+     *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
      */
     public void toPdf(File file) throws Md2PdfException {
       Path target = Objects.requireNonNull(file, "file").toPath().toAbsolutePath();
+      Path parent = target.getParent();
+      if (parent == null) {
+        throw new Md2PdfException("Cannot write a PDF to filesystem root " + target);
+      }
       Path temporary;
       try {
-        temporary = Files.createTempFile(target.getParent(), ".md2pdf-", ".pdf");
-      } catch (IOException e) {
-        throw new Md2PdfException(e);
+        temporary = createTemporaryPdf(parent);
+      } catch (IOException temporaryFailure) {
+        writePdfDirectly(target, temporaryFailure);
+        return;
       }
       try {
         writePdf(temporary);
+        copyTargetPermissions(target, temporary);
         replaceFile(temporary, target);
         log.debug("toPdf: Wrote {}", target);
       } catch (IOException e) {
@@ -716,6 +731,29 @@ public class Md2PdfEngine {
           log.warn("Failed to remove temporary PDF {}", temporary, e);
         }
       }
+    }
+
+    private void writePdfDirectly(Path target, IOException temporaryFailure)
+        throws Md2PdfException {
+      byte[] pdf = toPdf();
+      try {
+        Files.write(target, pdf);
+        log.debug("toPdf: Wrote {} without a temporary sibling", target);
+      } catch (IOException directWriteFailure) {
+        directWriteFailure.addSuppressed(temporaryFailure);
+        throw new Md2PdfException(directWriteFailure);
+      }
+    }
+
+    private static Path createTemporaryPdf(Path parent) throws IOException {
+      if (Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null) {
+        return Files.createTempFile(
+            parent,
+            ".md2pdf-",
+            ".pdf",
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-rw-rw-")));
+      }
+      return Files.createTempFile(parent, ".md2pdf-", ".pdf");
     }
 
     private void writePdf(Path path) throws Md2PdfException, IOException {
@@ -732,6 +770,19 @@ public class Md2PdfEngine {
             source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
       } catch (AtomicMoveNotSupportedException e) {
         Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+    }
+
+    private static void copyTargetPermissions(Path target, Path temporary) throws IOException {
+      PosixFileAttributeView targetAttributes =
+          Files.getFileAttributeView(target, PosixFileAttributeView.class);
+      if (targetAttributes == null) {
+        return;
+      }
+      try {
+        Files.setPosixFilePermissions(temporary, targetAttributes.readAttributes().permissions());
+      } catch (NoSuchFileException ignored) {
+        // The destination did not exist, so the temporary file keeps the platform default mode.
       }
     }
 

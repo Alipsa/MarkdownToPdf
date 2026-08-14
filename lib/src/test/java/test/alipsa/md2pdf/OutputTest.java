@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -12,6 +13,9 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Set;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -72,6 +76,62 @@ public class OutputTest {
         NullPointerException.class, () -> engine.markdown((String) null).toPdf(output.toFile()));
 
     assertEquals("existing document", Files.readString(output));
+  }
+
+  @Test
+  void testFilesystemRootReportsMd2PdfException() {
+    File root = File.listRoots()[0];
+
+    assertThrows(Md2PdfException.class, () -> engine.markdown("# Report").toPdf(root));
+  }
+
+  @Test
+  void testPdfFilePreservesExistingPosixPermissions() throws Exception {
+    assumeTrue(
+        Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
+            != null);
+    Path output = tempDir.resolve("existing.pdf");
+    Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rw-r-----");
+    Files.writeString(output, "existing document");
+    Files.setPosixFilePermissions(output, permissions);
+
+    engine.markdown("# Report").toPdf(output);
+
+    assertEquals(permissions, Files.getPosixFilePermissions(output));
+  }
+
+  @Test
+  void testPdfFileUsesPlatformDefaultPermissionsForNewFile() throws Exception {
+    assumeTrue(
+        Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
+            != null);
+    Path reference = tempDir.resolve("reference.txt");
+    Path output = tempDir.resolve("new.pdf");
+    Files.writeString(reference, "reference");
+
+    engine.markdown("# Report").toPdf(output);
+
+    assertEquals(Files.getPosixFilePermissions(reference), Files.getPosixFilePermissions(output));
+  }
+
+  @Test
+  void testPdfFileFallsBackToDirectWriteWhenParentCannotCreateFiles() throws Exception {
+    assumeTrue(
+        Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
+            != null);
+    Path parent = Files.createDirectory(tempDir.resolve("restricted"));
+    Path output = parent.resolve("existing.pdf");
+    Set<PosixFilePermission> originalPermissions = Files.getPosixFilePermissions(parent);
+    Files.writeString(output, "existing document");
+    try {
+      Files.setPosixFilePermissions(parent, PosixFilePermissions.fromString("r-x------"));
+
+      engine.markdown("# Report").toPdf(output);
+    } finally {
+      Files.setPosixFilePermissions(parent, originalPermissions);
+    }
+
+    assertTrue(Files.size(output) > "existing document".length());
   }
 
   @Test

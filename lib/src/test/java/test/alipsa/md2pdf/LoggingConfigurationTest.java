@@ -21,7 +21,9 @@ class LoggingConfigurationTest {
 
       assertSame(configured, XRLog.getLoggerImpl());
     } finally {
-      XRLog.setLoggerImpl(original);
+      if (original != null) {
+        XRLog.setLoggerImpl(original);
+      }
     }
   }
 
@@ -33,7 +35,9 @@ class LoggingConfigurationTest {
 
       assertInstanceOf(Slf4jXRLogger.class, XRLog.getLoggerImpl());
     } finally {
-      XRLog.setLoggerImpl(original);
+      if (original != null) {
+        XRLog.setLoggerImpl(original);
+      }
     }
   }
 }
