@@ -25,6 +25,20 @@ import org.apache.logging.log4j.LogManager;
 public interface FileAccessBroker {
 
   /**
+   * Returns whether this distribution needs a file chooser grant before it can hand a file to
+   * another application.
+   *
+   * <p>A distribution-specific broker is installed only by a sandboxed build, so the conservative
+   * default is {@code true}. The ordinary desktop broker overrides this to retain the lightweight
+   * temporary-file workflow.
+   *
+   * @return {@code true} when externally viewed files must be chosen by the user
+   */
+  default boolean requiresUserSelectedOutputPath() {
+    return true;
+  }
+
+  /**
    * Records that this path should stay accessible in later sessions. Called while the application
    * still has access to it, which for a sandboxed build is the moment the user chose it.
    *

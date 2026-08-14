@@ -532,7 +532,7 @@ public class MarkdownToPdf extends Application {
     viewPdfButton.setOnAction(a -> run());
 
     viewExternalButton = new Button("View external");
-    viewExternalButton.setTooltip(new Tooltip("Open PDF in default system viewer"));
+    viewExternalButton.setTooltip(new Tooltip("Render and open PDF in the default system viewer"));
     viewExternalButton.setOnAction(a -> viewExternal());
 
     Label projectLabel = new Label("Project:");
@@ -694,7 +694,7 @@ public class MarkdownToPdf extends Application {
     fc.setTitle("Export HTML");
     fc.setInitialDirectory(getProjectDir());
     fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html"));
-    File file = fc.showSaveDialog(stage);
+    File file = showSaveDialog(fc);
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
       try {
@@ -712,15 +712,14 @@ public class MarkdownToPdf extends Application {
   private void exportPdf() {
     FileChooser fc = new FileChooser();
     fc.setTitle("Export PDF");
-    fc.setInitialDirectory(getProjectDir());
-    fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
-    File file = fc.showSaveDialog(stage);
+    configurePdfSaveDialog(fc);
+    File file = showSaveDialog(fc);
     if (file != null) {
       scene.setCursor(Cursor.WAIT);
       try {
-        markdownTab.renderPdf(file);
+        writeToFile(file, markdownTab.renderPdf());
         setStatus("Exported PDF to " + file.getName());
-      } catch (Md2PdfException e) {
+      } catch (Md2PdfException | IOException e) {
         ExceptionAlert.showAlert("Failed to export PDF", e);
       } finally {
         scene.setCursor(Cursor.DEFAULT);
@@ -744,17 +743,159 @@ public class MarkdownToPdf extends Application {
   }
 
   void viewExternal() {
+    File file;
+    boolean needsUserSelectedPath = fileAccess.requiresUserSelectedOutputPath();
+    if (needsUserSelectedPath) {
+      FileChooser fc = new FileChooser();
+      fc.setTitle("Save PDF to view externally");
+      configurePdfSaveDialog(fc);
+      file = showSaveDialog(fc);
+      if (file == null) {
+        return;
+      }
+    } else {
+      try {
+        file = File.createTempFile("md2pdf_", ".pdf");
+        file.deleteOnExit();
+      } catch (IOException e) {
+        ExceptionAlert.showAlert("Failed to create temporary PDF", e);
+        return;
+      }
+    }
     scene.setCursor(Cursor.WAIT);
     try {
-      File tmpFile = File.createTempFile("md2pdf_", ".pdf");
-      markdownTab.renderPdf(tmpFile);
-      openInExternalApp(tmpFile);
-      tmpFile.deleteOnExit();
-    } catch (IOException | Md2PdfException e) {
+      if (needsUserSelectedPath) {
+        try {
+          byte[] pdf = markdownTab.renderPdf();
+          writeToFile(file, pdf);
+        } catch (IOException e) {
+          ExceptionAlert.showAlert("Failed to write PDF", e);
+          return;
+        }
+        setStatus("Wrote PDF to " + file.getAbsolutePath());
+      } else {
+        markdownTab.renderPdf(file);
+      }
+      openInExternalApp(file);
+    } catch (Md2PdfException e) {
       ExceptionAlert.showAlert("Failed to render PDF", e);
     } finally {
       scene.setCursor(Cursor.DEFAULT);
     }
+  }
+
+  private void configurePdfSaveDialog(FileChooser chooser) {
+    File markdownFile = markdownTab.getFile();
+    Project active = getActiveProject();
+    File initialDirectory = pdfInitialDirectory(markdownFile, active);
+    if (initialDirectory != null) {
+      chooser.setInitialDirectory(initialDirectory);
+    }
+    chooser.setInitialFileName(suggestedPdfFileName(markdownFile, active));
+    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+  }
+
+  /**
+   * Picks the directory a PDF save dialog should open in: the open Markdown file's directory, or
+   * failing that the active project's Markdown file's directory, or {@code null} to let the dialog
+   * fall back to the platform default.
+   *
+   * <p>Factored out as a plain function of a {@link File} and a {@link Project} — package-private
+   * and static, following {@link #populateProjects} and {@link #rememberProjectPaths} — so it can
+   * be exercised without a JavaFX toolkit.
+   *
+   * @param markdownFile the currently open Markdown file, or {@code null}
+   * @param active the active project, or {@code null}
+   * @return a usable directory, or {@code null} if none was found
+   */
+  static File pdfInitialDirectory(File markdownFile, Project active) {
+    File markdownParent = markdownFile == null ? null : markdownFile.getParentFile();
+    if (isUsablePdfDirectory(markdownParent)) {
+      return markdownParent;
+    }
+    if (active != null && active.getMarkdownFile() != null) {
+      File projectMarkdownParent = active.getMarkdownFile().toFile().getParentFile();
+      if (isUsablePdfDirectory(projectMarkdownParent)) {
+        return projectMarkdownParent;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Under App Sandbox this is expected to return {@code false} for the Markdown file's parent
+   * directory: the security-scoped bookmark covers the file itself, not the enclosing directory, so
+   * {@code isDirectory()} cannot see it. {@link #pdfInitialDirectory} then falls through to {@code
+   * null} and the save dialog opens at the platform default — the correct, safe outcome, not a bug
+   * — so do not "optimise" this probe away for the sandboxed build.
+   */
+  private static boolean isUsablePdfDirectory(File directory) {
+    return directory != null && directory.isDirectory();
+  }
+
+  File showSaveDialog(FileChooser chooser) {
+    try {
+      return chooser.showSaveDialog(stage);
+    } catch (IllegalArgumentException e) {
+      // Reachable: com.sun.glass.ui.CommonDialogs#convertFolder throws IllegalArgumentException
+      // ("Folder parameter must be a valid folder") when initialDirectory is non-null but not an
+      // existing directory, on every platform backend (Mac/Win/Gtk) — not caller error, since a
+      // directory that existed when configurePdfSaveDialog ran can be removed before the dialog is
+      // actually shown.
+      logger().warn("Save dialog rejected its initial directory; retrying without one", e);
+      chooser.setInitialDirectory(null);
+      try {
+        return chooser.showSaveDialog(stage);
+      } catch (IllegalArgumentException retryFailure) {
+        ExceptionAlert.showAlert("Failed to open save dialog", retryFailure);
+        return null;
+      }
+    }
+  }
+
+  File showOpenDialog(FileChooser chooser) {
+    try {
+      return chooser.showOpenDialog(stage);
+    } catch (IllegalArgumentException e) {
+      // See showSaveDialog: same platform-level rejection of a stale initial directory.
+      logger().warn("Open dialog rejected its initial directory; retrying without one", e);
+      chooser.setInitialDirectory(null);
+      try {
+        return chooser.showOpenDialog(stage);
+      } catch (IllegalArgumentException retryFailure) {
+        ExceptionAlert.showAlert("Failed to open file dialog", retryFailure);
+        return null;
+      }
+    }
+  }
+
+  /**
+   * Derives the PDF file name to suggest in a save dialog from the open Markdown file's name, or
+   * failing that the active project's Markdown file's name.
+   *
+   * <p>Factored out for the same reason as {@link #pdfInitialDirectory}.
+   *
+   * @param markdownFile the currently open Markdown file, or {@code null}
+   * @param active the active project, or {@code null}
+   * @return a suggested {@code .pdf} file name, never {@code null}
+   */
+  static String suggestedPdfFileName(File markdownFile, Project active) {
+    File file = markdownFile;
+    if (file == null && active != null && active.getMarkdownFile() != null) {
+      file = active.getMarkdownFile().toFile();
+    }
+    if (file == null) {
+      return "document.pdf";
+    }
+    String name = file.getName();
+    int extension = name.lastIndexOf('.');
+    // extension == 0 means the whole name is the "extension" (e.g. ".md"): using extension > 0
+    // here would leave that leading dot in baseName and produce ".md.pdf" instead of stripping it.
+    String baseName = extension >= 0 ? name.substring(0, extension) : name;
+    if (baseName.isBlank()) {
+      baseName = "document";
+    }
+    return baseName + ".pdf";
   }
 
   private void openInExternalApp(File file) {
@@ -786,7 +927,7 @@ public class MarkdownToPdf extends Application {
           fc.setInitialDirectory(getProjectDir());
           fc.setInitialFileName(name + ".jpr");
           fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Project files", "*.jpr"));
-          File projectFile = fc.showSaveDialog(stage);
+          File projectFile = showSaveDialog(fc);
           if (projectFile != null) {
             Project p = new Project();
             p.setName(name);
@@ -807,7 +948,7 @@ public class MarkdownToPdf extends Application {
     FileChooser fc = new FileChooser();
     fc.setInitialDirectory(getProjectDir());
     fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Project files", "*.jpr"));
-    File projectFile = fc.showOpenDialog(stage);
+    File projectFile = showOpenDialog(fc);
     if (projectFile != null) {
       try {
         Project p = Project.load(projectFile.toPath());
@@ -894,7 +1035,7 @@ public class MarkdownToPdf extends Application {
     if (parent != null && Files.isDirectory(parent)) {
       fc.setInitialDirectory(parent.toFile());
     }
-    File chosen = fc.showOpenDialog(stage);
+    File chosen = showOpenDialog(fc);
     if (chosen == null) {
       return;
     }
@@ -1055,7 +1196,7 @@ public class MarkdownToPdf extends Application {
       fc.setTitle("Save project file");
       fc.setInitialDirectory(getProjectDir());
       fc.setInitialFileName(p.getName() + ".jpr");
-      File file = fc.showSaveDialog(stage);
+      File file = showSaveDialog(fc);
       if (file == null) return;
       projectFilePath = file.toPath();
     } else {
@@ -1096,10 +1237,13 @@ public class MarkdownToPdf extends Application {
     Button saveButton = new Button("Save…");
     saveButton.setOnAction(
         a -> {
+          if (pdfViewer.getContent() == null) {
+            Alerts.info("No PDF to save", "Render a PDF first.");
+            return;
+          }
           FileChooser fc = new FileChooser();
-          fc.setInitialDirectory(getProjectDir());
-          fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
-          File file = fc.showSaveDialog(stage);
+          configurePdfSaveDialog(fc);
+          File file = showSaveDialog(fc);
           if (file != null) {
             try {
               writeToFile(file, pdfViewer.getContent());

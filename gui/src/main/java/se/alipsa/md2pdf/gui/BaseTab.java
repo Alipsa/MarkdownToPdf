@@ -129,6 +129,15 @@ public abstract class BaseTab extends Tab {
     }
   }
 
+  /**
+   * Returns the file this tab was loaded from or last saved to.
+   *
+   * @return the backing file, or {@code null} if there is none
+   */
+  public File getFile() {
+    return file;
+  }
+
   /** Clears the tab content and resets the title and file association. */
   public abstract void clear();
 }

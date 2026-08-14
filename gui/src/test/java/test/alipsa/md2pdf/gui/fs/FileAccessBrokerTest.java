@@ -18,6 +18,9 @@ public class FileAccessBrokerTest {
   public void withNoProviderTheNoOpBrokerIsUsed() {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(List.of());
     assertNotNull(broker);
+    assertFalse(
+        broker.requiresUserSelectedOutputPath(),
+        "the ordinary desktop build must retain its temporary preview workflow");
     assertTrue(
         broker.restore(ANY).isGranted(),
         "without a provider every path must be treated as accessible");
@@ -38,6 +41,9 @@ public class FileAccessBrokerTest {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(List.of(provided));
 
     assertSame(provided, broker);
+    assertTrue(
+        broker.requiresUserSelectedOutputPath(),
+        "a distribution-specific broker signals that an external file needs a chooser grant");
     assertFalse(broker.restore(ANY).isGranted());
   }
 
@@ -73,6 +79,9 @@ public class FileAccessBrokerTest {
     FileAccessBroker broker = FileAccessBroker.firstOrNoop(broken);
 
     assertNotNull(broker);
+    assertTrue(
+        broker.requiresUserSelectedOutputPath(),
+        "a broken provider must retain the sandbox-safe external preview workflow");
     // Unlike an absent provider, a broken one is evidence this build needs sandboxing — falling
     // back to the no-op broker would grant every path and let an unreachable stored path be
     // classified MISSING and discarded instead of INACCESSIBLE.

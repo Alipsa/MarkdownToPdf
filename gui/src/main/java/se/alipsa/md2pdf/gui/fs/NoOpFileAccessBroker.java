@@ -10,6 +10,11 @@ import java.nio.file.Path;
 final class NoOpFileAccessBroker implements FileAccessBroker {
 
   @Override
+  public boolean requiresUserSelectedOutputPath() {
+    return false;
+  }
+
+  @Override
   public void remember(Path path) {
     // Nothing to remember: an unsandboxed process keeps access to whatever it can read.
   }
