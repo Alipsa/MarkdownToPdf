@@ -124,7 +124,7 @@ public class StyleTab extends BaseTab {
     FileChooser fc = new FileChooser();
     fc.setTitle("Load CSS file");
     fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSS files", "*.css"));
-    File f = fc.showOpenDialog(getTabPane() != null ? getTabPane().getScene().getWindow() : null);
+    File f = gui.showOpenDialog(fc);
     if (f == null) return;
     try {
       String css = Files.readString(f.toPath());

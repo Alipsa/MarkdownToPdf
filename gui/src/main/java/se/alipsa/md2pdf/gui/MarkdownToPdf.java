@@ -784,13 +784,35 @@ public class MarkdownToPdf extends Application {
     }
   }
 
-  private File pdfInitialDirectory() {
+  private void configurePdfSaveDialog(FileChooser chooser) {
     File markdownFile = markdownTab.getFile();
+    Project active = getActiveProject();
+    File initialDirectory = pdfInitialDirectory(markdownFile, active);
+    if (initialDirectory != null) {
+      chooser.setInitialDirectory(initialDirectory);
+    }
+    chooser.setInitialFileName(suggestedPdfFileName(markdownFile, active));
+    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+  }
+
+  /**
+   * Picks the directory a PDF save dialog should open in: the open Markdown file's directory, or
+   * failing that the active project's Markdown file's directory, or {@code null} to let the dialog
+   * fall back to the platform default.
+   *
+   * <p>Factored out as a plain function of a {@link File} and a {@link Project} — package-private
+   * and static, following {@link #populateProjects} and {@link #rememberProjectPaths} — so it can
+   * be exercised without a JavaFX toolkit.
+   *
+   * @param markdownFile the currently open Markdown file, or {@code null}
+   * @param active the active project, or {@code null}
+   * @return a usable directory, or {@code null} if none was found
+   */
+  static File pdfInitialDirectory(File markdownFile, Project active) {
     File markdownParent = markdownFile == null ? null : markdownFile.getParentFile();
     if (isUsablePdfDirectory(markdownParent)) {
       return markdownParent;
     }
-    Project active = getActiveProject();
     if (active != null && active.getMarkdownFile() != null) {
       File projectMarkdownParent = active.getMarkdownFile().toFile().getParentFile();
       if (isUsablePdfDirectory(projectMarkdownParent)) {
@@ -800,23 +822,19 @@ public class MarkdownToPdf extends Application {
     return null;
   }
 
-  private boolean isUsablePdfDirectory(File directory) {
+  private static boolean isUsablePdfDirectory(File directory) {
     return directory != null && directory.isDirectory();
-  }
-
-  private void configurePdfSaveDialog(FileChooser chooser) {
-    File initialDirectory = pdfInitialDirectory();
-    if (initialDirectory != null) {
-      chooser.setInitialDirectory(initialDirectory);
-    }
-    chooser.setInitialFileName(suggestedPdfFileName());
-    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
   }
 
   File showSaveDialog(FileChooser chooser) {
     try {
       return chooser.showSaveDialog(stage);
     } catch (IllegalArgumentException e) {
+      // Reachable: com.sun.glass.ui.CommonDialogs#convertFolder throws IllegalArgumentException
+      // ("Folder parameter must be a valid folder") when initialDirectory is non-null but not an
+      // existing directory, on every platform backend (Mac/Win/Gtk) — not caller error, since a
+      // directory that existed when configurePdfSaveDialog ran can be removed before the dialog is
+      // actually shown.
       logger().warn("Save dialog rejected its initial directory; retrying without one", e);
       chooser.setInitialDirectory(null);
       try {
@@ -832,6 +850,7 @@ public class MarkdownToPdf extends Application {
     try {
       return chooser.showOpenDialog(stage);
     } catch (IllegalArgumentException e) {
+      // See showSaveDialog: same platform-level rejection of a stale initial directory.
       logger().warn("Open dialog rejected its initial directory; retrying without one", e);
       chooser.setInitialDirectory(null);
       try {
@@ -843,10 +862,18 @@ public class MarkdownToPdf extends Application {
     }
   }
 
-  private String suggestedPdfFileName() {
-    File markdownFile = markdownTab.getFile();
+  /**
+   * Derives the PDF file name to suggest in a save dialog from the open Markdown file's name, or
+   * failing that the active project's Markdown file's name.
+   *
+   * <p>Factored out for the same reason as {@link #pdfInitialDirectory}.
+   *
+   * @param markdownFile the currently open Markdown file, or {@code null}
+   * @param active the active project, or {@code null}
+   * @return a suggested {@code .pdf} file name, never {@code null}
+   */
+  static String suggestedPdfFileName(File markdownFile, Project active) {
     if (markdownFile == null) {
-      Project active = getActiveProject();
       if (active != null && active.getMarkdownFile() != null) {
         markdownFile = active.getMarkdownFile().toFile();
       }
@@ -856,7 +883,12 @@ public class MarkdownToPdf extends Application {
     }
     String name = markdownFile.getName();
     int extension = name.lastIndexOf('.');
-    String baseName = extension > 0 ? name.substring(0, extension) : name;
+    // extension == 0 means the whole name is the "extension" (e.g. ".md"): using extension > 0
+    // here would leave that leading dot in baseName and produce ".md.pdf" instead of stripping it.
+    String baseName = extension >= 0 ? name.substring(0, extension) : name;
+    if (baseName.isBlank()) {
+      baseName = "document";
+    }
     return baseName + ".pdf";
   }
 

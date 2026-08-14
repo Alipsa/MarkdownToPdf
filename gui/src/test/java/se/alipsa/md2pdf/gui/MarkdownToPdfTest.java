@@ -2,7 +2,9 @@ package se.alipsa.md2pdf.gui;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -140,6 +142,83 @@ public class MarkdownToPdfTest {
     MarkdownToPdf.rememberProjectPaths(broker, p, projectFile);
 
     assertEquals(List.of(projectFile), broker.remembered());
+  }
+
+  @Test
+  public void suggestedPdfFileNameStripsTheMarkdownExtension() {
+    assertEquals("report.pdf", MarkdownToPdf.suggestedPdfFileName(new File("report.md"), null));
+  }
+
+  @Test
+  public void suggestedPdfFileNameKeepsALeadingDotOnAHiddenFileName() {
+    // A dot-prefixed hidden file whose extension is not the whole name: lastIndexOf('.') finds
+    // the second dot, so the leading dot must stay in the base name.
+    assertEquals(".hidden.pdf", MarkdownToPdf.suggestedPdfFileName(new File(".hidden.md"), null));
+  }
+
+  @Test
+  public void suggestedPdfFileNameFallsBackToDocumentForADotOnlyFileName() {
+    // Regression test: a file literally named ".md" has its dot at index 0, the whole name is the
+    // "extension". Stripping it naively leaves an empty base name; "document.pdf" is used instead
+    // of suggesting the hidden file name ".pdf".
+    assertEquals("document.pdf", MarkdownToPdf.suggestedPdfFileName(new File(".md"), null));
+  }
+
+  @Test
+  public void suggestedPdfFileNameFallsBackToDocumentWhenNothingIsOpen() {
+    assertEquals("document.pdf", MarkdownToPdf.suggestedPdfFileName(null, null));
+  }
+
+  @Test
+  public void suggestedPdfFileNameFallsBackToTheActiveProjectsMarkdownFile() {
+    Project p = new Project();
+    p.setName("demo");
+    p.setMarkdownFile(dir.resolve("demo.md"));
+
+    assertEquals("demo.pdf", MarkdownToPdf.suggestedPdfFileName(null, p));
+  }
+
+  @Test
+  public void pdfInitialDirectoryPrefersTheOpenMarkdownFilesDirectory() throws IOException {
+    Path markdownDir = dir.resolve("open");
+    Files.createDirectories(markdownDir);
+
+    File result = MarkdownToPdf.pdfInitialDirectory(markdownDir.resolve("doc.md").toFile(), null);
+
+    assertEquals(markdownDir.toFile(), result);
+  }
+
+  @Test
+  public void pdfInitialDirectoryFallsBackToTheActiveProjectsMarkdownFilesDirectory()
+      throws IOException {
+    Path projectDir = dir.resolve("project");
+    Files.createDirectories(projectDir);
+    Project p = new Project();
+    p.setName("demo");
+    p.setMarkdownFile(projectDir.resolve("demo.md"));
+
+    File result = MarkdownToPdf.pdfInitialDirectory(null, p);
+
+    assertEquals(projectDir.toFile(), result);
+  }
+
+  @Test
+  public void pdfInitialDirectoryIsNullWhenNoUsableDirectoryIsFound() {
+    assertNull(MarkdownToPdf.pdfInitialDirectory(null, null));
+  }
+
+  @Test
+  public void pdfInitialDirectorySkipsAMarkdownParentThatIsNotAnActualDirectory() {
+    // The Markdown file's parent may not exist (e.g. a project relocated on another machine), in
+    // which case the active project's Markdown file directory must still be considered.
+    File nonExistentParent = dir.resolve("gone-" + UUID.randomUUID()).toFile();
+    Project p = new Project();
+    p.setName("demo");
+    p.setMarkdownFile(dir.resolve("demo.md"));
+
+    File result = MarkdownToPdf.pdfInitialDirectory(new File(nonExistentParent, "doc.md"), p);
+
+    assertEquals(dir.toFile(), result);
   }
 
   private static List<String> childrenNames(Preferences node) throws BackingStoreException {
