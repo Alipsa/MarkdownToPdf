@@ -5,19 +5,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.openhtmltopdf.util.XRLog;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import se.alipsa.md2pdf.Md2PdfEngine;
 import se.alipsa.md2pdf.Md2PdfException;
 
 public class ConcurrencyTest {
+
+  @TempDir Path tempDir;
 
   static {
     // silence openhtmltopdf noice
@@ -27,11 +30,11 @@ public class ConcurrencyTest {
   }
 
   @Test
-  public void testSameInstanceConcurrently() throws InterruptedException, IOException {
+  public void testSameInstanceConcurrently() throws Exception {
     Md2PdfEngine engine = new Md2PdfEngine();
 
-    Path path1 = Paths.get("target/blue.pdf");
-    Path path2 = Paths.get("target/yellow.pdf");
+    Path path1 = tempDir.resolve("blue.pdf");
+    Path path2 = tempDir.resolve("yellow.pdf");
 
     String md1 =
         """
@@ -63,10 +66,12 @@ public class ConcurrencyTest {
             throw new RuntimeException(e);
           }
         };
-    executorService.submit(task1);
-    executorService.submit(task2);
+    Future<?> future1 = executorService.submit(task1);
+    Future<?> future2 = executorService.submit(task2);
     executorService.shutdown();
     assertTrue(executorService.awaitTermination(3, TimeUnit.SECONDS));
+    future1.get();
+    future2.get();
     assertTrue(path1.toFile().exists());
     assertTrue(path2.toFile().exists());
     assertTrue(extractContent(path1).contains("Blue Circle"));
@@ -74,9 +79,9 @@ public class ConcurrencyTest {
   }
 
   @Test
-  public void testDifferentInstancesConcurrently() throws InterruptedException, IOException {
-    Path path1 = Paths.get("target/blue2.pdf");
-    Path path2 = Paths.get("target/yellow2.pdf");
+  public void testDifferentInstancesConcurrently() throws Exception {
+    Path path1 = tempDir.resolve("blue2.pdf");
+    Path path2 = tempDir.resolve("yellow2.pdf");
 
     String md1 =
         """
@@ -110,10 +115,12 @@ public class ConcurrencyTest {
             throw new RuntimeException(e);
           }
         };
-    executorService.submit(task1);
-    executorService.submit(task2);
+    Future<?> future1 = executorService.submit(task1);
+    Future<?> future2 = executorService.submit(task2);
     executorService.shutdown();
     assertTrue(executorService.awaitTermination(3, TimeUnit.SECONDS));
+    future1.get();
+    future2.get();
     assertTrue(path1.toFile().exists());
     assertTrue(path2.toFile().exists());
     assertTrue(extractContent(path1).contains("Blue Circle"));

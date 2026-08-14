@@ -8,9 +8,11 @@ import com.openhtmltopdf.util.XRLog;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -144,7 +146,6 @@ public class Md2PdfEngine {
   }
 
   private Md2PdfEngine(Builder builder) {
-    XRLog.setLoggerImpl(new Slf4jXRLogger());
     var parserBuilder = Parser.builder();
     var rendererBuilder = HtmlRenderer.builder().softbreak(builder.softbreak);
     if (builder.tables) {
@@ -163,6 +164,16 @@ public class Md2PdfEngine {
    */
   public static Builder builder() {
     return new Builder();
+  }
+
+  /**
+   * Configure OpenHTMLtoPDF to route its logging through SLF4J.
+   *
+   * <p>OpenHTMLtoPDF logging is JVM-global, so applications should call this deliberately during
+   * their startup rather than having an engine instance replace an existing logger unexpectedly.
+   */
+  public static void configureOpenHtmlToPdfLogging() {
+    XRLog.setLoggerImpl(new Slf4jXRLogger());
   }
 
   /** Builder for configuring Markdown parsing and HTML rendering options. */
@@ -685,14 +696,42 @@ public class Md2PdfEngine {
      * @throws Md2PdfException if rendering or writing fails
      */
     public void toPdf(File file) throws Md2PdfException {
-      try (BufferedOutputStream fos =
-          new BufferedOutputStream(Files.newOutputStream(file.toPath()))) {
+      Path target = Objects.requireNonNull(file, "file").toPath().toAbsolutePath();
+      Path temporary;
+      try {
+        temporary = Files.createTempFile(target.getParent(), ".md2pdf-", ".pdf");
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+      try {
+        writePdf(temporary);
+        replaceFile(temporary, target);
+        log.debug("toPdf: Wrote {}", target);
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      } finally {
+        try {
+          Files.deleteIfExists(temporary);
+        } catch (IOException e) {
+          log.warn("Failed to remove temporary PDF {}", temporary, e);
+        }
+      }
+    }
+
+    private void writePdf(Path path) throws Md2PdfException, IOException {
+      try (BufferedOutputStream fos = new BufferedOutputStream(Files.newOutputStream(path))) {
         String html = buildHtml();
         String xhtml = htmlToXhtml(html);
         xhtmlToPdf(xhtml, fos, baseUri, fonts, metadata);
-        log.debug("toPdf: Wrote {}", file.getAbsolutePath());
-      } catch (IOException e) {
-        throw new Md2PdfException(e);
+      }
+    }
+
+    private static void replaceFile(Path source, Path target) throws IOException {
+      try {
+        Files.move(
+            source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+      } catch (AtomicMoveNotSupportedException e) {
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
       }
     }
 

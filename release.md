@@ -6,6 +6,9 @@ the published modules are recorded in their own changelogs:
 
 How a release is cut is documented in [`docs/release-process.md`](docs/release-process.md).
 
+## 0.2.0 (2026-08-14)
+- No changes to the shared build, CI or release tooling.
+
 ## 0.1.1 (2026-08-11)
 - Updated build tooling
   - spotless 3.5.1 -> 3.9.0 (google-java-format 1.22.0 -> 1.28.0)
