@@ -42,9 +42,9 @@ public class ImageUtilTest {
     Locale originalLocale = Locale.getDefault();
     try {
       Locale.setDefault(Locale.forLanguageTag("tr-TR"));
-      String dataUrl = ImageUtil.asDataUrl("/images/sample.PNG");
+      String dataUrl = ImageUtil.asDataUrl("/images/sample.GIF");
 
-      assertTrue(dataUrl.startsWith("data:image/png;base64,"));
+      assertTrue(dataUrl.startsWith("data:image/gif;base64,"));
     } finally {
       Locale.setDefault(originalLocale);
     }
