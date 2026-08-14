@@ -2,6 +2,7 @@ package test.alipsa.md2pdf.gui;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Locale;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import se.alipsa.md2pdf.model.StyleProfile;
@@ -156,6 +157,19 @@ public class StyleProfileTest {
     // Headings keep their defaults
     assertEquals(2.0, p.getH1SizeEm(), 0.001);
     assertEquals("#000000", p.getHeadingColor());
+  }
+
+  @Test
+  void cssPropertyNamesAreLocaleIndependent() {
+    Locale originalLocale = Locale.getDefault();
+    try {
+      Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+      StyleProfile p = StyleProfile.fromCss("BODY { LINE-HEIGHT: 1.5; }");
+
+      assertEquals(1.5, p.getLineHeight(), 0.001);
+    } finally {
+      Locale.setDefault(originalLocale);
+    }
   }
 
   @Test

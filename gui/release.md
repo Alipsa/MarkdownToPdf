@@ -10,6 +10,7 @@
 - **View external** now lets sandboxed distributions choose where to save the rendered PDF before
   opening it in the system viewer. PDF export and file dialogs also handle inaccessible or stale
   initial directories more safely.
+- CSS style parsing and syntax-highlight injection now behave consistently in every system locale.
 
 ## 0.1.1 (2026-08-11)
 - Added an update check: **Help > Check for Updates…** asks GitHub Releases whether a newer
