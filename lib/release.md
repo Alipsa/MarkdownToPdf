@@ -3,10 +3,10 @@
 
 ## 0.2.0 (2026-08-14)
 - PDF file output now renders completely before opening its destination, so a rendering failure
-  preserves an existing file. Writing directly also preserves destination links and attributes and
-  supports pre-created writable files in restricted directories.
-- Constructing an engine no longer changes JVM-global OpenHTMLtoPDF logging; applications can
-  explicitly enable the provided SLF4J bridge during startup.
+  preserves an existing file.
+- **Breaking:** constructing an engine no longer changes JVM-global OpenHTMLtoPDF logging. To
+  retain the bundled SLF4J bridge, call `Md2PdfEngine.configureOpenHtmlToPdfLogging()` during
+  application startup.
 - Image data-URL type detection now handles uppercase file extensions consistently across locales.
 
 ## 0.1.1 (2026-08-11)

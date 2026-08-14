@@ -80,6 +80,19 @@ String      html = job.toHtml();              // string
             job.toHtml(Path.of("out.html"));   // file
 ```
 
+File output renders the complete PDF in memory before opening the destination, so a rendering
+failure cannot overwrite an existing file. Use `toPdf(OutputStream)` when avoiding that final byte
+array is important.
+
+## Logging
+
+**Upgrading from 0.1.1:** constructing an engine no longer changes OpenHTMLtoPDF's JVM-global
+logger. To route its diagnostics through SLF4J, opt in once during application startup:
+
+```java
+Md2PdfEngine.configureOpenHtmlToPdfLogging();
+```
+
 ## Styling
 
 Use `css(...)` to **replace** the default stylesheet entirely:

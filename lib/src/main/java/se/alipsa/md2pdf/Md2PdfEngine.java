@@ -695,6 +695,9 @@ public class Md2PdfEngine {
      * replacing their directory entries. As with any direct file write, a failure while writing the
      * completed PDF can leave the destination partially written.
      *
+     * <p>File output retains the completed PDF in memory. Use {@link #toPdf(OutputStream)} when
+     * avoiding that final byte array is important.
+     *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
      */

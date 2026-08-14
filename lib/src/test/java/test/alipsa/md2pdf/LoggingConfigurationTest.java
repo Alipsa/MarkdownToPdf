@@ -3,6 +3,7 @@ package test.alipsa.md2pdf;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.openhtmltopdf.util.JDKXRLogger;
 import com.openhtmltopdf.util.XRLog;
 import com.openhtmltopdf.util.XRLogger;
 import org.junit.jupiter.api.Test;
@@ -21,9 +22,7 @@ class LoggingConfigurationTest {
 
       assertSame(configured, XRLog.getLoggerImpl());
     } finally {
-      if (original != null) {
-        XRLog.setLoggerImpl(original);
-      }
+      restoreLogger(original);
     }
   }
 
@@ -35,9 +34,11 @@ class LoggingConfigurationTest {
 
       assertInstanceOf(Slf4jXRLogger.class, XRLog.getLoggerImpl());
     } finally {
-      if (original != null) {
-        XRLog.setLoggerImpl(original);
-      }
+      restoreLogger(original);
     }
+  }
+
+  private static void restoreLogger(XRLogger original) {
+    XRLog.setLoggerImpl(original != null ? original : new JDKXRLogger());
   }
 }
