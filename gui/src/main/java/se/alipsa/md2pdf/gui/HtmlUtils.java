@@ -3,7 +3,6 @@ package se.alipsa.md2pdf.gui;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 
 /** Utilities for post-processing HTML strings loaded into WebView previews. */
 class HtmlUtils {
@@ -32,11 +31,22 @@ class HtmlUtils {
    */
   static String injectSyntaxHighlighting(String html) {
     if (html == null) return "";
-    int idx = html.toLowerCase(Locale.ROOT).lastIndexOf("</head>");
+    int idx = lastHeadEndTagStart(html);
     if (idx >= 0) {
       return html.substring(0, idx) + HIGHLIGHT_INJECTION + html.substring(idx);
     }
     return HIGHLIGHT_INJECTION + html;
+  }
+
+  private static int lastHeadEndTagStart(String html) {
+    int match = -1;
+    String closingHead = "</head>";
+    for (int i = 0; i <= html.length() - closingHead.length(); i++) {
+      if (html.regionMatches(true, i, closingHead, 0, closingHead.length())) {
+        match = i;
+      }
+    }
+    return match;
   }
 
   private static String loadResource(String path) {
