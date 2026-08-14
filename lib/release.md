@@ -2,9 +2,9 @@
 (Note, dates are in yyyy-MM-dd format)
 
 ## 0.2.0 (2026-08-14)
-- PDF file output now preserves an existing destination if rendering fails, keeps existing POSIX
-  permissions when replacing a file, and still supports a pre-created writable destination when
-  its parent does not permit temporary files.
+- PDF file output now renders completely before opening its destination, so a rendering failure
+  preserves an existing file. Writing directly also preserves destination links and attributes and
+  supports pre-created writable files in restricted directories.
 - Constructing an engine no longer changes JVM-global OpenHTMLtoPDF logging; applications can
   explicitly enable the provided SLF4J bridge during startup.
 - Image data-URL type detection now handles uppercase file extensions consistently across locales.

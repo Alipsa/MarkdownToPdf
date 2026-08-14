@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -115,23 +116,39 @@ public class OutputTest {
   }
 
   @Test
-  void testPdfFileFallsBackToDirectWriteWhenParentCannotCreateFiles() throws Exception {
+  void testPdfFileWritesThroughSymbolicLink() throws Exception {
     assumeTrue(
         Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
             != null);
-    Path parent = Files.createDirectory(tempDir.resolve("restricted"));
-    Path output = parent.resolve("existing.pdf");
-    Set<PosixFilePermission> originalPermissions = Files.getPosixFilePermissions(parent);
-    Files.writeString(output, "existing document");
-    try {
-      Files.setPosixFilePermissions(parent, PosixFilePermissions.fromString("r-x------"));
+    Path target = tempDir.resolve("target.pdf");
+    Path link = tempDir.resolve("report.pdf");
+    Files.writeString(target, "existing document");
+    Files.createSymbolicLink(link, target.getFileName());
 
-      engine.markdown("# Report").toPdf(output);
+    engine.markdown("# Report").toPdf(link);
+
+    assertTrue(Files.isSymbolicLink(link));
+    assertTrue(Files.size(target) > "existing document".length());
+  }
+
+  @Test
+  void testReadOnlyPdfFileIsNotReplaced() throws Exception {
+    assumeTrue(
+        Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
+            != null);
+    Path output = tempDir.resolve("readonly.pdf");
+    Set<PosixFilePermission> originalPermissions = PosixFilePermissions.fromString("rw-r--r--");
+    Files.writeString(output, "existing document");
+    Files.setPosixFilePermissions(output, PosixFilePermissions.fromString("r--r--r--"));
+    try {
+      assumeFalse(Files.isWritable(output));
+
+      assertThrows(Md2PdfException.class, () -> engine.markdown("# Report").toPdf(output));
     } finally {
-      Files.setPosixFilePermissions(parent, originalPermissions);
+      Files.setPosixFilePermissions(output, originalPermissions);
     }
 
-    assertTrue(Files.size(output) > "existing document".length());
+    assertEquals("existing document", Files.readString(output));
   }
 
   @Test
