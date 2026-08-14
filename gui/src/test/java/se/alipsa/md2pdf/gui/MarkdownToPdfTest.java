@@ -18,10 +18,11 @@ import se.alipsa.md2pdf.model.Project;
 import test.alipsa.md2pdf.gui.fs.RecordingFileAccessBroker;
 
 /**
- * Exercises {@link MarkdownToPdf#populateProjects} and {@link MarkdownToPdf#rememberProjectPaths}
- * directly — the plain {@code List}/{@code Preferences}/{@code FileAccessBroker} logic factored out
- * of the ComboBox-bound methods that call them — rather than through a JavaFX control. Lives in the
- * production package because both are package-private.
+ * Exercises {@link MarkdownToPdf#populateProjects}, {@link MarkdownToPdf#rememberProjectPaths},
+ * {@link MarkdownToPdf#pdfInitialDirectory}, and {@link MarkdownToPdf#suggestedPdfFileName}
+ * directly — the plain {@code File}/{@code List}/{@code Preferences}/{@code FileAccessBroker} logic
+ * factored out of the JavaFX-bound methods that call them — rather than through a JavaFX control.
+ * Lives in the production package because all four are package-private.
  */
 public class MarkdownToPdfTest {
 

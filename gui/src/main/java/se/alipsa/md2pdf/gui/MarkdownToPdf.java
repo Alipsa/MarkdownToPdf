@@ -822,6 +822,13 @@ public class MarkdownToPdf extends Application {
     return null;
   }
 
+  /**
+   * Under App Sandbox this is expected to return {@code false} for the Markdown file's parent
+   * directory: the security-scoped bookmark covers the file itself, not the enclosing directory, so
+   * {@code isDirectory()} cannot see it. {@link #pdfInitialDirectory} then falls through to {@code
+   * null} and the save dialog opens at the platform default — the correct, safe outcome, not a bug
+   * — so do not "optimise" this probe away for the sandboxed build.
+   */
   private static boolean isUsablePdfDirectory(File directory) {
     return directory != null && directory.isDirectory();
   }
@@ -873,15 +880,14 @@ public class MarkdownToPdf extends Application {
    * @return a suggested {@code .pdf} file name, never {@code null}
    */
   static String suggestedPdfFileName(File markdownFile, Project active) {
-    if (markdownFile == null) {
-      if (active != null && active.getMarkdownFile() != null) {
-        markdownFile = active.getMarkdownFile().toFile();
-      }
+    File file = markdownFile;
+    if (file == null && active != null && active.getMarkdownFile() != null) {
+      file = active.getMarkdownFile().toFile();
     }
-    if (markdownFile == null) {
+    if (file == null) {
       return "document.pdf";
     }
-    String name = markdownFile.getName();
+    String name = file.getName();
     int extension = name.lastIndexOf('.');
     // extension == 0 means the whole name is the "extension" (e.g. ".md"): using extension > 0
     // here would leave that leading dot in baseName and produce ".md.pdf" instead of stripping it.
