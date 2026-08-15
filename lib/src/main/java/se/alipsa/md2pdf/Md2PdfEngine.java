@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -735,6 +736,7 @@ public class Md2PdfEngine {
       try {
         try {
           temporary = createTemporaryPdfFile(parent);
+          temporary.toFile().deleteOnExit();
         } catch (IOException e) {
           log.debug("Could not stage PDF beside {}; buffering before writing", renderTarget, e);
           writePdfAfterRendering(renderTarget);
@@ -775,9 +777,7 @@ public class Md2PdfEngine {
             throw new Md2PdfException("Cannot resolve symbolic link at filesystem root: " + target);
           }
           resolved =
-              (linkTarget.isAbsolute() ? linkTarget : linkParent.resolve(linkTarget))
-                  .toAbsolutePath()
-                  .normalize();
+              linkTarget.isAbsolute() ? linkTarget : linkParent.toRealPath().resolve(linkTarget);
         }
         return resolved;
       } catch (IOException e) {
@@ -826,10 +826,14 @@ public class Md2PdfEngine {
     }
 
     private void preservePosixPermissions(Path target, Path temporary) throws IOException {
-      if (Files.exists(target)
-          && Files.getFileAttributeView(target, PosixFileAttributeView.class) != null) {
-        Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
+      if (Files.getFileAttributeView(temporary, PosixFileAttributeView.class) == null) {
+        return;
       }
+      if (Files.exists(target)) {
+        Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
+        return;
+      }
+      Files.setPosixFilePermissions(temporary, defaultPosixFilePermissions(temporary.getParent()));
     }
 
     private Path createTemporaryPdfFile(Path parent) throws IOException {
@@ -838,9 +842,20 @@ public class Md2PdfEngine {
             parent,
             ".md2pdf-",
             ".tmp",
-            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-rw-rw-")));
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
       }
       return Files.createTempFile(parent, ".md2pdf-", ".tmp");
+    }
+
+    private Set<java.nio.file.attribute.PosixFilePermission> defaultPosixFilePermissions(
+        Path parent) throws IOException {
+      Path probe = parent.resolve(".md2pdf-permissions-" + UUID.randomUUID() + ".tmp");
+      Files.createFile(probe);
+      try {
+        return Files.getPosixFilePermissions(probe);
+      } finally {
+        Files.deleteIfExists(probe);
+      }
     }
 
     private void moveIntoPlace(Path temporary, Path target) throws IOException {

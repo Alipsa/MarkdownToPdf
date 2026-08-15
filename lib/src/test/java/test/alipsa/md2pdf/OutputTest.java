@@ -157,6 +157,27 @@ public class OutputTest {
   }
 
   @Test
+  void testPdfFileResolvesRelativeLinkFromPhysicalParent() throws Exception {
+    assumeTrue(
+        Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
+            != null);
+    Path logicalParent = tempDir.resolve("x");
+    Path physicalRoot = tempDir.resolve("y");
+    Path physicalParent = physicalRoot.resolve("real");
+    Path expectedTarget = physicalRoot.resolve("out/report.pdf");
+    Files.createDirectories(logicalParent);
+    Files.createDirectories(physicalParent);
+    Files.createDirectories(expectedTarget.getParent());
+    Files.createSymbolicLink(logicalParent.resolve("docs"), physicalParent);
+    Files.createSymbolicLink(physicalParent.resolve("report.pdf"), Path.of("../out/report.pdf"));
+
+    engine.markdown("# Report").toPdf(logicalParent.resolve("docs/report.pdf"));
+
+    assertTrue(Files.size(expectedTarget) > 0);
+    assertFalse(Files.exists(logicalParent.resolve("out/report.pdf")));
+  }
+
+  @Test
   void testReadOnlyPdfFileIsNotReplaced() throws Exception {
     assumeTrue(
         Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
