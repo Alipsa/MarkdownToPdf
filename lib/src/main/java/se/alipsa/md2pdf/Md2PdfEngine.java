@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -54,6 +55,10 @@ public class Md2PdfEngine {
 
   private static final Logger log = LoggerFactory.getLogger(Md2PdfEngine.class);
   private static final Duration TEMPORARY_PDF_MAX_AGE = Duration.ofDays(1);
+  private static final Set<Path> SWEPT_TEMPORARY_PDF_DIRECTORIES = ConcurrentHashMap.newKeySet();
+  private static final Set<Path> WARNED_STAGING_FALLBACK_DIRECTORIES =
+      ConcurrentHashMap.newKeySet();
+  private static volatile Set<PosixFilePermission> defaultPosixFilePermissions;
 
   private static final String DEFAULT_CSS =
       """
@@ -727,6 +732,9 @@ public class Md2PdfEngine {
      */
     public void toPdf(File file) throws Md2PdfException {
       Path target = Objects.requireNonNull(file, "file").toPath().toAbsolutePath();
+      if (Files.isSymbolicLink(target) && Files.isDirectory(target)) {
+        throw new Md2PdfException("PDF destination is a directory: " + target);
+      }
       if (Files.isSymbolicLink(target) && Files.exists(target) && !Files.isRegularFile(target)) {
         writePdfDirectly(target);
         log.debug("toPdf: Wrote {}", target);
@@ -745,7 +753,7 @@ public class Md2PdfEngine {
           removeStaleTemporaryPdfs(parent);
           temporary = createTemporaryPdfFile(parent);
         } catch (IOException e) {
-          log.debug("Could not stage PDF beside {}; buffering before writing", renderTarget, e);
+          warnStagingFallback(parent, renderTarget, e);
           writePdfAfterRendering(renderTarget);
           log.debug("toPdf: Wrote {}", target);
           return;
@@ -838,8 +846,12 @@ public class Md2PdfEngine {
         return;
       }
       if (Files.exists(target)) {
-        Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
-        return;
+        try {
+          Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
+          return;
+        } catch (IOException e) {
+          log.debug("Could not preserve POSIX permissions from {}", target, e);
+        }
       }
       try {
         Files.setPosixFilePermissions(temporary, defaultPosixFilePermissions(parent));
@@ -863,6 +875,23 @@ public class Md2PdfEngine {
     }
 
     private Set<PosixFilePermission> defaultPosixFilePermissions(Path parent) throws IOException {
+      Set<PosixFilePermission> cached = defaultPosixFilePermissions;
+      if (cached != null) {
+        return cached;
+      }
+      synchronized (Md2PdfEngine.class) {
+        cached = defaultPosixFilePermissions;
+        if (cached != null) {
+          return cached;
+        }
+        cached = discoverDefaultPosixFilePermissions(parent);
+        defaultPosixFilePermissions = cached;
+        return cached;
+      }
+    }
+
+    private Set<PosixFilePermission> discoverDefaultPosixFilePermissions(Path parent)
+        throws IOException {
       Path probe = parent.resolve(".md2pdf-permissions-" + UUID.randomUUID() + ".tmp");
       Files.createFile(probe);
       try {
@@ -873,6 +902,9 @@ public class Md2PdfEngine {
     }
 
     private void removeStaleTemporaryPdfs(Path parent) {
+      if (!SWEPT_TEMPORARY_PDF_DIRECTORIES.add(parent)) {
+        return;
+      }
       Instant expiry = Instant.now().minus(TEMPORARY_PDF_MAX_AGE);
       try (Stream<Path> entries = Files.list(parent)) {
         entries
@@ -895,7 +927,20 @@ public class Md2PdfEngine {
 
     private boolean isTemporaryPdf(Path path) {
       Path fileName = path.getFileName();
-      return fileName != null && fileName.toString().startsWith(".md2pdf-");
+      return fileName != null
+          && fileName.toString().startsWith(".md2pdf-")
+          && fileName.toString().endsWith(".tmp");
+    }
+
+    private void warnStagingFallback(Path parent, Path target, IOException cause) {
+      if (WARNED_STAGING_FALLBACK_DIRECTORIES.add(parent)) {
+        log.warn(
+            "Could not stage PDF beside {}; future writes in this directory may not be atomic",
+            target,
+            cause);
+      } else {
+        log.debug("Could not stage PDF beside {}; buffering before writing", target, cause);
+      }
     }
 
     private void moveIntoPlace(Path temporary, Path target) throws IOException {
