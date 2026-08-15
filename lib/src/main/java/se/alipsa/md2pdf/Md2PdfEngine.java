@@ -709,10 +709,10 @@ public class Md2PdfEngine {
      *
      * <p>When a temporary sibling can be created, the document is rendered there before replacing
      * the destination. This preserves an existing file if rendering or staging fails. The
-     * replacement is atomic when the filesystem supports atomic moves. Destinations that cannot
-     * support sibling staging are written directly for compatibility. Existing symbolic links are
-     * followed so the link itself is retained. Replacing a regular file gives it a new filesystem
-     * identity, so hard links and file ownership may not be retained.
+     * replacement is atomic when the filesystem supports atomic moves. For a regular destination
+     * that cannot support sibling staging, the document is rendered in memory before it is written.
+     * Existing symbolic links are followed so the link itself is retained. Replacing a regular file
+     * gives it a new filesystem identity, so hard links and file ownership may not be retained.
      *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
@@ -736,8 +736,8 @@ public class Md2PdfEngine {
         try {
           temporary = createTemporaryPdfFile(parent);
         } catch (IOException e) {
-          log.debug("Could not stage PDF beside {}; writing directly", renderTarget, e);
-          writePdfDirectly(renderTarget);
+          log.debug("Could not stage PDF beside {}; buffering before writing", renderTarget, e);
+          writePdfAfterRendering(renderTarget);
           log.debug("toPdf: Wrote {}", target);
           return;
         }
@@ -770,8 +770,12 @@ public class Md2PdfEngine {
             throw new Md2PdfException("Cyclic symbolic link destination: " + target);
           }
           Path linkTarget = Files.readSymbolicLink(resolved);
+          Path linkParent = resolved.getParent();
+          if (!linkTarget.isAbsolute() && linkParent == null) {
+            throw new Md2PdfException("Cannot resolve symbolic link at filesystem root: " + target);
+          }
           resolved =
-              (linkTarget.isAbsolute() ? linkTarget : resolved.getParent().resolve(linkTarget))
+              (linkTarget.isAbsolute() ? linkTarget : linkParent.resolve(linkTarget))
                   .toAbsolutePath()
                   .normalize();
         }
@@ -801,6 +805,15 @@ public class Md2PdfEngine {
     private void writePdfDirectly(Path target) throws Md2PdfException {
       try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(target))) {
         renderPdf(output);
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+    }
+
+    private void writePdfAfterRendering(Path target) throws Md2PdfException {
+      byte[] pdf = toPdf();
+      try {
+        Files.write(target, pdf);
       } catch (IOException e) {
         throw new Md2PdfException(e);
       }

@@ -82,8 +82,8 @@ String      html = job.toHtml();              // string
 
 Where the destination directory permits it, file output stages the rendered PDF in a temporary
 sibling before replacing the destination, so a rendering or staging failure cannot overwrite an
-existing file. The replacement is atomic when the filesystem supports atomic moves. Destinations
-that cannot support sibling staging are written directly for compatibility.
+existing file. The replacement is atomic when the filesystem supports atomic moves. A regular
+destination that cannot support sibling staging is rendered in memory before it is written.
 
 ## Logging
 
