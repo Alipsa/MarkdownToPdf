@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import se.alipsa.md2pdf.ImageUtil;
 
@@ -34,5 +35,18 @@ public class ImageUtilTest {
 
     assertTrue(dataUrl.startsWith("data:image/png;base64,"));
     assertTrue(Base64.getDecoder().decode(dataUrl.substring(dataUrl.indexOf(',') + 1)).length > 0);
+  }
+
+  @Test
+  void testMediaTypeDetectionIsLocaleIndependent() throws Exception {
+    Locale originalLocale = Locale.getDefault();
+    try {
+      Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+      String dataUrl = ImageUtil.asDataUrl("/images/sample.GIF");
+
+      assertTrue(dataUrl.startsWith("data:image/gif;base64,"));
+    } finally {
+      Locale.setDefault(originalLocale);
+    }
   }
 }

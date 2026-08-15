@@ -3,6 +3,7 @@ package se.alipsa.md2pdf.model;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
@@ -212,7 +213,7 @@ public class StyleProfile {
   }
 
   private static String normalizeSelector(String sel) {
-    return sel.replaceAll("\\s+", " ").trim().toLowerCase();
+    return sel.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
   }
 
   private static Map<String, String> parseDeclarations(String decls) {
@@ -222,7 +223,7 @@ public class StyleProfile {
       if (decl.isEmpty()) continue;
       int colon = decl.indexOf(':');
       if (colon < 0) continue;
-      String prop = decl.substring(0, colon).trim().toLowerCase();
+      String prop = decl.substring(0, colon).trim().toLowerCase(Locale.ROOT);
       String value = decl.substring(colon + 1).trim();
       map.put(prop, value);
     }

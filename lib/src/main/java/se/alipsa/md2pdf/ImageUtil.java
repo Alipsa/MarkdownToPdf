@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
+import java.util.Locale;
 
 /** Image utilities */
 public class ImageUtil {
@@ -127,7 +128,7 @@ public class ImageUtil {
   }
 
   private static String getMediaType(String resource) {
-    String res = resource.toLowerCase();
+    String res = resource.toLowerCase(Locale.ROOT);
     if (res.endsWith("png")) {
       return "image/png";
     }

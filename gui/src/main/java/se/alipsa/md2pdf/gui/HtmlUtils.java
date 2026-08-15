@@ -31,11 +31,21 @@ class HtmlUtils {
    */
   static String injectSyntaxHighlighting(String html) {
     if (html == null) return "";
-    int idx = html.toLowerCase().lastIndexOf("</head>");
+    int idx = lastHeadEndTagStart(html);
     if (idx >= 0) {
       return html.substring(0, idx) + HIGHLIGHT_INJECTION + html.substring(idx);
     }
     return HIGHLIGHT_INJECTION + html;
+  }
+
+  private static int lastHeadEndTagStart(String html) {
+    String closingHead = "</head>";
+    for (int i = html.length() - closingHead.length(); i >= 0; i--) {
+      if (html.regionMatches(true, i, closingHead, 0, closingHead.length())) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private static String loadResource(String path) {

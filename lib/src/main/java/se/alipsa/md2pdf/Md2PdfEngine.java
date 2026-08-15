@@ -4,16 +4,27 @@ import com.openhtmltopdf.extend.SVGDrawer;
 import com.openhtmltopdf.mathmlsupport.MathMLDrawer;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.openhtmltopdf.svgsupport.BatikSVGDrawer;
+import com.openhtmltopdf.util.JDKXRLogger;
 import com.openhtmltopdf.util.XRLog;
+import com.openhtmltopdf.util.XRLogger;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -144,7 +155,7 @@ public class Md2PdfEngine {
   }
 
   private Md2PdfEngine(Builder builder) {
-    XRLog.setLoggerImpl(new Slf4jXRLogger());
+    configureOpenHtmlToPdfLoggingIfAbsent();
     var parserBuilder = Parser.builder();
     var rendererBuilder = HtmlRenderer.builder().softbreak(builder.softbreak);
     if (builder.tables) {
@@ -163,6 +174,25 @@ public class Md2PdfEngine {
    */
   public static Builder builder() {
     return new Builder();
+  }
+
+  /**
+   * Configure OpenHTMLtoPDF to route its logging through SLF4J.
+   *
+   * <p>OpenHTMLtoPDF logging is JVM-global. This method replaces any logger already configured for
+   * OpenHTMLtoPDF, so applications should call it deliberately during startup.
+   */
+  public static void configureOpenHtmlToPdfLogging() {
+    XRLog.setLoggerImpl(new Slf4jXRLogger());
+  }
+
+  private static void configureOpenHtmlToPdfLoggingIfAbsent() {
+    synchronized (XRLog.class) {
+      XRLogger logger = XRLog.getLoggerImpl();
+      if (logger == null || logger instanceof JDKXRLogger) {
+        XRLog.setLoggerImpl(new Slf4jXRLogger());
+      }
+    }
   }
 
   /** Builder for configuring Markdown parsing and HTML rendering options. */
@@ -681,18 +711,193 @@ public class Md2PdfEngine {
     /**
      * Render the job to a PDF file.
      *
+     * <p>When a temporary sibling can be created, the document is rendered there before replacing
+     * the destination. This preserves an existing file if rendering or staging fails. The
+     * replacement is atomic when the filesystem supports atomic moves. For a regular destination
+     * that cannot support sibling staging, the document is rendered in memory before it is written.
+     * Existing symbolic links are followed so the link itself is retained. Replacing a regular file
+     * gives it a new filesystem identity, so hard links, file ownership, and access-control entries
+     * may not be retained. A write failure on a destination that cannot support sibling staging can
+     * leave that destination partially written.
+     *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
      */
     public void toPdf(File file) throws Md2PdfException {
-      try (BufferedOutputStream fos =
-          new BufferedOutputStream(Files.newOutputStream(file.toPath()))) {
-        String html = buildHtml();
-        String xhtml = htmlToXhtml(html);
-        xhtmlToPdf(xhtml, fos, baseUri, fonts, metadata);
-        log.debug("toPdf: Wrote {}", file.getAbsolutePath());
+      Path target = Objects.requireNonNull(file, "file").toPath().toAbsolutePath();
+      if (Files.isSymbolicLink(target) && Files.isDirectory(target)) {
+        throw new Md2PdfException("PDF destination is a directory: " + target);
+      }
+      if (Files.isSymbolicLink(target) && Files.exists(target) && !Files.isRegularFile(target)) {
+        writePdfDirectly(target);
+        log.debug("toPdf: Wrote {}", target);
+        return;
+      }
+      Path renderTarget = resolveSymbolicLink(target);
+      Path parent = validatePdfDestination(renderTarget);
+      if (Files.exists(renderTarget) && !Files.isRegularFile(renderTarget)) {
+        writePdfDirectly(renderTarget);
+        log.debug("toPdf: Wrote {}", target);
+        return;
+      }
+      Path temporary = null;
+      try {
+        try {
+          temporary = createTemporaryPdfFile(parent);
+        } catch (IOException e) {
+          log.warn("Could not stage PDF beside {}; buffering before writing", renderTarget, e);
+          writePdfAfterRendering(renderTarget);
+          log.debug("toPdf: Wrote {}", target);
+          return;
+        }
+        try (OutputStream output =
+            new BufferedOutputStream(
+                Files.newOutputStream(
+                    temporary,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    LinkOption.NOFOLLOW_LINKS))) {
+          renderPdf(output);
+        }
+        preservePosixPermissions(renderTarget, temporary, parent);
+        moveIntoPlace(temporary, renderTarget);
+        temporary = null;
+        log.debug("toPdf: Wrote {}", target);
       } catch (IOException e) {
         throw new Md2PdfException(e);
+      } finally {
+        if (temporary != null) {
+          try {
+            Files.deleteIfExists(temporary);
+          } catch (IOException e) {
+            log.warn("Could not remove temporary PDF {}", temporary, e);
+          }
+        }
+      }
+    }
+
+    private Path resolveSymbolicLink(Path target) throws Md2PdfException {
+      try {
+        Path resolved = target;
+        Set<Path> visited = new HashSet<>();
+        while (Files.isSymbolicLink(resolved)) {
+          if (!visited.add(resolved)) {
+            throw new Md2PdfException("Cyclic symbolic link destination: " + target);
+          }
+          Path linkTarget = Files.readSymbolicLink(resolved);
+          Path linkParent = resolved.getParent();
+          if (!linkTarget.isAbsolute() && linkParent == null) {
+            throw new Md2PdfException("Cannot resolve symbolic link at filesystem root: " + target);
+          }
+          resolved =
+              linkTarget.isAbsolute() ? linkTarget : linkParent.toRealPath().resolve(linkTarget);
+        }
+        return resolved;
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+    }
+
+    private Path validatePdfDestination(Path target) throws Md2PdfException {
+      Path parent = target.getParent();
+      if (parent == null) {
+        throw new Md2PdfException("Cannot write a PDF to filesystem root " + target);
+      }
+      if (!Files.isDirectory(parent)) {
+        throw new Md2PdfException("PDF destination directory does not exist: " + parent);
+      }
+      if (Files.isDirectory(target)) {
+        throw new Md2PdfException("PDF destination is a directory: " + target);
+      }
+      if (Files.exists(target) && !Files.isWritable(target)) {
+        throw new Md2PdfException("PDF destination is not writable: " + target);
+      }
+      return parent;
+    }
+
+    private void writePdfDirectly(Path target) throws Md2PdfException {
+      try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(target))) {
+        renderPdf(output);
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+    }
+
+    private void writePdfAfterRendering(Path target) throws Md2PdfException {
+      byte[] pdf = toPdf();
+      try {
+        Files.write(target, pdf);
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+    }
+
+    private void renderPdf(OutputStream output) throws Md2PdfException {
+      String html = buildHtml();
+      String xhtml = htmlToXhtml(html);
+      xhtmlToPdf(xhtml, output, baseUri, fonts, metadata);
+    }
+
+    private void preservePosixPermissions(Path target, Path temporary, Path parent)
+        throws IOException {
+      if (Files.getFileAttributeView(temporary, PosixFileAttributeView.class) == null) {
+        return;
+      }
+      if (Files.exists(target)) {
+        try {
+          Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
+          return;
+        } catch (IOException e) {
+          log.debug("Could not preserve POSIX permissions from {}", target, e);
+        }
+      }
+      try {
+        Files.setPosixFilePermissions(temporary, defaultPosixFilePermissions(parent));
+      } catch (IOException e) {
+        log.debug(
+            "Could not determine default POSIX permissions for {}; retaining temporary mode",
+            parent,
+            e);
+      }
+    }
+
+    private Path createTemporaryPdfFile(Path parent) throws IOException {
+      if (Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null) {
+        return Files.createTempFile(
+            parent,
+            ".md2pdf-",
+            ".tmp",
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+      }
+      return Files.createTempFile(parent, ".md2pdf-", ".tmp");
+    }
+
+    private Set<PosixFilePermission> defaultPosixFilePermissions(Path parent) throws IOException {
+      return discoverDefaultPosixFilePermissions(parent);
+    }
+
+    private Set<PosixFilePermission> discoverDefaultPosixFilePermissions(Path parent)
+        throws IOException {
+      Path probe = parent.resolve(".md2pdf-permissions-" + UUID.randomUUID() + ".tmp");
+      Files.createFile(probe);
+      try {
+        return Files.getPosixFilePermissions(probe);
+      } finally {
+        Files.deleteIfExists(probe);
+      }
+    }
+
+    private void moveIntoPlace(Path temporary, Path target) throws IOException {
+      try {
+        Files.move(
+            temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+      } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+        try {
+          Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException retryFailure) {
+          retryFailure.addSuppressed(e);
+          throw retryFailure;
+        }
       }
     }
 

@@ -80,6 +80,25 @@ String      html = job.toHtml();              // string
             job.toHtml(Path.of("out.html"));   // file
 ```
 
+Where the destination directory permits it, file output stages the rendered PDF in a temporary
+sibling before replacing the destination, so a rendering or staging failure cannot overwrite an
+existing file. The replacement is atomic when the filesystem supports atomic moves. A regular
+destination that cannot support sibling staging is rendered in memory before it is written; a
+failure while writing that fallback can still leave a partially written destination.
+
+## Logging
+
+By default, constructing the first engine replaces any OpenHTMLtoPDF JDK logger with the bundled
+SLF4J bridge. This includes a JDK logger installed by OpenHTMLtoPDF's `XRLog` tuning methods. A
+non-JDK logger implementation is preserved.
+
+To explicitly replace OpenHTMLtoPDF's JVM-global logger with the bundled SLF4J bridge during
+application startup:
+
+```java
+Md2PdfEngine.configureOpenHtmlToPdfLogging();
+```
+
 ## Styling
 
 Use `css(...)` to **replace** the default stylesheet entirely:
