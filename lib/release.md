@@ -2,8 +2,8 @@
 (Note, dates are in yyyy-MM-dd format)
 
 ## 0.2.0 (2026-08-14)
-- PDF file output now renders completely before opening its destination, so a rendering failure
-  preserves an existing file.
+- PDF file output stages regular filesystem destinations before replacing them, so a rendering or
+  staging failure preserves an existing file where sibling staging is available.
 - Engine construction retains the bundled SLF4J bridge when OpenHTMLtoPDF uses its built-in JDK
   logger, while preserving an application-provided non-JDK JVM-global logger.
 - Image data-URL type detection now handles uppercase file extensions consistently across locales.

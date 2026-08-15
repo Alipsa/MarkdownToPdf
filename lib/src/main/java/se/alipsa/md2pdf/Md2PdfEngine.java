@@ -15,13 +15,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -49,6 +53,7 @@ import org.slf4j.LoggerFactory;
 public class Md2PdfEngine {
 
   private static final Logger log = LoggerFactory.getLogger(Md2PdfEngine.class);
+  private static final Duration TEMPORARY_PDF_MAX_AGE = Duration.ofDays(1);
 
   private static final String DEFAULT_CSS =
       """
@@ -713,7 +718,9 @@ public class Md2PdfEngine {
      * replacement is atomic when the filesystem supports atomic moves. For a regular destination
      * that cannot support sibling staging, the document is rendered in memory before it is written.
      * Existing symbolic links are followed so the link itself is retained. Replacing a regular file
-     * gives it a new filesystem identity, so hard links and file ownership may not be retained.
+     * gives it a new filesystem identity, so hard links, file ownership, and access-control entries
+     * may not be retained. A write failure on a destination that cannot support sibling staging can
+     * leave that destination partially written.
      *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
@@ -735,8 +742,8 @@ public class Md2PdfEngine {
       Path temporary = null;
       try {
         try {
+          removeStaleTemporaryPdfs(parent);
           temporary = createTemporaryPdfFile(parent);
-          temporary.toFile().deleteOnExit();
         } catch (IOException e) {
           log.debug("Could not stage PDF beside {}; buffering before writing", renderTarget, e);
           writePdfAfterRendering(renderTarget);
@@ -746,7 +753,7 @@ public class Md2PdfEngine {
         try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(temporary))) {
           renderPdf(output);
         }
-        preservePosixPermissions(renderTarget, temporary);
+        preservePosixPermissions(renderTarget, temporary, parent);
         moveIntoPlace(temporary, renderTarget);
         temporary = null;
         log.debug("toPdf: Wrote {}", target);
@@ -825,7 +832,8 @@ public class Md2PdfEngine {
       xhtmlToPdf(xhtml, output, baseUri, fonts, metadata);
     }
 
-    private void preservePosixPermissions(Path target, Path temporary) throws IOException {
+    private void preservePosixPermissions(Path target, Path temporary, Path parent)
+        throws IOException {
       if (Files.getFileAttributeView(temporary, PosixFileAttributeView.class) == null) {
         return;
       }
@@ -833,7 +841,14 @@ public class Md2PdfEngine {
         Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
         return;
       }
-      Files.setPosixFilePermissions(temporary, defaultPosixFilePermissions(temporary.getParent()));
+      try {
+        Files.setPosixFilePermissions(temporary, defaultPosixFilePermissions(parent));
+      } catch (IOException e) {
+        log.debug(
+            "Could not determine default POSIX permissions for {}; retaining temporary mode",
+            parent,
+            e);
+      }
     }
 
     private Path createTemporaryPdfFile(Path parent) throws IOException {
@@ -847,8 +862,7 @@ public class Md2PdfEngine {
       return Files.createTempFile(parent, ".md2pdf-", ".tmp");
     }
 
-    private Set<java.nio.file.attribute.PosixFilePermission> defaultPosixFilePermissions(
-        Path parent) throws IOException {
+    private Set<PosixFilePermission> defaultPosixFilePermissions(Path parent) throws IOException {
       Path probe = parent.resolve(".md2pdf-permissions-" + UUID.randomUUID() + ".tmp");
       Files.createFile(probe);
       try {
@@ -856,6 +870,32 @@ public class Md2PdfEngine {
       } finally {
         Files.deleteIfExists(probe);
       }
+    }
+
+    private void removeStaleTemporaryPdfs(Path parent) {
+      Instant expiry = Instant.now().minus(TEMPORARY_PDF_MAX_AGE);
+      try (Stream<Path> entries = Files.list(parent)) {
+        entries
+            .filter(this::isTemporaryPdf)
+            .filter(Files::isRegularFile)
+            .forEach(
+                path -> {
+                  try {
+                    if (Files.getLastModifiedTime(path).toInstant().isBefore(expiry)) {
+                      Files.deleteIfExists(path);
+                    }
+                  } catch (IOException e) {
+                    log.debug("Could not remove stale temporary PDF {}", path, e);
+                  }
+                });
+      } catch (IOException e) {
+        log.debug("Could not inspect {} for stale temporary PDFs", parent, e);
+      }
+    }
+
+    private boolean isTemporaryPdf(Path path) {
+      Path fileName = path.getFileName();
+      return fileName != null && fileName.toString().startsWith(".md2pdf-");
     }
 
     private void moveIntoPlace(Path temporary, Path target) throws IOException {
