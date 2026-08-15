@@ -11,6 +11,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -144,6 +147,7 @@ public class Md2PdfEngine {
   }
 
   private Md2PdfEngine(Builder builder) {
+    configureOpenHtmlToPdfLoggingIfAbsent();
     var parserBuilder = Parser.builder();
     var rendererBuilder = HtmlRenderer.builder().softbreak(builder.softbreak);
     if (builder.tables) {
@@ -167,11 +171,19 @@ public class Md2PdfEngine {
   /**
    * Configure OpenHTMLtoPDF to route its logging through SLF4J.
    *
-   * <p>OpenHTMLtoPDF logging is JVM-global, so applications should call this deliberately during
-   * their startup rather than having an engine instance replace an existing logger unexpectedly.
+   * <p>OpenHTMLtoPDF logging is JVM-global. This method replaces any logger already configured for
+   * OpenHTMLtoPDF, so applications should call it deliberately during startup.
    */
   public static void configureOpenHtmlToPdfLogging() {
     XRLog.setLoggerImpl(new Slf4jXRLogger());
+  }
+
+  private static void configureOpenHtmlToPdfLoggingIfAbsent() {
+    synchronized (XRLog.class) {
+      if (XRLog.getLoggerImpl() == null) {
+        XRLog.setLoggerImpl(new Slf4jXRLogger());
+      }
+    }
   }
 
   /** Builder for configuring Markdown parsing and HTML rendering options. */
@@ -690,29 +702,95 @@ public class Md2PdfEngine {
     /**
      * Render the job to a PDF file.
      *
-     * <p>The document is rendered completely before the destination is opened. This preserves an
-     * existing file if rendering fails, and writes through symbolic and hard links without
-     * replacing their directory entries. As with any direct file write, a failure while writing the
-     * completed PDF can leave the destination partially written.
-     *
-     * <p>File output retains the completed PDF in memory. Use {@link #toPdf(OutputStream)} when
-     * avoiding that final byte array is important.
+     * <p>The document is rendered to a temporary sibling before replacing the destination. This
+     * preserves an existing file if rendering or staging fails. The replacement is atomic when the
+     * filesystem supports atomic moves. Existing symbolic links are followed so the link itself is
+     * retained.
      *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
      */
     public void toPdf(File file) throws Md2PdfException {
       Path target = Objects.requireNonNull(file, "file").toPath().toAbsolutePath();
+      Path renderTarget = resolveSymbolicLink(target);
+      Path parent = validatePdfDestination(renderTarget);
+      Path temporary = null;
+      try {
+        temporary = createTemporaryPdfFile(parent);
+        preservePosixPermissions(renderTarget, temporary);
+        try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(temporary))) {
+          String html = buildHtml();
+          String xhtml = htmlToXhtml(html);
+          xhtmlToPdf(xhtml, output, baseUri, fonts, metadata);
+        }
+        moveIntoPlace(temporary, renderTarget);
+        temporary = null;
+        log.debug("toPdf: Wrote {}", target);
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      } finally {
+        if (temporary != null) {
+          try {
+            Files.deleteIfExists(temporary);
+          } catch (IOException e) {
+            log.warn("Could not remove temporary PDF {}", temporary, e);
+          }
+        }
+      }
+    }
+
+    private Path resolveSymbolicLink(Path target) throws Md2PdfException {
+      try {
+        return Files.isSymbolicLink(target) && Files.exists(target) ? target.toRealPath() : target;
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+    }
+
+    private Path validatePdfDestination(Path target) throws Md2PdfException {
       Path parent = target.getParent();
       if (parent == null) {
         throw new Md2PdfException("Cannot write a PDF to filesystem root " + target);
       }
-      byte[] pdf = toPdf();
+      if (!Files.isDirectory(parent)) {
+        throw new Md2PdfException("PDF destination directory does not exist: " + parent);
+      }
+      if (!Files.isWritable(parent)) {
+        throw new Md2PdfException("PDF destination directory is not writable: " + parent);
+      }
+      if (Files.isDirectory(target)) {
+        throw new Md2PdfException("PDF destination is a directory: " + target);
+      }
+      if (Files.exists(target) && !Files.isWritable(target)) {
+        throw new Md2PdfException("PDF destination is not writable: " + target);
+      }
+      return parent;
+    }
+
+    private void preservePosixPermissions(Path target, Path temporary) throws IOException {
+      if (Files.exists(target)
+          && Files.getFileAttributeView(target, PosixFileAttributeView.class) != null) {
+        Files.setPosixFilePermissions(temporary, Files.getPosixFilePermissions(target));
+      }
+    }
+
+    private Path createTemporaryPdfFile(Path parent) throws IOException {
+      if (Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null) {
+        return Files.createTempFile(
+            parent,
+            ".md2pdf-",
+            ".tmp",
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-rw-rw-")));
+      }
+      return Files.createTempFile(parent, ".md2pdf-", ".tmp");
+    }
+
+    private void moveIntoPlace(Path temporary, Path target) throws IOException {
       try {
-        Files.write(target, pdf);
-        log.debug("toPdf: Wrote {}", target);
-      } catch (IOException e) {
-        throw new Md2PdfException(e);
+        Files.move(
+            temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+      } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+        Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
       }
     }
 

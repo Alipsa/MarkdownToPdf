@@ -13,7 +13,20 @@ import se.alipsa.md2pdf.Slf4jXRLogger;
 class LoggingConfigurationTest {
 
   @Test
-  void engineConstructionDoesNotReplaceConfiguredLogger() {
+  void engineConstructionInstallsSlf4jBridgeWhenNoLoggerIsConfigured() {
+    XRLogger original = XRLog.getLoggerImpl();
+    try {
+      XRLog.setLoggerImpl(null);
+      new Md2PdfEngine();
+
+      assertInstanceOf(Slf4jXRLogger.class, XRLog.getLoggerImpl());
+    } finally {
+      restoreLogger(original);
+    }
+  }
+
+  @Test
+  void engineConstructionPreservesConfiguredLogger() {
     XRLogger original = XRLog.getLoggerImpl();
     XRLogger configured = new Slf4jXRLogger();
     XRLog.setLoggerImpl(configured);
@@ -27,8 +40,10 @@ class LoggingConfigurationTest {
   }
 
   @Test
-  void loggingBridgeIsEnabledExplicitly() {
+  void explicitLoggingConfigurationReplacesExistingLogger() {
     XRLogger original = XRLog.getLoggerImpl();
+    XRLogger configured = new JDKXRLogger();
+    XRLog.setLoggerImpl(configured);
     try {
       Md2PdfEngine.configureOpenHtmlToPdfLogging();
 
@@ -39,6 +54,6 @@ class LoggingConfigurationTest {
   }
 
   private static void restoreLogger(XRLogger original) {
-    XRLog.setLoggerImpl(original != null ? original : new JDKXRLogger());
+    XRLog.setLoggerImpl(original);
   }
 }

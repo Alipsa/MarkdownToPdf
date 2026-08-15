@@ -39,14 +39,13 @@ class HtmlUtils {
   }
 
   private static int lastHeadEndTagStart(String html) {
-    int match = -1;
     String closingHead = "</head>";
-    for (int i = 0; i <= html.length() - closingHead.length(); i++) {
+    for (int i = html.length() - closingHead.length(); i >= 0; i--) {
       if (html.regionMatches(true, i, closingHead, 0, closingHead.length())) {
-        match = i;
+        return i;
       }
     }
-    return match;
+    return -1;
   }
 
   private static String loadResource(String path) {

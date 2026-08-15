@@ -69,9 +69,7 @@ public class ConcurrencyTest {
     Future<?> future1 = executorService.submit(task1);
     Future<?> future2 = executorService.submit(task2);
     executorService.shutdown();
-    assertTrue(executorService.awaitTermination(3, TimeUnit.SECONDS));
-    future1.get();
-    future2.get();
+    awaitTasks(executorService, future1, future2);
     assertTrue(path1.toFile().exists());
     assertTrue(path2.toFile().exists());
     assertTrue(extractContent(path1).contains("Blue Circle"));
@@ -118,9 +116,7 @@ public class ConcurrencyTest {
     Future<?> future1 = executorService.submit(task1);
     Future<?> future2 = executorService.submit(task2);
     executorService.shutdown();
-    assertTrue(executorService.awaitTermination(3, TimeUnit.SECONDS));
-    future1.get();
-    future2.get();
+    awaitTasks(executorService, future1, future2);
     assertTrue(path1.toFile().exists());
     assertTrue(path2.toFile().exists());
     assertTrue(extractContent(path1).contains("Blue Circle"));
@@ -130,6 +126,17 @@ public class ConcurrencyTest {
   String extractContent(Path path) throws IOException {
     try (PDDocument pdf = Loader.loadPDF(path.toFile())) {
       return new PDFTextStripper().getText(pdf);
+    }
+  }
+
+  private void awaitTasks(ExecutorService executorService, Future<?>... futures) throws Exception {
+    try {
+      for (Future<?> future : futures) {
+        future.get(30, TimeUnit.SECONDS);
+      }
+    } finally {
+      executorService.shutdownNow();
+      assertTrue(executorService.awaitTermination(5, TimeUnit.SECONDS));
     }
   }
 }

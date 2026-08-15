@@ -86,8 +86,11 @@ array is important.
 
 ## Logging
 
-**Upgrading from 0.1.1:** constructing an engine no longer changes OpenHTMLtoPDF's JVM-global
-logger. To route its diagnostics through SLF4J, opt in once during application startup:
+By default, constructing the first engine installs the bundled SLF4J bridge if OpenHTMLtoPDF does
+not already have a logger. An application-provided OpenHTMLtoPDF logger is preserved.
+
+To explicitly replace OpenHTMLtoPDF's JVM-global logger with the bundled SLF4J bridge during
+application startup:
 
 ```java
 Md2PdfEngine.configureOpenHtmlToPdfLogging();

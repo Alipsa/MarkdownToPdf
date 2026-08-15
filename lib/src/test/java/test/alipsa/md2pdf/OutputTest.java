@@ -87,6 +87,14 @@ public class OutputTest {
   }
 
   @Test
+  void testPdfDestinationDirectoryFailsBeforeRendering() throws IOException {
+    Path output = tempDir.resolve("output-directory");
+    Files.createDirectory(output);
+
+    assertThrows(Md2PdfException.class, () -> engine.markdown("# Report").toPdf(output));
+  }
+
+  @Test
   void testPdfFilePreservesExistingPosixPermissions() throws Exception {
     assumeTrue(
         Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
