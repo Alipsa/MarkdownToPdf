@@ -88,8 +88,9 @@ failure while writing that fallback can still leave a partially written destinat
 
 ## Logging
 
-By default, constructing the first engine replaces OpenHTMLtoPDF's built-in JDK logger with the
-bundled SLF4J bridge. An application-provided non-JDK logger is preserved.
+By default, constructing the first engine replaces any OpenHTMLtoPDF JDK logger with the bundled
+SLF4J bridge. This includes a JDK logger installed by OpenHTMLtoPDF's `XRLog` tuning methods. A
+non-JDK logger implementation is preserved.
 
 To explicitly replace OpenHTMLtoPDF's JVM-global logger with the bundled SLF4J bridge during
 application startup:
