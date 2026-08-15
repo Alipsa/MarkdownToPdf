@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-22.04
@@ -47,19 +51,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Pinned versioned labels, never -latest: macos-latest is a moving alias whose
-          # architecture GitHub has already changed once, and a silent migration would
-          # produce an x64 runtime under an aarch64 filename.
-          - os: ubuntu-22.04
-            platform: linux
-            label: linux-x64
-          - os: macos-14
-            platform: macos
-            label: macos-aarch64
-          - os: windows-2022
-            platform: windows
-            label: windows-x64
+        # PR updates exercise Linux packaging; the main branch produces and verifies every release
+        # artifact consumed by release.sh.
+        # Pinned versioned labels, never -latest: macos-latest is a moving alias whose
+        # architecture GitHub has already changed once, and a silent migration would produce an
+        # x64 runtime under an aarch64 filename.
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"os":"ubuntu-22.04","platform":"linux","label":"linux-x64"},{"os":"macos-14","platform":"macos","label":"macos-aarch64"},{"os":"windows-2022","platform":"windows","label":"windows-x64"}]' || '[{"os":"ubuntu-22.04","platform":"linux","label":"linux-x64"}]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -203,16 +200,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-22.04
-            platform: linux
-            label: linux-x64
-          - os: macos-14
-            platform: macos
-            label: macos-aarch64
-          - os: windows-2022
-            platform: windows
-            label: windows-x64
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"os":"ubuntu-22.04","platform":"linux","label":"linux-x64"},{"os":"macos-14","platform":"macos","label":"macos-aarch64"},{"os":"windows-2022","platform":"windows","label":"windows-x64"}]' || '[{"os":"ubuntu-22.04","platform":"linux","label":"linux-x64"}]') }}
     runs-on: ${{ matrix.os }}
     needs: build
     defaults:
