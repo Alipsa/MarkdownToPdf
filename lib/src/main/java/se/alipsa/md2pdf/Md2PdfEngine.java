@@ -776,12 +776,7 @@ public class Md2PdfEngine {
           renderPdf(output);
         }
         preservePosixPermissions(renderTarget, temporary, parent);
-        try {
-          moveIntoPlace(temporary, renderTarget);
-        } catch (IOException e) {
-          warnStagingFallback(parent, renderTarget, e);
-          Files.copy(temporary, renderTarget, StandardCopyOption.REPLACE_EXISTING);
-        }
+        moveIntoPlace(temporary, renderTarget);
         temporary = null;
         log.debug("toPdf: Wrote {}", target);
       } catch (IOException e) {
@@ -924,8 +919,11 @@ public class Md2PdfEngine {
     }
 
     private void removeStaleTemporaryPdfs(Path parent) {
-      if (!markFirst(SWEPT_TEMPORARY_PDF_DIRECTORIES, normalizedDirectory(parent))) {
-        return;
+      Path cacheKey = normalizedDirectory(parent);
+      synchronized (SWEPT_TEMPORARY_PDF_DIRECTORIES) {
+        if (SWEPT_TEMPORARY_PDF_DIRECTORIES.containsKey(cacheKey)) {
+          return;
+        }
       }
       Instant expiry = Instant.now().minus(TEMPORARY_PDF_MAX_AGE);
       try (Stream<Path> entries = Files.list(parent)) {
@@ -944,7 +942,9 @@ public class Md2PdfEngine {
                 });
       } catch (IOException e) {
         log.debug("Could not inspect {} for stale temporary PDFs", parent, e);
+        return;
       }
+      markFirst(SWEPT_TEMPORARY_PDF_DIRECTORIES, cacheKey);
     }
 
     private boolean isTemporaryPdf(Path path) {

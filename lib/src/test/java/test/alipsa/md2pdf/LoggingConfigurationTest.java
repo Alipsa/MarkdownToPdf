@@ -54,6 +54,6 @@ class LoggingConfigurationTest {
   }
 
   private static void restoreLogger(XRLogger original) {
-    XRLog.setLoggerImpl(original);
+    XRLog.setLoggerImpl(original != null ? original : new JDKXRLogger());
   }
 }
