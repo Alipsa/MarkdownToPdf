@@ -1,7 +1,7 @@
 # MarkdownToPdf GUI Release History
 (Note, dates are in yyyy-MM-dd format)
 
-## 0.2.0 (2026-08-14)
+## 0.2.0 (2026-08-15)
 - Added a pluggable file-access layer for sandboxed distributions. Stored projects are retained
   when their files are temporarily inaccessible, and the application can ask to locate an
   inaccessible project Markdown file and remember the new location.

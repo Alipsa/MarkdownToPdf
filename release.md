@@ -6,7 +6,7 @@ the published modules are recorded in their own changelogs:
 
 How a release is cut is documented in [`docs/release-process.md`](docs/release-process.md).
 
-## 0.2.0 (2026-08-14)
+## 0.2.0 (2026-08-15)
 - No changes to the shared build, CI or release tooling.
 
 ## 0.1.1 (2026-08-11)
