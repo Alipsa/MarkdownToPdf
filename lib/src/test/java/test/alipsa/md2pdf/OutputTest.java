@@ -140,6 +140,23 @@ public class OutputTest {
   }
 
   @Test
+  void testPdfFileWritesThroughDanglingSymbolicLink() throws Exception {
+    assumeTrue(
+        Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)
+            != null);
+    Path targetDirectory = tempDir.resolve("output");
+    Path target = targetDirectory.resolve("report.pdf");
+    Path link = tempDir.resolve("report.pdf");
+    Files.createDirectory(targetDirectory);
+    Files.createSymbolicLink(link, tempDir.relativize(target));
+
+    engine.markdown("# Report").toPdf(link);
+
+    assertTrue(Files.isSymbolicLink(link));
+    assertTrue(Files.size(target) > 0);
+  }
+
+  @Test
   void testReadOnlyPdfFileIsNotReplaced() throws Exception {
     assumeTrue(
         Files.getFileAttributeView(tempDir, java.nio.file.attribute.PosixFileAttributeView.class)

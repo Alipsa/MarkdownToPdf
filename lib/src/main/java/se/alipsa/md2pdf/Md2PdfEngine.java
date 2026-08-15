@@ -4,7 +4,9 @@ import com.openhtmltopdf.extend.SVGDrawer;
 import com.openhtmltopdf.mathmlsupport.MathMLDrawer;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.openhtmltopdf.svgsupport.BatikSVGDrawer;
+import com.openhtmltopdf.util.JDKXRLogger;
 import com.openhtmltopdf.util.XRLog;
+import com.openhtmltopdf.util.XRLogger;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -15,8 +17,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -180,7 +184,8 @@ public class Md2PdfEngine {
 
   private static void configureOpenHtmlToPdfLoggingIfAbsent() {
     synchronized (XRLog.class) {
-      if (XRLog.getLoggerImpl() == null) {
+      XRLogger logger = XRLog.getLoggerImpl();
+      if (logger == null || logger instanceof JDKXRLogger) {
         XRLog.setLoggerImpl(new Slf4jXRLogger());
       }
     }
@@ -702,27 +707,44 @@ public class Md2PdfEngine {
     /**
      * Render the job to a PDF file.
      *
-     * <p>The document is rendered to a temporary sibling before replacing the destination. This
-     * preserves an existing file if rendering or staging fails. The replacement is atomic when the
-     * filesystem supports atomic moves. Existing symbolic links are followed so the link itself is
-     * retained.
+     * <p>When a temporary sibling can be created, the document is rendered there before replacing
+     * the destination. This preserves an existing file if rendering or staging fails. The
+     * replacement is atomic when the filesystem supports atomic moves. Destinations that cannot
+     * support sibling staging are written directly for compatibility. Existing symbolic links are
+     * followed so the link itself is retained. Replacing a regular file gives it a new filesystem
+     * identity, so hard links and file ownership may not be retained.
      *
      * @param file the file to write the PDF to
      * @throws Md2PdfException if rendering or writing fails
      */
     public void toPdf(File file) throws Md2PdfException {
       Path target = Objects.requireNonNull(file, "file").toPath().toAbsolutePath();
+      if (Files.isSymbolicLink(target) && Files.exists(target) && !Files.isRegularFile(target)) {
+        writePdfDirectly(target);
+        log.debug("toPdf: Wrote {}", target);
+        return;
+      }
       Path renderTarget = resolveSymbolicLink(target);
       Path parent = validatePdfDestination(renderTarget);
+      if (Files.exists(renderTarget) && !Files.isRegularFile(renderTarget)) {
+        writePdfDirectly(renderTarget);
+        log.debug("toPdf: Wrote {}", target);
+        return;
+      }
       Path temporary = null;
       try {
-        temporary = createTemporaryPdfFile(parent);
-        preservePosixPermissions(renderTarget, temporary);
-        try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(temporary))) {
-          String html = buildHtml();
-          String xhtml = htmlToXhtml(html);
-          xhtmlToPdf(xhtml, output, baseUri, fonts, metadata);
+        try {
+          temporary = createTemporaryPdfFile(parent);
+        } catch (IOException e) {
+          log.debug("Could not stage PDF beside {}; writing directly", renderTarget, e);
+          writePdfDirectly(renderTarget);
+          log.debug("toPdf: Wrote {}", target);
+          return;
         }
+        try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(temporary))) {
+          renderPdf(output);
+        }
+        preservePosixPermissions(renderTarget, temporary);
         moveIntoPlace(temporary, renderTarget);
         temporary = null;
         log.debug("toPdf: Wrote {}", target);
@@ -741,7 +763,19 @@ public class Md2PdfEngine {
 
     private Path resolveSymbolicLink(Path target) throws Md2PdfException {
       try {
-        return Files.isSymbolicLink(target) && Files.exists(target) ? target.toRealPath() : target;
+        Path resolved = target;
+        Set<Path> visited = new HashSet<>();
+        while (Files.isSymbolicLink(resolved)) {
+          if (!visited.add(resolved)) {
+            throw new Md2PdfException("Cyclic symbolic link destination: " + target);
+          }
+          Path linkTarget = Files.readSymbolicLink(resolved);
+          resolved =
+              (linkTarget.isAbsolute() ? linkTarget : resolved.getParent().resolve(linkTarget))
+                  .toAbsolutePath()
+                  .normalize();
+        }
+        return resolved;
       } catch (IOException e) {
         throw new Md2PdfException(e);
       }
@@ -755,9 +789,6 @@ public class Md2PdfEngine {
       if (!Files.isDirectory(parent)) {
         throw new Md2PdfException("PDF destination directory does not exist: " + parent);
       }
-      if (!Files.isWritable(parent)) {
-        throw new Md2PdfException("PDF destination directory is not writable: " + parent);
-      }
       if (Files.isDirectory(target)) {
         throw new Md2PdfException("PDF destination is a directory: " + target);
       }
@@ -765,6 +796,20 @@ public class Md2PdfEngine {
         throw new Md2PdfException("PDF destination is not writable: " + target);
       }
       return parent;
+    }
+
+    private void writePdfDirectly(Path target) throws Md2PdfException {
+      try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(target))) {
+        renderPdf(output);
+      } catch (IOException e) {
+        throw new Md2PdfException(e);
+      }
+    }
+
+    private void renderPdf(OutputStream output) throws Md2PdfException {
+      String html = buildHtml();
+      String xhtml = htmlToXhtml(html);
+      xhtmlToPdf(xhtml, output, baseUri, fonts, metadata);
     }
 
     private void preservePosixPermissions(Path target, Path temporary) throws IOException {

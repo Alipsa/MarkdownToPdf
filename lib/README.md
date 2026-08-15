@@ -80,14 +80,15 @@ String      html = job.toHtml();              // string
             job.toHtml(Path.of("out.html"));   // file
 ```
 
-File output renders the complete PDF in memory before opening the destination, so a rendering
-failure cannot overwrite an existing file. Use `toPdf(OutputStream)` when avoiding that final byte
-array is important.
+Where the destination directory permits it, file output stages the rendered PDF in a temporary
+sibling before replacing the destination, so a rendering or staging failure cannot overwrite an
+existing file. The replacement is atomic when the filesystem supports atomic moves. Destinations
+that cannot support sibling staging are written directly for compatibility.
 
 ## Logging
 
-By default, constructing the first engine installs the bundled SLF4J bridge if OpenHTMLtoPDF does
-not already have a logger. An application-provided OpenHTMLtoPDF logger is preserved.
+By default, constructing the first engine replaces OpenHTMLtoPDF's built-in JDK logger with the
+bundled SLF4J bridge. An application-provided non-JDK logger is preserved.
 
 To explicitly replace OpenHTMLtoPDF's JVM-global logger with the bundled SLF4J bridge during
 application startup:

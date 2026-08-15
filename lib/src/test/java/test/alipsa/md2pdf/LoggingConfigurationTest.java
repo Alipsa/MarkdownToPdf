@@ -13,10 +13,10 @@ import se.alipsa.md2pdf.Slf4jXRLogger;
 class LoggingConfigurationTest {
 
   @Test
-  void engineConstructionInstallsSlf4jBridgeWhenNoLoggerIsConfigured() {
+  void engineConstructionReplacesDefaultJdkLoggerWithSlf4jBridge() {
     XRLogger original = XRLog.getLoggerImpl();
     try {
-      XRLog.setLoggerImpl(null);
+      XRLog.setLoggerImpl(new JDKXRLogger());
       new Md2PdfEngine();
 
       assertInstanceOf(Slf4jXRLogger.class, XRLog.getLoggerImpl());
