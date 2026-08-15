@@ -11,24 +11,20 @@ import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -56,13 +52,6 @@ import org.slf4j.LoggerFactory;
 public class Md2PdfEngine {
 
   private static final Logger log = LoggerFactory.getLogger(Md2PdfEngine.class);
-  private static final Duration TEMPORARY_PDF_MAX_AGE = Duration.ofDays(1);
-  private static final int MAX_TRACKED_DIRECTORIES = 128;
-  private static final Map<Path, Boolean> SWEPT_TEMPORARY_PDF_DIRECTORIES = boundedDirectoryMap();
-  private static final Map<Path, Boolean> WARNED_STAGING_FALLBACK_DIRECTORIES =
-      boundedDirectoryMap();
-  private static final Map<Path, Set<PosixFilePermission>> DEFAULT_POSIX_FILE_PERMISSIONS =
-      boundedDirectoryMap();
 
   private static final String DEFAULT_CSS =
       """
@@ -204,16 +193,6 @@ public class Md2PdfEngine {
         XRLog.setLoggerImpl(new Slf4jXRLogger());
       }
     }
-  }
-
-  private static <V> Map<Path, V> boundedDirectoryMap() {
-    return Collections.synchronizedMap(
-        new LinkedHashMap<>(MAX_TRACKED_DIRECTORIES, 0.75f, true) {
-          @Override
-          protected boolean removeEldestEntry(Map.Entry<Path, V> eldest) {
-            return size() > MAX_TRACKED_DIRECTORIES;
-          }
-        });
   }
 
   /** Builder for configuring Markdown parsing and HTML rendering options. */
@@ -764,15 +743,20 @@ public class Md2PdfEngine {
       Path temporary = null;
       try {
         try {
-          removeStaleTemporaryPdfs(parent);
           temporary = createTemporaryPdfFile(parent);
         } catch (IOException e) {
-          warnStagingFallback(parent, renderTarget, e);
+          log.warn("Could not stage PDF beside {}; buffering before writing", renderTarget, e);
           writePdfAfterRendering(renderTarget);
           log.debug("toPdf: Wrote {}", target);
           return;
         }
-        try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(temporary))) {
+        try (OutputStream output =
+            new BufferedOutputStream(
+                Files.newOutputStream(
+                    temporary,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    LinkOption.NOFOLLOW_LINKS))) {
           renderPdf(output);
         }
         preservePosixPermissions(renderTarget, temporary, parent);
@@ -889,22 +873,7 @@ public class Md2PdfEngine {
     }
 
     private Set<PosixFilePermission> defaultPosixFilePermissions(Path parent) throws IOException {
-      Path cacheKey = normalizedDirectory(parent);
-      synchronized (DEFAULT_POSIX_FILE_PERMISSIONS) {
-        Set<PosixFilePermission> cached = DEFAULT_POSIX_FILE_PERMISSIONS.get(cacheKey);
-        if (cached != null) {
-          return cached;
-        }
-      }
-      Set<PosixFilePermission> discovered = discoverDefaultPosixFilePermissions(parent);
-      synchronized (DEFAULT_POSIX_FILE_PERMISSIONS) {
-        Set<PosixFilePermission> cached = DEFAULT_POSIX_FILE_PERMISSIONS.get(cacheKey);
-        if (cached != null) {
-          return cached;
-        }
-        DEFAULT_POSIX_FILE_PERMISSIONS.put(cacheKey, discovered);
-        return discovered;
-      }
+      return discoverDefaultPosixFilePermissions(parent);
     }
 
     private Set<PosixFilePermission> discoverDefaultPosixFilePermissions(Path parent)
@@ -918,77 +887,17 @@ public class Md2PdfEngine {
       }
     }
 
-    private void removeStaleTemporaryPdfs(Path parent) {
-      Path cacheKey = normalizedDirectory(parent);
-      synchronized (SWEPT_TEMPORARY_PDF_DIRECTORIES) {
-        if (SWEPT_TEMPORARY_PDF_DIRECTORIES.containsKey(cacheKey)) {
-          return;
-        }
-      }
-      Instant expiry = Instant.now().minus(TEMPORARY_PDF_MAX_AGE);
-      try (Stream<Path> entries = Files.list(parent)) {
-        entries
-            .filter(this::isTemporaryPdf)
-            .filter(Files::isRegularFile)
-            .forEach(
-                path -> {
-                  try {
-                    if (Files.getLastModifiedTime(path).toInstant().isBefore(expiry)) {
-                      Files.deleteIfExists(path);
-                    }
-                  } catch (IOException e) {
-                    log.debug("Could not remove stale temporary PDF {}", path, e);
-                  }
-                });
-      } catch (IOException e) {
-        log.debug("Could not inspect {} for stale temporary PDFs", parent, e);
-        return;
-      }
-      markFirst(SWEPT_TEMPORARY_PDF_DIRECTORIES, cacheKey);
-    }
-
-    private boolean isTemporaryPdf(Path path) {
-      Path fileName = path.getFileName();
-      return fileName != null
-          && fileName.toString().startsWith(".md2pdf-")
-          && fileName.toString().endsWith(".tmp");
-    }
-
-    private void warnStagingFallback(Path parent, Path target, IOException cause) {
-      if (markFirst(WARNED_STAGING_FALLBACK_DIRECTORIES, normalizedDirectory(parent))) {
-        log.warn(
-            "Could not stage PDF beside {}; future writes in this directory may not be atomic",
-            target,
-            cause);
-      } else {
-        log.debug("Could not stage PDF beside {}; buffering before writing", target, cause);
-      }
-    }
-
-    private Path normalizedDirectory(Path directory) {
-      try {
-        return directory.toRealPath();
-      } catch (IOException e) {
-        return directory.toAbsolutePath().normalize();
-      }
-    }
-
-    private boolean markFirst(Map<Path, Boolean> directories, Path directory) {
-      synchronized (directories) {
-        if (directories.containsKey(directory)) {
-          return false;
-        }
-        directories.put(directory, Boolean.TRUE);
-        return true;
-      }
-    }
-
     private void moveIntoPlace(Path temporary, Path target) throws IOException {
       try {
         Files.move(
             temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
       } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-        Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+        try {
+          Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException retryFailure) {
+          retryFailure.addSuppressed(e);
+          throw retryFailure;
+        }
       }
     }
 

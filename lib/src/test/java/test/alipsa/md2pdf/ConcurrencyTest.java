@@ -130,13 +130,18 @@ public class ConcurrencyTest {
   }
 
   private void awaitTasks(ExecutorService executorService, Future<?>... futures) throws Exception {
+    boolean tasksCompleted = false;
     try {
       for (Future<?> future : futures) {
         future.get(30, TimeUnit.SECONDS);
       }
+      tasksCompleted = true;
     } finally {
       executorService.shutdownNow();
-      assertTrue(executorService.awaitTermination(5, TimeUnit.SECONDS));
+      boolean terminated = executorService.awaitTermination(5, TimeUnit.SECONDS);
+      if (tasksCompleted) {
+        assertTrue(terminated);
+      }
     }
   }
 }
