@@ -122,18 +122,37 @@ Double-click the `MarkdownToPdf` shortcut on the Desktop, or run:
 
 ## Recovery after a partial release
 
-`release.sh` publishes to Maven Central in step 6, and that step cannot be undone or
-repeated. Steps 7 and 8 — the tag and the GitHub release — are both reversible.
+Both `./release.sh lib` and `./release.sh gui` can fail after the tag is pushed but before the
+GitHub release is created (step 8) — a `gh` auth expiry, a network drop, or an asset upload error
+partway through several ~100 MB zips all leave the tag pushed with no release to show for it.
+Re-running the same command then dies in its own preconditions, since the tag now exists both
+locally and on the remote.
 
-If a release fails after the deploy:
+### lib
 
-    git push --delete origin v<version>
-    git tag -d v<version>
-    gh release delete v<version> --yes    # only if a partial release was created
-    ./release.sh --skip-deploy
+`./release.sh lib` additionally publishes to Maven Central in step 6, and that step cannot be
+undone or repeated — steps 7 and 8 (the tag and the GitHub release) are both reversible on their
+own.
 
-`--skip-deploy` re-downloads the same CI artifacts and resumes from the tag. It works
-from a clean checkout: nothing in steps 3-5 is built locally.
+If a lib release fails after the deploy:
+
+    git push --delete origin md2pdf-v<version>
+    git tag -d md2pdf-v<version>
+    gh release delete md2pdf-v<version> --yes    # only if a partial release was created
+    ./release.sh lib --skip-deploy
+
+`--skip-deploy` re-downloads the same CI artifacts and resumes from the tag. It works from a
+clean checkout: nothing in steps 3-5 is built locally.
+
+### gui
+
+gui has no irreversible step — every stage is safe to redo, so recovery is just
+delete-and-re-run, every time:
+
+    git push --delete origin MarkdownToPdf-v<version>
+    git tag -d MarkdownToPdf-v<version>
+    gh release delete MarkdownToPdf-v<version> --yes    # only if a partial release was created
+    ./release.sh gui
 
 ## Style Profiles
 
