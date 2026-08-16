@@ -1,27 +1,54 @@
 # MarkdownToPdf release process
 
-Run `./release.sh` from a clean `main` checkout. It downloads the artifacts from the green CI
-run for `HEAD`, publishes the library to Maven Central, creates the version tag and opens the
-GitHub release. Use `./release.sh --skip-deploy` only when Maven Central already received the
-release and a later release step needs recovery; see the recovery instructions in
-[`gui/readme.md`](../gui/readme.md).
+`lib` and `gui` release independently, on independent version numbers. `gui` releases never
+touch Maven Central.
 
-## Before releasing
+```
+./release.sh lib [--skip-deploy]
+./release.sh gui
+```
 
-Bump `<revision>` in the root `pom.xml`, then give **all three** changelogs a
-`## <version>` section — [`release.md`](../release.md), [`lib/release.md`](../lib/release.md)
-and [`gui/release.md`](../gui/release.md). Each file covers only its own artifact:
-`md2pdf-parent` for the shared build, CI and release tooling, `md2pdf` for the library, and
-`MarkdownToPdf` for the desktop application.
+Run either from a clean `main` checkout. Both download the artifacts from the green CI run for
+`HEAD`, create the version tag, and open the GitHub release; `./release.sh lib` additionally
+publishes the library to Maven Central. Use `./release.sh lib --skip-deploy` only when Maven
+Central already received the release and a later release step needs recovery; see
+[`gui/readme.md`](../gui/readme.md) for lib's and gui's recovery instructions.
 
-`release.sh` composes the GitHub release notes from those three sections, one per artifact,
-and checks them in its preconditions — before anything is downloaded and long before the
-irreversible Maven Central deploy. A module whose heading still reads `-SNAPSHOT` has no
-section for the version being released, and the run aborts with:
+## Before releasing a lib version
+
+Bump `<revision>` in the root `pom.xml`, then give **both** relevant changelogs a
+`## <version>` section — [`release.md`](../release.md) and [`lib/release.md`](../lib/release.md).
+`release.md` covers the shared build, CI and release tooling; `lib/release.md` covers the
+library itself.
+
+## Before releasing a gui version
+
+Bump **two** files in lockstep:
+
+- `gui/pom.xml`'s own `<version>`.
+- The dependency `<version>` in `gui/MarkdownToPdf.xml` — `release.sh gui` checks these match
+  and refuses to proceed otherwise, but the values still have to be written by hand in both
+  places.
+
+Then give [`gui/release.md`](../gui/release.md) a `## <version>` section. If this is the first
+release under the new `MarkdownToPdf-v<version>` tag scheme, that section must also say plainly
+that installs predating this change will not detect this or any future update automatically (the
+old `UpdateChecker` parses the new tag scheme incorrectly) and should be updated manually from
+the GitHub releases page.
+
+## What `release.sh` checks
+
+`release.sh` composes the GitHub release notes from the relevant changelog section(s) above and
+checks them in its preconditions — before anything is downloaded and long before the irreversible
+Maven Central deploy (lib only). A module whose heading still reads `-SNAPSHOT` has no section for
+the version being released, and the run aborts with:
 
     ERROR: gui/release.md has no section for 0.1.1 — bump its heading from -SNAPSHOT before releasing
 
-Push the release commit and wait for its CI run to go green before running `./release.sh`;
-the script releases the artifacts built by the run for `HEAD`, so a later commit means a
-later CI run and a re-check.
+For a gui release, it also checks that `gui/MarkdownToPdf.xml`'s dependency version matches
+`gui/pom.xml`'s version, and dies with a clear message before doing anything else if they've
+drifted.
 
+Push the release commit and wait for its CI run to go green before running `./release.sh lib [--skip-deploy]`
+or `./release.sh gui`, as appropriate; the script releases the artifacts built by the run for
+`HEAD`, so a later commit means a later CI run and a re-check.
