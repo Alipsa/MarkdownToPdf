@@ -3,6 +3,7 @@ package se.alipsa.md2pdf.gui.update;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -69,7 +70,11 @@ public class UpdateChecker {
       throw new UpdateCheckException(
           "GitHub returned HTTP " + response.statusCode() + " for " + apiUrl);
     }
-    return parseAndEvaluate(currentVersion, UpdatePlatform.detectCurrent(), response.body());
+    return parseAndEvaluate(
+        currentVersion,
+        UpdatePlatform.detectCurrent(),
+        response.body(),
+        hasNextPage(response.headers()));
   }
 
   /**
@@ -92,6 +97,18 @@ public class UpdateChecker {
    */
   public static UpdateCheckResult parseAndEvaluate(
       String currentVersion, UpdatePlatform platform, String responseJson) {
+    return parseAndEvaluate(currentVersion, platform, responseJson, false);
+  }
+
+  /**
+   * Evaluates one page of a {@code GET /releases} response.
+   *
+   * <p>When GitHub signals another page, an apparent up-to-date result is indeterminate: a newer
+   * GUI release may be on a page not yet inspected. A discovered newer release is still safe to
+   * offer, because it is newer regardless of what later pages contain.
+   */
+  private static UpdateCheckResult parseAndEvaluate(
+      String currentVersion, UpdatePlatform platform, String responseJson, boolean hasNextPage) {
     if (platform == UpdatePlatform.UNSUPPORTED) {
       LOGGER.info("Skipping update check: no release archive for this platform.");
       return UpdateCheckResult.indeterminate();
@@ -104,6 +121,11 @@ public class UpdateChecker {
     String tagName = GitHubReleaseJson.extractTagName(releaseJson);
     String latestVersion = tagName.substring(TAG_PREFIX.length());
     if (!VersionComparator.isNewer(latestVersion, currentVersion)) {
+      if (hasNextPage) {
+        LOGGER.info(
+            "Skipping up-to-date result: another releases page may contain a newer GUI release.");
+        return UpdateCheckResult.indeterminate();
+      }
       LOGGER.info(
           "No update available: latest release {} is not newer than the running {}.",
           latestVersion,
@@ -135,6 +157,10 @@ public class UpdateChecker {
     return UpdateCheckResult.updateAvailable(
         new UpdateInfo(
             latestVersion, tagName, expectedAssetName, downloadUrl, checksumsUrl, htmlUrl));
+  }
+
+  private static boolean hasNextPage(HttpHeaders headers) {
+    return headers.allValues("Link").stream().anyMatch(link -> link.contains("rel=\"next\""));
   }
 
   /**

@@ -81,25 +81,29 @@ echo "Releasing $MODULE $VERSION"
 
 git fetch --tags --quiet
 # 0.2.0 and earlier check the repository-wide releases/latest endpoint and only understand bare
-# v<version> tags.  Make the first new-style GUI release available under both tags so those
-# installed clients can update into the prefix-aware checker.  Create the compatibility release
-# last below, making it releases/latest until a subsequent repo-wide release is published.
+# v<version> tags. Make the first new-style GUI release available under both tags so those
+# installed clients can update into the prefix-aware checker. git fetch --tags above makes this
+# an offline check: a network/auth failure cannot accidentally re-arm the one-shot release.
 LEGACY_GUI_TAG=""
-if [ "$MODULE" = "gui" ] \
-  && ! git ls-remote --exit-code --tags origin "refs/tags/MarkdownToPdf-v*" > /dev/null 2>&1; then
+if [ "$MODULE" = "gui" ] && [ -z "$(git tag --list 'MarkdownToPdf-v*')" ]; then
   LEGACY_GUI_TAG="v$VERSION"
 fi
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && die "tag $TAG already exists locally"
 git ls-remote --exit-code --tags origin "$TAG" > /dev/null 2>&1 && die "tag $TAG already exists on the remote"
 
-# Transitional guard: this repo's pre-existing releases were tagged bare "v<version>",
-# before lib and gui split into their own tag schemes. It self-retires once every
-# pre-split version has been superseded — no future version will ever collide with a
-# legacy tag, only versions that were already released before this script existed.
-git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null \
-  && die "$VERSION was already released under the legacy tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
-git ls-remote --exit-code --tags origin "v$VERSION" > /dev/null 2>&1 \
-  && die "$VERSION was already released under the legacy tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
+# Only these genuinely pre-split bare tags reserve a version for both independently-versioned
+# modules. The first new-style GUI release deliberately creates its own bare compatibility tag,
+# which must not prevent lib from later releasing the same version.
+case "$VERSION" in
+  0.1.0|0.1.1|0.2.0)
+    git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null \
+      && die "$VERSION was already released under the pre-split tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
+    ;;
+esac
+if [ -n "$LEGACY_GUI_TAG" ]; then
+  git rev-parse -q --verify "refs/tags/$LEGACY_GUI_TAG" > /dev/null \
+    && die "compatibility tag $LEGACY_GUI_TAG already exists — delete its tag and GitHub release before re-running the first new-style gui release"
+fi
 
 git push --dry-run --quiet origin HEAD || die "git push would fail"
 

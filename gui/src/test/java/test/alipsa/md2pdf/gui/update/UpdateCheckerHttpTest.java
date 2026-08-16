@@ -52,10 +52,21 @@ public class UpdateCheckerHttpTest {
   }
 
   private void respond(int status, String body) {
+    respond(status, body, false);
+  }
+
+  private void respond(int status, String body, boolean hasNextPage) {
     server.createContext(
         "/releases",
         exchange -> {
           byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+          if (hasNextPage) {
+            exchange
+                .getResponseHeaders()
+                .add(
+                    "Link",
+                    "<https://api.github.com/repos/Alipsa/MarkdownToPdf/releases?page=2>; rel=\"next\"");
+          }
           // sendResponseHeaders' responseLength contract: 0 means chunked with unspecified
           // length, -1 means no response body at all. A genuinely empty body must send -1, not
           // 0, or the client is left waiting on a chunked stream that never starts.
@@ -122,5 +133,31 @@ public class UpdateCheckerHttpTest {
       assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
       assertTrue(result.updateInfo().isPresent());
     }
+  }
+
+  @Test
+  void currentVersionOnAnIncompletePageIsIndeterminate() throws UpdateCheckException {
+    UpdatePlatform platform = UpdatePlatform.detectCurrent();
+    String assetName = "md2pdf-0.1.0" + platform.assetSuffix();
+    respond(
+        200,
+        """
+        [
+          {
+            "tag_name": "MarkdownToPdf-v0.1.0",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v0.1.0",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
+        """
+            .formatted(assetName, assetName),
+        true);
+
+    UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
+
+    assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    assertTrue(result.updateInfo().isEmpty());
   }
 }
