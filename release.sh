@@ -26,8 +26,11 @@ case "$MODULE" in
     esac
     ;;
   gui)
-    [ -z "${2:-}" ] \
-      || die "gui has no Maven Central deploy step, so --skip-deploy does not apply. usage: ./release.sh gui"
+    case "${2:-}" in
+      "") ;;
+      --skip-deploy) die "gui has no Maven Central deploy step, so --skip-deploy does not apply. usage: ./release.sh gui" ;;
+      *) die "unrecognized argument: ${2}. usage: ./release.sh gui" ;;
+    esac
     ;;
   "")
     die "usage: ./release.sh lib [--skip-deploy] | ./release.sh gui"
@@ -78,6 +81,16 @@ echo "Releasing $MODULE $VERSION"
 git fetch --tags --quiet
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && die "tag $TAG already exists locally"
 git ls-remote --exit-code --tags origin "$TAG" > /dev/null 2>&1 && die "tag $TAG already exists on the remote"
+
+# Transitional guard: this repo's pre-existing releases were tagged bare "v<version>",
+# before lib and gui split into their own tag schemes. It self-retires once every
+# pre-split version has been superseded — no future version will ever collide with a
+# legacy tag, only versions that were already released before this script existed.
+git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null \
+  && die "$VERSION was already released under the legacy tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
+git ls-remote --exit-code --tags origin "v$VERSION" > /dev/null 2>&1 \
+  && die "$VERSION was already released under the legacy tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
+
 git push --dry-run --quiet origin HEAD || die "git push would fail"
 
 if [ "$MODULE" = "lib" ]; then
@@ -198,7 +211,8 @@ asset_floor() {
   case "$1" in
     *-linux-x64.zip|*-macos-aarch64.zip|*-windows-x64.zip) echo 40000000 ;;  # 40 MB
     *-no-jdk.zip)                                          echo  5000000 ;;  #  5 MB
-    *-javadoc.jar|*-sources.jar)                           echo    10000 ;;  # 10 KB
+    *-javadoc.jar)                                         echo    10000 ;;  # 10 KB
+    *-sources.jar)                                         echo     5000 ;;  #  5 KB
     *) echo 1 ;;
   esac
 }

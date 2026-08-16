@@ -19,7 +19,8 @@ Central already received the release and a later release step needs recovery; se
 Bump `<revision>` in the root `pom.xml`, then give **both** relevant changelogs a
 `## <version>` section — [`release.md`](../release.md) and [`lib/release.md`](../lib/release.md).
 `release.md` covers the shared build, CI and release tooling; `lib/release.md` covers the
-library itself.
+library itself. (`0.2.0` was already released under the legacy bare `v0.2.0` tag — the first
+lib release under the new `md2pdf-v<version>` scheme must be a version bumped past `0.2.0`.)
 
 ## Before releasing a gui version
 
@@ -34,7 +35,9 @@ Then give [`gui/release.md`](../gui/release.md) a `## <version>` section. If thi
 release under the new `MarkdownToPdf-v<version>` tag scheme, that section must also say plainly
 that installs predating this change will not detect this or any future update automatically (the
 old `UpdateChecker` parses the new tag scheme incorrectly) and should be updated manually from
-the GitHub releases page.
+the GitHub releases page. (`0.2.0` was already released under the legacy bare `v0.2.0` tag — the
+first gui release under the new `MarkdownToPdf-v<version>` scheme must be a version bumped past
+`0.2.0`.)
 
 ## What `release.sh` checks
 

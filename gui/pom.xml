@@ -12,9 +12,9 @@
   <artifactId>MarkdownToPdf</artifactId>
   <!-- gui's own version, independent of the parent's <revision>. Bump this when releasing
        gui; keep gui/MarkdownToPdf.xml's dependency version in lockstep (release.sh checks
-       this). The <parent><version> above MUST stay the literal text "${revision}" —
-       overriding revision here or making the parent reference a literal both break the
-       build (see the design spec's "Rejected" section). -->
+       this). The <parent><version> above MUST stay the unresolved revision property
+       reference, never a literal version — overriding revision here or hardcoding the
+       parent reference both break the build (see the design spec's "Rejected" section). -->
   <version>0.2.0</version>
   <packaging>jar</packaging>
 
