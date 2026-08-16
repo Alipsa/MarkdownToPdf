@@ -46,6 +46,23 @@ jobs:
           zsh -n gui/src/main/assembly/mac/markdownToPdf
           zsh -n gui/src/main/assembly/mac/mkicns.zsh
       # md2pdf-install.cmd has no linter; its native packaging and overlap jobs exercise it.
+      - run: cat .github/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.LIBERICA_VERSION }}
+          distribution: liberica
+          java-package: jdk+fx
+          cache: maven
+      # release.sh's gui flow enforces this same lockstep at release time; checking it here
+      # too means drift is caught on every push/PR instead of sitting unnoticed until release.
+      - name: check gui/pom.xml and gui/MarkdownToPdf.xml stay in lockstep
+        run: |
+          POM_VERSION="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=project.version -DforceStdout)"
+          LAUNCHER_VERSION="$(sed -n -e '/<artifactId>MarkdownToPdf<\/artifactId>/,/<\/dependency>/ s/.*<version>\(.*\)<\/version>.*/\1/p' gui/MarkdownToPdf.xml)"
+          if [ "$POM_VERSION" != "$LAUNCHER_VERSION" ]; then
+            echo "gui/pom.xml's version ($POM_VERSION) does not match gui/MarkdownToPdf.xml's dependency version ($LAUNCHER_VERSION) — bump both together"
+            exit 1
+          fi
 
   build:
     strategy:
