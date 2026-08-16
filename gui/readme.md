@@ -147,11 +147,15 @@ clean checkout: nothing in steps 3-5 is built locally.
 ### gui
 
 gui has no irreversible step — every stage is safe to redo, so recovery is just
-delete-and-re-run, every time:
+delete-and-re-run, every time. On the first gui release under the new tag scheme, also delete
+the `v<version>` compatibility tag and release if they were created:
 
     git push --delete origin MarkdownToPdf-v<version>
     git tag -d MarkdownToPdf-v<version>
     gh release delete MarkdownToPdf-v<version> --yes    # only if a partial release was created
+    git push --delete origin v<version>                  # first new-style gui release only
+    git tag -d v<version>                                # first new-style gui release only
+    gh release delete v<version> --yes                   # first new-style gui release only
     ./release.sh gui
 
 ## Style Profiles

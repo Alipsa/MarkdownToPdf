@@ -80,6 +80,15 @@ case "$VERSION" in *-SNAPSHOT) die "refusing to release a snapshot version: $VER
 echo "Releasing $MODULE $VERSION"
 
 git fetch --tags --quiet
+# 0.2.0 and earlier check the repository-wide releases/latest endpoint and only understand bare
+# v<version> tags.  Make the first new-style GUI release available under both tags so those
+# installed clients can update into the prefix-aware checker.  Create the compatibility release
+# last below, making it releases/latest until a subsequent repo-wide release is published.
+LEGACY_GUI_TAG=""
+if [ "$MODULE" = "gui" ] \
+  && ! git ls-remote --exit-code --tags origin "refs/tags/MarkdownToPdf-v*" > /dev/null 2>&1; then
+  LEGACY_GUI_TAG="v$VERSION"
+fi
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && die "tag $TAG already exists locally"
 git ls-remote --exit-code --tags origin "$TAG" > /dev/null 2>&1 && die "tag $TAG already exists on the remote"
 
@@ -133,7 +142,7 @@ extract_section() {
 
 # Outside $STAGING on purpose: step 3 empties that directory, and step 8 uploads every file
 # in it as a release asset. .release-staging itself is gitignored.
-NOTES="$BASEDIR/.release-staging/release-notes-$VERSION.md"
+NOTES="$BASEDIR/.release-staging/release-notes-$MODULE-$VERSION.md"
 mkdir -p "$(dirname "$NOTES")"
 : > "$NOTES"
 
@@ -166,7 +175,7 @@ step "Downloading release assets"
 # Keep staging outside target/: the release deploy includes `clean`, and -am brings the
 # aggregator parent into the reactor, so Maven clean removes every module's target tree.
 # This directory is ignored so a failed post-deploy recovery does not dirty the checkout.
-STAGING="$BASEDIR/.release-staging/release-$VERSION"
+STAGING="$BASEDIR/.release-staging/release-$MODULE-$VERSION"
 # Emptied, not reused: the --skip-deploy recovery re-runs this step over a directory a
 # previous attempt already populated, and a stale file here would ship unhashed under a
 # SHA256SUMS that appears to account for it.
@@ -260,6 +269,11 @@ fi
 step "Tagging $TAG"
 git tag -a "$TAG" -m "Release $VERSION"
 git push origin "$TAG"
+if [ -n "$LEGACY_GUI_TAG" ]; then
+  step "Tagging compatibility release $LEGACY_GUI_TAG"
+  git tag -a "$LEGACY_GUI_TAG" -m "Release $VERSION (legacy GUI updater compatibility)"
+  git push origin "$LEGACY_GUI_TAG"
+fi
 
 # ── 8. GitHub release ───────────────────────────────────────────────
 step "Creating the GitHub release"
@@ -275,5 +289,11 @@ fi
 gh release create "$TAG" "$STAGING"/* \
   --title "$TITLE" \
   --notes-file "$NOTES"
+if [ -n "$LEGACY_GUI_TAG" ]; then
+  step "Creating compatibility GitHub release"
+  gh release create "$LEGACY_GUI_TAG" "$STAGING"/* \
+    --title "$TITLE (legacy updater compatibility)" \
+    --notes-file "$NOTES"
+fi
 
 printf '\nReleased %s %s\n' "$MODULE" "$VERSION"

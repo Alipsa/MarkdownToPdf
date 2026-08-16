@@ -31,13 +31,12 @@ Bump **two** files in lockstep:
   and refuses to proceed otherwise, but the values still have to be written by hand in both
   places.
 
-Then give [`gui/release.md`](../gui/release.md) a `## <version>` section. If this is the first
-release under the new `MarkdownToPdf-v<version>` tag scheme, that section must also say plainly
-that installs predating this change will not detect this or any future update automatically (the
-old `UpdateChecker` parses the new tag scheme incorrectly) and should be updated manually from
-the GitHub releases page. (`0.2.0` was already released under the legacy bare `v0.2.0` tag — the
-first gui release under the new `MarkdownToPdf-v<version>` scheme must be a version bumped past
-`0.2.0`.)
+Then give [`gui/release.md`](../gui/release.md) a `## <version>` section. On the first gui release
+under the new `MarkdownToPdf-v<version>` tag scheme, `release.sh` also creates a bare
+`v<version>` compatibility release with the same assets. This lets installed 0.2.0-and-earlier
+clients, which only understand the old tag scheme, update into the prefix-aware checker. (`0.2.0`
+was already released under the legacy bare `v0.2.0` tag — the first gui release under the new
+scheme must be a version bumped past `0.2.0`.)
 
 ## What `release.sh` checks
 
