@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Drives a MarkdownToPdf release.
+# Drives a MarkdownToPdf release. lib and gui release independently, on independent
+# version numbers; gui releases never touch Maven Central.
 #
-#   ./release.sh [--skip-deploy]
+#   ./release.sh lib [--skip-deploy]
+#   ./release.sh gui
 #
 # Builds nothing. Every release asset comes from the CI run for HEAD, so what ships is
 # byte-identical to what was tested. Runs on Linux or macOS.
@@ -10,11 +12,30 @@ set -euo pipefail
 BASEDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
 cd "$BASEDIR"
 
-SKIP_DEPLOY=0
-[ "${1:-}" = "--skip-deploy" ] && SKIP_DEPLOY=1
-
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n=== %s\n' "$*"; }
+
+MODULE="${1:-}"
+case "$MODULE" in
+  lib)
+    SKIP_DEPLOY=0
+    case "${2:-}" in
+      "") ;;
+      --skip-deploy) SKIP_DEPLOY=1 ;;
+      *) die "unrecognized argument: ${2}. usage: ./release.sh lib [--skip-deploy]" ;;
+    esac
+    ;;
+  gui)
+    [ -z "${2:-}" ] \
+      || die "gui has no Maven Central deploy step, so --skip-deploy does not apply. usage: ./release.sh gui"
+    ;;
+  "")
+    die "usage: ./release.sh lib [--skip-deploy] | ./release.sh gui"
+    ;;
+  *)
+    die "unrecognized module: $MODULE. usage: ./release.sh lib [--skip-deploy] | ./release.sh gui"
+    ;;
+esac
 
 # ── 1. preconditions ────────────────────────────────────────────────
 step "Preconditions"
@@ -37,22 +58,36 @@ gh auth status > /dev/null 2>&1 || die "gh is not authenticated"
 [ -z "$(git status --porcelain)" ] || die "working tree is not clean"
 [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || die "not on main"
 
-VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)"
+if [ "$MODULE" = "lib" ]; then
+  VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)"
+  TAG="md2pdf-v$VERSION"
+else
+  VERSION="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=project.version -DforceStdout)"
+  TAG="MarkdownToPdf-v$VERSION"
+  # gui/MarkdownToPdf.xml duplicates gui's own version in a second, non-reactor file that
+  # nothing else builds, tests, or touches (only CLAUDE.md references it) — a stale value
+  # there is invisible until a developer runs `mvn -f gui/MarkdownToPdf.xml javafx:run`,
+  # possibly releases later.
+  LAUNCHER_VERSION="$(sed -n -e '/<artifactId>MarkdownToPdf<\/artifactId>/,/<\/dependency>/ s/.*<version>\(.*\)<\/version>.*/\1/p' gui/MarkdownToPdf.xml)"
+  [ "$LAUNCHER_VERSION" = "$VERSION" ] \
+    || die "gui/MarkdownToPdf.xml's dependency version ($LAUNCHER_VERSION) does not match gui/pom.xml's version ($VERSION) — bump both together before releasing"
+fi
 case "$VERSION" in *-SNAPSHOT) die "refusing to release a snapshot version: $VERSION" ;; esac
-TAG="v$VERSION"
-echo "Releasing $VERSION"
+echo "Releasing $MODULE $VERSION"
 
 git fetch --tags --quiet
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && die "tag $TAG already exists locally"
 git ls-remote --exit-code --tags origin "$TAG" > /dev/null 2>&1 && die "tag $TAG already exists on the remote"
 git push --dry-run --quiet origin HEAD || die "git push would fail"
 
-# The POM, not the directory: a directory listing can 200 on a partially-populated or
-# stale path, and only the POM's presence means the version is actually published.
-CENTRAL="https://repo1.maven.org/maven2/se/alipsa/md2pdf/$VERSION/md2pdf-$VERSION.pom"
-if curl -sfI "$CENTRAL" > /dev/null; then
-  [ "$SKIP_DEPLOY" -eq 1 ] \
-    || die "$VERSION is already on Maven Central. Maven Central cannot be overwritten; re-run with --skip-deploy to finish the rest of the release."
+if [ "$MODULE" = "lib" ]; then
+  # The POM, not the directory: a directory listing can 200 on a partially-populated or
+  # stale path, and only the POM's presence means the version is actually published.
+  CENTRAL="https://repo1.maven.org/maven2/se/alipsa/md2pdf/$VERSION/md2pdf-$VERSION.pom"
+  if curl -sfI "$CENTRAL" > /dev/null; then
+    [ "$SKIP_DEPLOY" -eq 1 ] \
+      || die "$VERSION is already on Maven Central. Maven Central cannot be overwritten; re-run with './release.sh lib --skip-deploy' to finish the rest of the release."
+  fi
 fi
 
 # ── 1b. release notes ───────────────────────────────────────────────
@@ -88,8 +123,6 @@ NOTES="$BASEDIR/.release-staging/release-notes-$VERSION.md"
 mkdir -p "$(dirname "$NOTES")"
 : > "$NOTES"
 
-# One section per published artifact, named as the artifact is: an aggregator whose notes
-# cover the shared build, and the two modules a user actually consumes.
 add_section() {
   local title="$1" file="$2" body
   body="$(extract_section "$file" "$VERSION")"
@@ -97,9 +130,12 @@ add_section() {
     || die "$file has no section for $VERSION — bump its heading from -SNAPSHOT before releasing"
   printf '## %s\n\n%s\n\n' "$title" "$body" >> "$NOTES"
 }
-add_section "md2pdf-parent — build and release tooling" release.md
-add_section "md2pdf — library"                          lib/release.md
-add_section "MarkdownToPdf — desktop application"       gui/release.md
+if [ "$MODULE" = "lib" ]; then
+  add_section "md2pdf-parent — build and release tooling" release.md
+  add_section "md2pdf — library"                          lib/release.md
+else
+  add_section "MarkdownToPdf — desktop application"        gui/release.md
+fi
 cat "$NOTES"
 
 # ── 2. wait for CI ──────────────────────────────────────────────────
@@ -123,13 +159,19 @@ STAGING="$BASEDIR/.release-staging/release-$VERSION"
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 
-ASSETS=(
-  "md2pdf-$VERSION-linux-x64.zip"
-  "md2pdf-$VERSION-macos-aarch64.zip"
-  "md2pdf-$VERSION-windows-x64.zip"
-  "md2pdf-$VERSION-no-jdk.zip"
-  "md2pdf-$VERSION-javadoc.jar"
-)
+if [ "$MODULE" = "lib" ]; then
+  ASSETS=(
+    "md2pdf-$VERSION-sources.jar"
+    "md2pdf-$VERSION-javadoc.jar"
+  )
+else
+  ASSETS=(
+    "md2pdf-$VERSION-linux-x64.zip"
+    "md2pdf-$VERSION-macos-aarch64.zip"
+    "md2pdf-$VERSION-windows-x64.zip"
+    "md2pdf-$VERSION-no-jdk.zip"
+  )
+fi
 
 # One call per artifact. gh run download extracts multiple artifacts into separate
 # subdirectories and only flattens when a single artifact is named — and the artifact
@@ -142,16 +184,21 @@ done
 
 # ── 4. sanity-check ─────────────────────────────────────────────────
 step "Checking the staged assets"
+if [ "$MODULE" = "lib" ]; then
+  EXPECTED_COUNT=2
+else
+  EXPECTED_COUNT=4
+fi
 count="$(find "$STAGING" -maxdepth 1 -type f | wc -l | tr -d ' ')"
-[ "$count" -eq 5 ] || die "expected exactly 5 files in $STAGING, found $count"
+[ "$count" -eq "$EXPECTED_COUNT" ] || die "expected exactly $EXPECTED_COUNT files in $STAGING, found $count"
 # Per-asset floors, because the assets differ by three orders of magnitude: a platform zip
-# carries a ~100 MB runtime, the no-jdk zip is ~15 MB, and the javadoc jar is ~130 KB. A
-# single 1 MB floor would abort every release on the javadoc jar.
+# carries a ~100 MB runtime, the no-jdk zip is ~15 MB, and the javadoc/sources jars are each
+# tens of KB. A single 1 MB floor would abort every release on the small jars.
 asset_floor() {
   case "$1" in
     *-linux-x64.zip|*-macos-aarch64.zip|*-windows-x64.zip) echo 40000000 ;;  # 40 MB
     *-no-jdk.zip)                                          echo  5000000 ;;  #  5 MB
-    *-javadoc.jar)                                         echo    20000 ;;  # 20 KB
+    *-javadoc.jar|*-sources.jar)                           echo    10000 ;;  # 10 KB
     *) echo 1 ;;
   esac
 }
@@ -162,13 +209,15 @@ for asset in "${ASSETS[@]}"; do
   floor="$(asset_floor "$asset")"
   [ "$size" -gt "$floor" ] || die "$asset is only $size bytes (expected more than $floor)"
 done
-for label in linux-x64 macos-aarch64 windows-x64; do
-  unzip -l "$STAGING/md2pdf-$VERSION-$label.zip" | grep -F 'MarkdownToPdf' > /dev/null \
-    || die "md2pdf-$VERSION-$label.zip has no MarkdownToPdf entry"
-done
-unzip -l "$STAGING/md2pdf-$VERSION-no-jdk.zip" | grep -F 'MarkdownToPdf.jar' > /dev/null \
-  || die "the no-jdk zip has no MarkdownToPdf.jar"
-echo "  5 assets OK"
+if [ "$MODULE" = "gui" ]; then
+  for label in linux-x64 macos-aarch64 windows-x64; do
+    unzip -l "$STAGING/md2pdf-$VERSION-$label.zip" | grep -F 'MarkdownToPdf' > /dev/null \
+      || die "md2pdf-$VERSION-$label.zip has no MarkdownToPdf entry"
+  done
+  unzip -l "$STAGING/md2pdf-$VERSION-no-jdk.zip" | grep -F 'MarkdownToPdf.jar' > /dev/null \
+    || die "the no-jdk zip has no MarkdownToPdf.jar"
+fi
+echo "  $EXPECTED_COUNT assets OK"
 
 # ── 5. checksums ────────────────────────────────────────────────────
 step "Generating SHA256SUMS"
@@ -179,7 +228,9 @@ step "Generating SHA256SUMS"
 cat "$STAGING/SHA256SUMS"
 
 # ── 6. Maven Central — the point of no return ───────────────────────
-if [ "$SKIP_DEPLOY" -eq 1 ]; then
+if [ "$MODULE" = "gui" ]; then
+  step "No Maven Central deploy for gui — this is the entire point"
+elif [ "$SKIP_DEPLOY" -eq 1 ]; then
   step "Skipping the Maven Central deploy (--skip-deploy)"
 else
   step "Publishing lib to Maven Central"
@@ -197,11 +248,17 @@ git push origin "$TAG"
 
 # ── 8. GitHub release ───────────────────────────────────────────────
 step "Creating the GitHub release"
+FINAL_COUNT=$((EXPECTED_COUNT + 1))
 count="$(find "$STAGING" -maxdepth 1 -type f | wc -l | tr -d ' ')"
-[ "$count" -eq 6 ] || die "expected exactly 6 files in $STAGING, found $count"
+[ "$count" -eq "$FINAL_COUNT" ] || die "expected exactly $FINAL_COUNT files in $STAGING, found $count"
+if [ "$MODULE" = "lib" ]; then
+  TITLE="md2pdf $VERSION"
+else
+  TITLE="MarkdownToPdf $VERSION"
+fi
 # gh release create takes filenames or globs, never a directory.
 gh release create "$TAG" "$STAGING"/* \
-  --title "MarkdownToPdf $VERSION" \
+  --title "$TITLE" \
   --notes-file "$NOTES"
 
-printf '\nReleased %s\n' "$VERSION"
+printf '\nReleased %s %s\n' "$MODULE" "$VERSION"
