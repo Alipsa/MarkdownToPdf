@@ -38,6 +38,8 @@ public class UpdateChecker {
   private static final String DEFAULT_API_URL =
       "https://api.github.com/repos/Alipsa/MarkdownToPdf/releases?per_page=100";
 
+  private static final int MAX_RELEASE_PAGES = 5;
+
   private static final Logger LOGGER = LogManager.getLogger(UpdateChecker.class);
 
   /**
@@ -50,11 +52,15 @@ public class UpdateChecker {
    * @throws UpdateCheckException on any network, HTTP-status or interrupt failure
    */
   public UpdateCheckResult checkForUpdate(String currentVersion) throws UpdateCheckException {
+    UpdatePlatform platform = UpdatePlatform.detectCurrent();
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      LOGGER.info("Skipping update check: no release archive for this platform.");
+      return UpdateCheckResult.indeterminate();
+    }
     String apiUrl = System.getProperty(API_URL_PROPERTY, DEFAULT_API_URL);
     try (HttpClient httpClient =
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()) {
-      return parseAndEvaluate(
-          currentVersion, UpdatePlatform.detectCurrent(), fetchAllReleasePages(httpClient, apiUrl));
+      return parseAndEvaluate(currentVersion, platform, fetchAllReleasePages(httpClient, apiUrl));
     } catch (IOException e) {
       throw new UpdateCheckException("Failed to reach " + apiUrl, e);
     } catch (InterruptedException e) {
@@ -128,14 +134,23 @@ public class UpdateChecker {
             latestVersion, tagName, expectedAssetName, downloadUrl, checksumsUrl, htmlUrl));
   }
 
-  /** Fetches and combines every page that GitHub links from a releases response. */
+  /**
+   * Fetches and combines up to {@link #MAX_RELEASE_PAGES} linked GitHub Releases response pages.
+   */
   private static String fetchAllReleasePages(HttpClient httpClient, String apiUrl)
       throws IOException, InterruptedException, UpdateCheckException {
-    URI nextPage = URI.create(apiUrl);
+    URI nextPage = parseHttpUri(apiUrl, "release API URL");
+    if (!nextPage.isAbsolute()) {
+      throw new UpdateCheckException("GitHub release API URL must be absolute");
+    }
     Set<URI> fetchedPages = new HashSet<>();
     StringBuilder releases = new StringBuilder("[");
     boolean firstPage = true;
     while (nextPage != null) {
+      if (fetchedPages.size() == MAX_RELEASE_PAGES) {
+        throw new UpdateCheckException(
+            "GitHub Releases pagination exceeded " + MAX_RELEASE_PAGES + " pages");
+      }
       if (!fetchedPages.add(nextPage)) {
         throw new UpdateCheckException(
             "GitHub Releases pagination linked to a page already fetched");
@@ -155,7 +170,13 @@ public class UpdateChecker {
       }
       String page = response.body().strip();
       if (!page.startsWith("[")) {
-        return response.body();
+        if (fetchedPages.size() == 1) {
+          return response.body();
+        }
+        LOGGER.warn(
+            "Ignoring non-array response after {} valid GitHub Releases page(s).",
+            fetchedPages.size() - 1);
+        break;
       }
       String pageItems = GitHubReleaseJson.extractBracketedRegion(page, page.indexOf('[')).strip();
       if (!pageItems.isEmpty()) {
@@ -165,12 +186,13 @@ public class UpdateChecker {
         releases.append(pageItems);
         firstPage = false;
       }
-      nextPage = findNextPage(response.headers());
+      nextPage = findNextPage(response.headers(), nextPage);
     }
     return releases.append(']').toString();
   }
 
-  private static URI findNextPage(HttpHeaders headers) throws UpdateCheckException {
+  private static URI findNextPage(HttpHeaders headers, URI currentPage)
+      throws UpdateCheckException {
     for (String link : headers.allValues("Link")) {
       for (String entry : link.split(",")) {
         if (entry.contains("rel=\"next\"")) {
@@ -179,15 +201,24 @@ public class UpdateChecker {
           if (open < 0 || close < 0) {
             throw new UpdateCheckException("GitHub returned a malformed next-page Link header");
           }
-          try {
-            return URI.create(entry.substring(open + 1, close));
-          } catch (IllegalArgumentException e) {
-            throw new UpdateCheckException("GitHub returned an invalid next-page Link URL", e);
-          }
+          URI linkedPage = parseHttpUri(entry.substring(open + 1, close), "next-page Link URL");
+          return currentPage.resolve(linkedPage);
         }
       }
     }
     return null;
+  }
+
+  private static URI parseHttpUri(String value, String description) throws UpdateCheckException {
+    try {
+      URI uri = URI.create(value);
+      if (uri.isAbsolute() && !"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme())) {
+        throw new UpdateCheckException("GitHub returned a non-HTTP " + description);
+      }
+      return uri;
+    } catch (IllegalArgumentException e) {
+      throw new UpdateCheckException("GitHub returned an invalid " + description, e);
+    }
   }
 
   /**

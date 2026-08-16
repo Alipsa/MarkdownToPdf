@@ -52,21 +52,10 @@ public class UpdateCheckerHttpTest {
   }
 
   private void respond(int status, String body) {
-    respond(status, body, false);
-  }
-
-  private void respond(int status, String body, boolean hasNextPage) {
     server.createContext(
         "/releases",
         exchange -> {
           byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-          if (hasNextPage) {
-            exchange
-                .getResponseHeaders()
-                .add(
-                    "Link",
-                    "<https://api.github.com/repos/Alipsa/MarkdownToPdf/releases?page=2>; rel=\"next\"");
-          }
           // sendResponseHeaders' responseLength contract: 0 means chunked with unspecified
           // length, -1 means no response body at all. A genuinely empty body must send -1, not
           // 0, or the client is left waiting on a chunked stream that never starts.
@@ -87,13 +76,7 @@ public class UpdateCheckerHttpTest {
           String body = secondRequest ? secondPage : firstPage;
           byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
           if (!secondRequest) {
-            exchange
-                .getResponseHeaders()
-                .add(
-                    "Link",
-                    "<http://127.0.0.1:"
-                        + server.getAddress().getPort()
-                        + "/releases?page=2>; rel=\"next\"");
+            exchange.getResponseHeaders().add("Link", "</releases?page=2>; rel=\"next\"");
           }
           exchange.sendResponseHeaders(200, bytes.length);
           try (OutputStream os = exchange.getResponseBody()) {
@@ -187,6 +170,35 @@ public class UpdateCheckerHttpTest {
         ]
         """
             .formatted(assetName, assetName));
+
+    UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
+
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    } else {
+      assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
+      assertEquals("0.1.1", result.updateInfo().get().latestVersion());
+    }
+  }
+
+  @Test
+  void nonArrayLaterPageKeepsTheReleaseFoundOnEarlierPages() throws UpdateCheckException {
+    UpdatePlatform platform = UpdatePlatform.detectCurrent();
+    String assetName = "md2pdf-0.1.1" + platform.assetSuffix();
+    respondTwoPages(
+        """
+        [
+          {
+            "tag_name": "MarkdownToPdf-v0.1.1",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v0.1.1",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
+        """
+            .formatted(assetName, assetName),
+        "GitHub is temporarily unavailable");
 
     UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
 
