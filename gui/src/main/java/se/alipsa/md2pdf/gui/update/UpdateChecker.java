@@ -25,14 +25,22 @@ public class UpdateChecker {
   /** System property that overrides the GitHub API URL, for manual QA against a local fixture. */
   public static final String API_URL_PROPERTY = "md2pdf.update.apiUrl";
 
+  /**
+   * gui releases are tagged {@code MarkdownToPdf-v<version>}; lib releases share the same
+   * repository and are tagged {@code md2pdf-v<version>}. {@code releases/latest} is repo-wide, so a
+   * lib-only release published after a gui release would shadow it and ship no platform zips at all
+   * — the releases list must be filtered to this prefix instead.
+   */
+  private static final String TAG_PREFIX = "MarkdownToPdf-v";
+
   private static final String DEFAULT_API_URL =
-      "https://api.github.com/repos/Alipsa/MarkdownToPdf/releases/latest";
+      "https://api.github.com/repos/Alipsa/MarkdownToPdf/releases?per_page=100";
 
   private static final Logger LOGGER = LogManager.getLogger(UpdateChecker.class);
 
   /**
-   * Fetches the latest GitHub release and returns update info if it is newer than {@code
-   * currentVersion} and ships an asset for this platform.
+   * Fetches recent GitHub releases and returns update info if the latest release tagged {@code
+   * MarkdownToPdf-v*} is newer than {@code currentVersion} and ships an asset for this platform.
    *
    * @param currentVersion the version currently running
    * @return update information when a newer platform release is available
@@ -65,18 +73,20 @@ public class UpdateChecker {
   }
 
   /**
-   * Pure evaluation of a GitHub releases/latest JSON response against the currently running version
-   * and platform. No network access — used directly by tests.
+   * Pure evaluation of a {@code GET /releases} JSON array response against the currently running
+   * version and platform. No network access — used directly by tests.
    *
-   * <p>Only the platform's own release asset and the release page URL are required; the {@code
-   * SHA256SUMS} checksum asset is captured when present but not required, since nothing in this
-   * check-only feature downloads or verifies it yet (that lands with the self-apply follow-up) —
-   * requiring it here would silently suppress every notification against a release that predates
-   * checksum publishing, such as the current {@code v0.1.0}.
+   * <p>The response is a top-level array of releases, not a single release: {@code releases/latest}
+   * is repo-wide and would let an unrelated {@code lib} release (tagged {@code md2pdf-v*}) shadow
+   * the actual latest {@code gui} release, or return no platform zips at all. This scans every
+   * entry, keeps only tags starting with {@link #TAG_PREFIX}, and picks the highest version among
+   * matches via {@link VersionComparator} — not "the first match" — because GitHub sorts {@code
+   * /releases} by the tagged commit's date, not publish time, so a gui release cut from an older
+   * commit is not guaranteed to sort above a newer lib release.
    *
    * @param currentVersion the version currently running
    * @param platform the platform whose release asset should be selected
-   * @param responseJson the GitHub Releases API response
+   * @param responseJson the {@code GET /releases} JSON array response
    * @return update information when a newer matching release is available
    */
   public static Optional<UpdateInfo> parseAndEvaluate(
@@ -85,12 +95,13 @@ public class UpdateChecker {
       LOGGER.info("Skipping update check: no release archive for this platform.");
       return Optional.empty();
     }
-    String tagName = GitHubReleaseJson.extractTagName(responseJson);
-    if (tagName == null) {
-      LOGGER.info("Skipping update check: release response had no tag_name.");
+    String releaseJson = selectLatestGuiRelease(responseJson);
+    if (releaseJson == null) {
+      LOGGER.warn("Skipping update check: no {}* release found in the fetched page.", TAG_PREFIX);
       return Optional.empty();
     }
-    String latestVersion = tagName.startsWith("v") ? tagName.substring(1) : tagName;
+    String tagName = GitHubReleaseJson.extractTagName(releaseJson);
+    String latestVersion = tagName.substring(TAG_PREFIX.length());
     if (!VersionComparator.isNewer(latestVersion, currentVersion)) {
       LOGGER.info(
           "No update available: latest release {} is not newer than the running {}.",
@@ -103,13 +114,13 @@ public class UpdateChecker {
     // response — nothing stops a future field reorder from handing back the uploader's profile
     // URL instead. A release page URL always contains "/releases/"; a profile URL never does, so
     // this converts a reorder from silently opening the wrong page into a skipped notification.
-    String htmlUrl = GitHubReleaseJson.extractHtmlUrl(responseJson);
+    String htmlUrl = GitHubReleaseJson.extractHtmlUrl(releaseJson);
     if (htmlUrl == null || !htmlUrl.contains("/releases/")) {
       LOGGER.info(
           "Skipping update check: release {} had no usable html_url ({}).", tagName, htmlUrl);
       return Optional.empty();
     }
-    List<GitHubReleaseJson.Asset> assets = GitHubReleaseJson.extractAssets(responseJson);
+    List<GitHubReleaseJson.Asset> assets = GitHubReleaseJson.extractAssets(releaseJson);
     String expectedAssetName = "md2pdf-" + latestVersion + platform.assetSuffix();
     String downloadUrl = findAssetUrl(assets, expectedAssetName);
     if (downloadUrl == null) {
@@ -123,6 +134,32 @@ public class UpdateChecker {
     return Optional.of(
         new UpdateInfo(
             latestVersion, tagName, expectedAssetName, downloadUrl, checksumsUrl, htmlUrl));
+  }
+
+  /**
+   * Scans a {@code GET /releases} JSON array and returns the JSON object of the release with the
+   * highest version among those tagged {@link #TAG_PREFIX}, or {@code null} if none match.
+   */
+  private static String selectLatestGuiRelease(String responseJson) {
+    int openBracket = responseJson.indexOf('[');
+    if (openBracket < 0) {
+      return null;
+    }
+    String arrayBody = GitHubReleaseJson.extractBracketedRegion(responseJson, openBracket);
+    String bestJson = null;
+    String bestVersion = null;
+    for (String candidate : GitHubReleaseJson.splitTopLevelObjects(arrayBody)) {
+      String tagName = GitHubReleaseJson.extractTagName(candidate);
+      if (tagName == null || !tagName.startsWith(TAG_PREFIX)) {
+        continue;
+      }
+      String candidateVersion = tagName.substring(TAG_PREFIX.length());
+      if (bestVersion == null || VersionComparator.isNewer(candidateVersion, bestVersion)) {
+        bestJson = candidate;
+        bestVersion = candidateVersion;
+      }
+    }
+    return bestJson;
   }
 
   private static String findAssetUrl(List<GitHubReleaseJson.Asset> assets, String name) {

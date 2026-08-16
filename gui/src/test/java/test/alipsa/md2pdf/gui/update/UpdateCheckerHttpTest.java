@@ -36,9 +36,11 @@ public class UpdateCheckerHttpTest {
   void startServer() throws IOException {
     server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.start();
+    // HttpServer context matching is path-only; the query string does not need to be part
+    // of the registered context path below.
     System.setProperty(
         UpdateChecker.API_URL_PROPERTY,
-        "http://127.0.0.1:" + server.getAddress().getPort() + "/releases/latest");
+        "http://127.0.0.1:" + server.getAddress().getPort() + "/releases?per_page=100");
   }
 
   @AfterEach
@@ -51,7 +53,7 @@ public class UpdateCheckerHttpTest {
 
   private void respond(int status, String body) {
     server.createContext(
-        "/releases/latest",
+        "/releases",
         exchange -> {
           byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
           // sendResponseHeaders' responseLength contract: 0 means chunked with unspecified
@@ -94,13 +96,15 @@ public class UpdateCheckerHttpTest {
     respond(
         200,
         """
-        {
-          "tag_name": "v99.0.0",
-          "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/v99.0.0",
-          "assets": [
-            {"name": "%s", "browser_download_url": "https://example.com/%s"}
-          ]
-        }
+        [
+          {
+            "tag_name": "MarkdownToPdf-v99.0.0",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v99.0.0",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
         """
             .formatted(assetName, assetName));
 
