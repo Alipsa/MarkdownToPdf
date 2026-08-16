@@ -7,14 +7,14 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Isolated;
 import se.alipsa.md2pdf.gui.update.UpdateCheckException;
+import se.alipsa.md2pdf.gui.update.UpdateCheckOutcome;
+import se.alipsa.md2pdf.gui.update.UpdateCheckResult;
 import se.alipsa.md2pdf.gui.update.UpdateChecker;
-import se.alipsa.md2pdf.gui.update.UpdateInfo;
 import se.alipsa.md2pdf.gui.update.UpdatePlatform;
 
 /**
@@ -76,17 +76,21 @@ public class UpdateCheckerHttpTest {
   }
 
   @Test
-  void emptyBodyReturnsEmptyWithoutThrowing() throws UpdateCheckException {
+  void emptyBodyIsIndeterminateWithoutThrowing() throws UpdateCheckException {
     respond(200, "");
     UpdateChecker checker = new UpdateChecker();
-    assertTrue(checker.checkForUpdate("0.1.0").isEmpty());
+    UpdateCheckResult result = checker.checkForUpdate("0.1.0");
+    assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    assertTrue(result.updateInfo().isEmpty());
   }
 
   @Test
-  void malformedJsonReturnsEmptyWithoutThrowing() throws UpdateCheckException {
+  void malformedJsonIsIndeterminateWithoutThrowing() throws UpdateCheckException {
     respond(200, "{not json at all");
     UpdateChecker checker = new UpdateChecker();
-    assertTrue(checker.checkForUpdate("0.1.0").isEmpty());
+    UpdateCheckResult result = checker.checkForUpdate("0.1.0");
+    assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    assertTrue(result.updateInfo().isEmpty());
   }
 
   @Test
@@ -108,10 +112,15 @@ public class UpdateCheckerHttpTest {
         """
             .formatted(assetName, assetName));
 
-    Optional<UpdateInfo> result = new UpdateChecker().checkForUpdate("0.1.0");
+    UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
 
-    // Deterministic on every platform CI runs on: UNSUPPORTED never matches (no asset suffix to
-    // build a real file name from), every supported platform matches the asset built above.
-    assertEquals(platform != UpdatePlatform.UNSUPPORTED, result.isPresent());
+    // Deterministic on every platform CI runs on: UNSUPPORTED is INDETERMINATE (no asset suffix
+    // to build a real file name from), every supported platform matches the asset built above.
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    } else {
+      assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
+      assertTrue(result.updateInfo().isPresent());
+    }
   }
 }

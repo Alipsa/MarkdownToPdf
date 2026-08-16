@@ -7,7 +7,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,10 +42,11 @@ public class UpdateChecker {
    * MarkdownToPdf-v*} is newer than {@code currentVersion} and ships an asset for this platform.
    *
    * @param currentVersion the version currently running
-   * @return update information when a newer platform release is available
+   * @return the outcome of the check, and update information when a newer platform release is
+   *     available
    * @throws UpdateCheckException on any network, HTTP-status or interrupt failure
    */
-  public Optional<UpdateInfo> checkForUpdate(String currentVersion) throws UpdateCheckException {
+  public UpdateCheckResult checkForUpdate(String currentVersion) throws UpdateCheckException {
     String apiUrl = System.getProperty(API_URL_PROPERTY, DEFAULT_API_URL);
     HttpRequest request =
         HttpRequest.newBuilder()
@@ -87,18 +87,19 @@ public class UpdateChecker {
    * @param currentVersion the version currently running
    * @param platform the platform whose release asset should be selected
    * @param responseJson the {@code GET /releases} JSON array response
-   * @return update information when a newer matching release is available
+   * @return the outcome of the check, and update information when a newer matching release is
+   *     available
    */
-  public static Optional<UpdateInfo> parseAndEvaluate(
+  public static UpdateCheckResult parseAndEvaluate(
       String currentVersion, UpdatePlatform platform, String responseJson) {
     if (platform == UpdatePlatform.UNSUPPORTED) {
       LOGGER.info("Skipping update check: no release archive for this platform.");
-      return Optional.empty();
+      return UpdateCheckResult.indeterminate();
     }
     String releaseJson = selectLatestGuiRelease(responseJson);
     if (releaseJson == null) {
       LOGGER.warn("Skipping update check: no {}* release found in the fetched page.", TAG_PREFIX);
-      return Optional.empty();
+      return UpdateCheckResult.indeterminate();
     }
     String tagName = GitHubReleaseJson.extractTagName(releaseJson);
     String latestVersion = tagName.substring(TAG_PREFIX.length());
@@ -107,7 +108,7 @@ public class UpdateChecker {
           "No update available: latest release {} is not newer than the running {}.",
           latestVersion,
           currentVersion);
-      return Optional.empty();
+      return UpdateCheckResult.upToDate();
     }
     // extractHtmlUrl takes the first "html_url" before "assets", which is the release's own
     // field only because it precedes the "assets" array in GitHub's current (but spec-unordered)
@@ -118,7 +119,7 @@ public class UpdateChecker {
     if (htmlUrl == null || !htmlUrl.contains("/releases/")) {
       LOGGER.info(
           "Skipping update check: release {} had no usable html_url ({}).", tagName, htmlUrl);
-      return Optional.empty();
+      return UpdateCheckResult.indeterminate();
     }
     List<GitHubReleaseJson.Asset> assets = GitHubReleaseJson.extractAssets(releaseJson);
     String expectedAssetName = "md2pdf-" + latestVersion + platform.assetSuffix();
@@ -128,23 +129,39 @@ public class UpdateChecker {
           "Release {} is newer but ships no '{}' asset for this platform.",
           tagName,
           expectedAssetName);
-      return Optional.empty();
+      return UpdateCheckResult.indeterminate();
     }
     String checksumsUrl = findAssetUrl(assets, "SHA256SUMS");
-    return Optional.of(
+    return UpdateCheckResult.updateAvailable(
         new UpdateInfo(
             latestVersion, tagName, expectedAssetName, downloadUrl, checksumsUrl, htmlUrl));
   }
 
   /**
    * Scans a {@code GET /releases} JSON array and returns the JSON object of the release with the
-   * highest version among those tagged {@link #TAG_PREFIX}, or {@code null} if none match.
+   * highest version among those tagged {@link #TAG_PREFIX}, skipping drafts, prereleases, and
+   * candidates whose version cannot be parsed, or {@code null} if none match.
+   *
+   * <p>Drafts and prereleases are skipped outright: GitHub's {@code draft}/{@code prerelease} flags
+   * mark a release as not a real, generally-available release, and offering one as an update would
+   * nag every user still on a genuinely released version. Candidates with an unparseable version
+   * (e.g. a malformed tag like {@code MarkdownToPdf-v0.4.0.RC1}) are skipped rather than allowed to
+   * seed {@code bestVersion}: {@link VersionComparator#isNewer} fails safe to {@code false}
+   * whenever either side fails to parse, so once an unparseable version became {@code bestVersion}
+   * every later, genuinely newer, well-formed candidate would also compare as "not newer" against
+   * it (because parsing {@code bestVersion} itself fails) and could never replace it — the
+   * malformed tag would win forever.
    */
   private static String selectLatestGuiRelease(String responseJson) {
-    int openBracket = responseJson.indexOf('[');
-    if (openBracket < 0) {
+    String trimmed = responseJson.strip();
+    if (!trimmed.startsWith("[")) {
+      LOGGER.warn(
+          "Response is not a JSON array (expected the GET /releases contract) — check the {} "
+              + "override if set.",
+          API_URL_PROPERTY);
       return null;
     }
+    int openBracket = responseJson.indexOf('[');
     String arrayBody = GitHubReleaseJson.extractBracketedRegion(responseJson, openBracket);
     String bestJson = null;
     String bestVersion = null;
@@ -153,7 +170,14 @@ public class UpdateChecker {
       if (tagName == null || !tagName.startsWith(TAG_PREFIX)) {
         continue;
       }
+      if (GitHubReleaseJson.extractBooleanBeforeAssets(candidate, "draft")
+          || GitHubReleaseJson.extractBooleanBeforeAssets(candidate, "prerelease")) {
+        continue;
+      }
       String candidateVersion = tagName.substring(TAG_PREFIX.length());
+      if (!VersionComparator.isParseable(candidateVersion)) {
+        continue;
+      }
       if (bestVersion == null || VersionComparator.isNewer(candidateVersion, bestVersion)) {
         bestJson = candidate;
         bestVersion = candidateVersion;

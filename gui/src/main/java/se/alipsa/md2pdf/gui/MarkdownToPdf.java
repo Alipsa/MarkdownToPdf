@@ -60,6 +60,7 @@ import se.alipsa.md2pdf.Md2PdfException;
 import se.alipsa.md2pdf.gui.fs.FileAccess;
 import se.alipsa.md2pdf.gui.fs.FileAccessBroker;
 import se.alipsa.md2pdf.gui.fs.PersistedFileState;
+import se.alipsa.md2pdf.gui.update.UpdateCheckResult;
 import se.alipsa.md2pdf.gui.update.UpdateChecker;
 import se.alipsa.md2pdf.gui.update.UpdateInfo;
 import se.alipsa.md2pdf.gui.update.UpdatePolicy;
@@ -1479,10 +1480,10 @@ public class MarkdownToPdf extends Application {
     }
     String currentVersion = currentVersionOpt.get();
     updateCheckInProgress.set(true);
-    Task<Optional<UpdateInfo>> task =
+    Task<UpdateCheckResult> task =
         new Task<>() {
           @Override
-          protected Optional<UpdateInfo> call() throws Exception {
+          protected UpdateCheckResult call() throws Exception {
             return new UpdateChecker().checkForUpdate(currentVersion);
           }
         };
@@ -1490,16 +1491,30 @@ public class MarkdownToPdf extends Application {
         e -> {
           updateCheckInProgress.set(false);
           preferences().putLong(PREF_LAST_UPDATE_CHECK, System.currentTimeMillis());
-          Optional<UpdateInfo> info = task.getValue();
-          if (info.isPresent()) {
-            String dismissedVersion = preferences().get(PREF_DISMISSED_VERSION, "");
-            if (interactive || !dismissedVersion.equals(info.get().latestVersion())) {
-              handleUpdateAvailable(info.get(), currentVersion);
+          UpdateCheckResult result = task.getValue();
+          switch (result.outcome()) {
+            case UPDATE_AVAILABLE -> {
+              UpdateInfo info = result.updateInfo().orElseThrow();
+              String dismissedVersion = preferences().get(PREF_DISMISSED_VERSION, "");
+              if (interactive || !dismissedVersion.equals(info.latestVersion())) {
+                handleUpdateAvailable(info, currentVersion);
+              }
             }
-          } else if (interactive) {
-            Alerts.info(
-                "Check for Updates",
-                "You are running the latest version (" + currentVersion + ").");
+            case UP_TO_DATE -> {
+              if (interactive) {
+                Alerts.info(
+                    "Check for Updates",
+                    "You are running the latest version (" + currentVersion + ").");
+              }
+            }
+            case INDETERMINATE -> {
+              if (interactive) {
+                Alerts.info(
+                    "Check for Updates",
+                    "Could not determine whether an update is available. Check "
+                        + "https://github.com/Alipsa/MarkdownToPdf/releases manually.");
+              }
+            }
           }
         });
     task.setOnFailed(

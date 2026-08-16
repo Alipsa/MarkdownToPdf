@@ -36,6 +36,17 @@ public final class VersionComparator {
     return currentHadSuffix && !candidateHadSuffix;
   }
 
+  /**
+   * Returns {@code true} if {@code version}'s dotted-numeric prefix can be parsed — i.e. {@link
+   * #isNewer} can meaningfully compare it against another version.
+   *
+   * @param version the version string to check
+   * @return {@code true} when {@code version} is parseable
+   */
+  public static boolean isParseable(String version) {
+    return parse(version) != null;
+  }
+
   private static int compareParts(int[] a, int[] b) {
     int length = Math.max(a.length, b.length);
     for (int i = 0; i < length; i++) {
