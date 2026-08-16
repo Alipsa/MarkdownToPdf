@@ -12,6 +12,17 @@ import java.util.Optional;
  */
 public record UpdateCheckResult(UpdateCheckOutcome outcome, Optional<UpdateInfo> updateInfo) {
 
+  public UpdateCheckResult {
+    boolean shouldHaveInfo = outcome == UpdateCheckOutcome.UPDATE_AVAILABLE;
+    if (updateInfo.isPresent() != shouldHaveInfo) {
+      throw new IllegalArgumentException(
+          "updateInfo must be present if and only if outcome is UPDATE_AVAILABLE, got outcome="
+              + outcome
+              + " updateInfo="
+              + updateInfo);
+    }
+  }
+
   /**
    * Creates a result for a newer, usable release.
    *
