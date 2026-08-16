@@ -219,13 +219,13 @@ fi
 count="$(find "$STAGING" -maxdepth 1 -type f | wc -l | tr -d ' ')"
 [ "$count" -eq "$EXPECTED_COUNT" ] || die "expected exactly $EXPECTED_COUNT files in $STAGING, found $count"
 # Per-asset floors, because the assets differ by three orders of magnitude: a platform zip
-# carries a ~100 MB runtime, the no-jdk zip is ~15 MB, and the javadoc/sources jars are each
-# tens of KB. A single 1 MB floor would abort every release on the small jars.
+# carries a ~100 MB runtime, the no-jdk zip is ~15 MB, the javadoc jar is ~130 KB, and the
+# sources jar is only tens of KB. A single 1 MB floor would abort every release on the small jars.
 asset_floor() {
   case "$1" in
     *-linux-x64.zip|*-macos-aarch64.zip|*-windows-x64.zip) echo 40000000 ;;  # 40 MB
     *-no-jdk.zip)                                          echo  5000000 ;;  #  5 MB
-    *-javadoc.jar)                                         echo    10000 ;;  # 10 KB
+    *-javadoc.jar)                                         echo    20000 ;;  # 20 KB
     *-sources.jar)                                         echo     5000 ;;  #  5 KB
     *) echo 1 ;;
   esac
@@ -298,6 +298,12 @@ if [ -n "$LEGACY_GUI_TAG" ]; then
   gh release create "$LEGACY_GUI_TAG" "$STAGING"/* \
     --title "$TITLE (legacy updater compatibility)" \
     --notes-file "$NOTES"
+  # Old clients use the repository-wide releases/latest endpoint. Both release tags point to the
+  # same commit, so assert GitHub selected the compatibility release rather than relying on an
+  # undocumented tie-break in its latest-release selection.
+  LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
+  [ "$LATEST_TAG" = "$LEGACY_GUI_TAG" ] \
+    || die "GitHub releases/latest resolved to $LATEST_TAG, not compatibility release $LEGACY_GUI_TAG — do not publish another release until this is corrected"
 fi
 
 printf '\nReleased %s %s\n' "$MODULE" "$VERSION"

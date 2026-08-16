@@ -79,6 +79,29 @@ public class UpdateCheckerHttpTest {
         });
   }
 
+  private void respondTwoPages(String firstPage, String secondPage) {
+    server.createContext(
+        "/releases",
+        exchange -> {
+          boolean secondRequest = "page=2".equals(exchange.getRequestURI().getQuery());
+          String body = secondRequest ? secondPage : firstPage;
+          byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+          if (!secondRequest) {
+            exchange
+                .getResponseHeaders()
+                .add(
+                    "Link",
+                    "<http://127.0.0.1:"
+                        + server.getAddress().getPort()
+                        + "/releases?page=2>; rel=\"next\"");
+          }
+          exchange.sendResponseHeaders(200, bytes.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+          }
+        });
+  }
+
   @Test
   void non200StatusThrowsUpdateCheckException() {
     respond(500, "boom");
@@ -136,11 +159,10 @@ public class UpdateCheckerHttpTest {
   }
 
   @Test
-  void currentVersionOnAnIncompletePageIsIndeterminate() throws UpdateCheckException {
+  void nextPageIsFetchedBeforeSelectingTheLatestGuiRelease() throws UpdateCheckException {
     UpdatePlatform platform = UpdatePlatform.detectCurrent();
-    String assetName = "md2pdf-0.1.0" + platform.assetSuffix();
-    respond(
-        200,
+    String assetName = "md2pdf-0.1.1" + platform.assetSuffix();
+    respondTwoPages(
         """
         [
           {
@@ -153,11 +175,26 @@ public class UpdateCheckerHttpTest {
         ]
         """
             .formatted(assetName, assetName),
-        true);
+        """
+        [
+          {
+            "tag_name": "MarkdownToPdf-v0.1.1",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v0.1.1",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
+        """
+            .formatted(assetName, assetName));
 
     UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
 
-    assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
-    assertTrue(result.updateInfo().isEmpty());
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    } else {
+      assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
+      assertEquals("0.1.1", result.updateInfo().get().latestVersion());
+    }
   }
 }

@@ -7,7 +7,9 @@ import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,32 +51,16 @@ public class UpdateChecker {
    */
   public UpdateCheckResult checkForUpdate(String currentVersion) throws UpdateCheckException {
     String apiUrl = System.getProperty(API_URL_PROPERTY, DEFAULT_API_URL);
-    HttpRequest request =
-        HttpRequest.newBuilder()
-            .uri(URI.create(apiUrl))
-            .header("Accept", "application/vnd.github+json")
-            .timeout(Duration.ofSeconds(10))
-            .GET()
-            .build();
-    HttpResponse<String> response;
     try (HttpClient httpClient =
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()) {
-      response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      return parseAndEvaluate(
+          currentVersion, UpdatePlatform.detectCurrent(), fetchAllReleasePages(httpClient, apiUrl));
     } catch (IOException e) {
       throw new UpdateCheckException("Failed to reach " + apiUrl, e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new UpdateCheckException("Interrupted while checking for updates", e);
     }
-    if (response.statusCode() != 200) {
-      throw new UpdateCheckException(
-          "GitHub returned HTTP " + response.statusCode() + " for " + apiUrl);
-    }
-    return parseAndEvaluate(
-        currentVersion,
-        UpdatePlatform.detectCurrent(),
-        response.body(),
-        hasNextPage(response.headers()));
   }
 
   /**
@@ -97,18 +83,6 @@ public class UpdateChecker {
    */
   public static UpdateCheckResult parseAndEvaluate(
       String currentVersion, UpdatePlatform platform, String responseJson) {
-    return parseAndEvaluate(currentVersion, platform, responseJson, false);
-  }
-
-  /**
-   * Evaluates one page of a {@code GET /releases} response.
-   *
-   * <p>When GitHub signals another page, an apparent up-to-date result is indeterminate: a newer
-   * GUI release may be on a page not yet inspected. A discovered newer release is still safe to
-   * offer, because it is newer regardless of what later pages contain.
-   */
-  private static UpdateCheckResult parseAndEvaluate(
-      String currentVersion, UpdatePlatform platform, String responseJson, boolean hasNextPage) {
     if (platform == UpdatePlatform.UNSUPPORTED) {
       LOGGER.info("Skipping update check: no release archive for this platform.");
       return UpdateCheckResult.indeterminate();
@@ -121,11 +95,6 @@ public class UpdateChecker {
     String tagName = GitHubReleaseJson.extractTagName(releaseJson);
     String latestVersion = tagName.substring(TAG_PREFIX.length());
     if (!VersionComparator.isNewer(latestVersion, currentVersion)) {
-      if (hasNextPage) {
-        LOGGER.info(
-            "Skipping up-to-date result: another releases page may contain a newer GUI release.");
-        return UpdateCheckResult.indeterminate();
-      }
       LOGGER.info(
           "No update available: latest release {} is not newer than the running {}.",
           latestVersion,
@@ -159,8 +128,66 @@ public class UpdateChecker {
             latestVersion, tagName, expectedAssetName, downloadUrl, checksumsUrl, htmlUrl));
   }
 
-  private static boolean hasNextPage(HttpHeaders headers) {
-    return headers.allValues("Link").stream().anyMatch(link -> link.contains("rel=\"next\""));
+  /** Fetches and combines every page that GitHub links from a releases response. */
+  private static String fetchAllReleasePages(HttpClient httpClient, String apiUrl)
+      throws IOException, InterruptedException, UpdateCheckException {
+    URI nextPage = URI.create(apiUrl);
+    Set<URI> fetchedPages = new HashSet<>();
+    StringBuilder releases = new StringBuilder("[");
+    boolean firstPage = true;
+    while (nextPage != null) {
+      if (!fetchedPages.add(nextPage)) {
+        throw new UpdateCheckException(
+            "GitHub Releases pagination linked to a page already fetched");
+      }
+      HttpRequest request =
+          HttpRequest.newBuilder()
+              .uri(nextPage)
+              .header("Accept", "application/vnd.github+json")
+              .timeout(Duration.ofSeconds(10))
+              .GET()
+              .build();
+      HttpResponse<String> response =
+          httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        throw new UpdateCheckException(
+            "GitHub returned HTTP " + response.statusCode() + " for " + nextPage);
+      }
+      String page = response.body().strip();
+      if (!page.startsWith("[")) {
+        return response.body();
+      }
+      String pageItems = GitHubReleaseJson.extractBracketedRegion(page, page.indexOf('[')).strip();
+      if (!pageItems.isEmpty()) {
+        if (!firstPage) {
+          releases.append(',');
+        }
+        releases.append(pageItems);
+        firstPage = false;
+      }
+      nextPage = findNextPage(response.headers());
+    }
+    return releases.append(']').toString();
+  }
+
+  private static URI findNextPage(HttpHeaders headers) throws UpdateCheckException {
+    for (String link : headers.allValues("Link")) {
+      for (String entry : link.split(",")) {
+        if (entry.contains("rel=\"next\"")) {
+          int open = entry.indexOf('<');
+          int close = entry.indexOf('>', open + 1);
+          if (open < 0 || close < 0) {
+            throw new UpdateCheckException("GitHub returned a malformed next-page Link header");
+          }
+          try {
+            return URI.create(entry.substring(open + 1, close));
+          } catch (IllegalArgumentException e) {
+            throw new UpdateCheckException("GitHub returned an invalid next-page Link URL", e);
+          }
+        }
+      }
+    }
+    return null;
   }
 
   /**

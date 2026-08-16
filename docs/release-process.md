@@ -38,6 +38,12 @@ clients, which only understand the old tag scheme, update into the prefix-aware 
 was already released under the legacy bare `v0.2.0` tag — the first gui release under the new
 scheme must be a version bumped past `0.2.0`.)
 
+The legacy updater only looks at the repository-wide `releases/latest` endpoint, so this migration
+window closes as soon as either module publishes another release. `release.sh` verifies that the
+compatibility release initially wins GitHub's latest-release selection; after that, leave both lib
+and gui releases quiet for at least seven days to give normally active legacy installs time to run
+their daily update check.
+
 ## What `release.sh` checks
 
 `release.sh` composes the GitHub release notes from the relevant changelog section(s) above and
