@@ -45,6 +45,10 @@ The installer checks for these and reports what is missing, but cannot install t
 | `md2pdf-<version>-windows-x64.zip` | unzip, then double-click `md2pdf-install.cmd` |
 | `md2pdf-<version>-no-jdk.zip` | unzip, then `java --enable-native-access=javafx.graphics,javafx.web,javafx.media -jar MarkdownToPdf.jar` |
 
+GitHub's repo-sidebar "Latest" badge is repo-wide and can point at a `lib`-only release (which
+ships no application) when one is newer than the latest `gui` release. Download the newest
+release tagged `MarkdownToPdf-v*` specifically, not whatever the sidebar highlights.
+
 The installer will:
 
 1. Copy the application to the standard location: `~/.local/share/MarkdownToPdf` on Linux,

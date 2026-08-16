@@ -60,6 +60,10 @@ The installer checks for these and reports what is missing, but cannot install t
 | `md2pdf-<version>-windows-x64.zip`   | unzip, then double-click `md2pdf-install.cmd`                              | ~100 MB |
 | `md2pdf-<version>-no-jdk.zip`        | unzip, then `java --enable-native-access=javafx.graphics,javafx.web,javafx.media -jar MarkdownToPdf.jar` (needs a JavaFX-bundled JDK 25+) | ~15 MB  |
 
+GitHub's repo-sidebar "Latest" badge is repo-wide and can point at a `lib`-only release (which
+ships no application) when one is newer than the latest `gui` release. Download the newest
+release tagged `MarkdownToPdf-v*` specifically, not whatever the sidebar highlights.
+
 Verify a download against `SHA256SUMS` from the same release:
 
     Linux:   sha256sum -c SHA256SUMS
