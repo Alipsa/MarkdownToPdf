@@ -1369,6 +1369,7 @@ public class MarkdownToPdf extends Application {
         buildTime = dt;
       }
     }
+    String md2pdfVersion = props.getProperty("Md2pdf-Version", "unknown");
     String batikVersion = props.getProperty("Batik-Version", "unknown");
     String jsoupVersion = props.getProperty("Jsoup-Version", "unknown");
     String openHtmlVersion = props.getProperty("Openhtmltopdf-Version", "unknown");
@@ -1379,7 +1380,9 @@ public class MarkdownToPdf extends Application {
         .append(version)
         .append("\nBuilt: ")
         .append(buildTime)
-        .append("\n\nOpenHTMLtoPDF version: ")
+        .append("\n\nmd2pdf library version: ")
+        .append(md2pdfVersion)
+        .append("\nOpenHTMLtoPDF version: ")
         .append(openHtmlVersion)
         .append("\nBatik version: ")
         .append(batikVersion)

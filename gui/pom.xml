@@ -195,6 +195,7 @@
                 <propertyfile file="${project.build.outputDirectory}/MarkdownToPdf.properties">
                   <entry key="Implementation-Version" value="${project.version}"/>
                   <entry key="Build-Time" value="${maven.build.timestamp}"/>
+                  <entry key="Md2pdf-Version" value="${md2pdf.version}"/>
                   <entry key="Batik-Version" value="${batik.version}"/>
                   <entry key="Jsoup-Version" value="${jsoup.version}"/>
                   <entry key="Openhtmltopdf-Version" value="${openhtmltopdfVersion}"/>
