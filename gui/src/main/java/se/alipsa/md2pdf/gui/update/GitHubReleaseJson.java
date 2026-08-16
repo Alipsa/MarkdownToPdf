@@ -96,6 +96,24 @@ public final class GitHubReleaseJson {
   }
 
   /**
+   * Scans a boolean top-level field (such as {@code draft} or {@code prerelease}), restricted to
+   * the JSON text preceding the {@code assets} array so a release's own flag is never confused with
+   * an identically-named field nested inside {@code assets[]} (e.g. an asset uploader's own boolean
+   * fields).
+   *
+   * @param json the JSON response to scan
+   * @param key the boolean field name to extract
+   * @return the field's value, or {@code false} if it is absent
+   */
+  public static boolean extractBooleanBeforeAssets(String json, String key) {
+    int assetsIndex = json.indexOf("\"assets\"");
+    String scope = assetsIndex < 0 ? json : json.substring(0, assetsIndex);
+    Matcher matcher =
+        Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(true|false)").matcher(scope);
+    return matcher.find() && Boolean.parseBoolean(matcher.group(1));
+  }
+
+  /**
    * Finds the first {@code "key": "value"} match in {@code json}.
    *
    * @param json the JSON text to scan

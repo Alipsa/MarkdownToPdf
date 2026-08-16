@@ -13,7 +13,7 @@ cd "$DIR/.." || exit 1
 mvn install -DskipTests || exit 1
 ./gui/createApp.sh linux || exit 1
 
-VERSION="$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)"
+VERSION="$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=project.version -DforceStdout)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 unzip -q "gui/target/md2pdf-$VERSION-linux-x64.zip" -d "$WORK"

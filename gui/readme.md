@@ -45,6 +45,10 @@ The installer checks for these and reports what is missing, but cannot install t
 | `md2pdf-<version>-windows-x64.zip` | unzip, then double-click `md2pdf-install.cmd` |
 | `md2pdf-<version>-no-jdk.zip` | unzip, then `java --enable-native-access=javafx.graphics,javafx.web,javafx.media -jar MarkdownToPdf.jar` |
 
+GitHub's repo-sidebar "Latest" badge is repo-wide and can point at a `lib`-only release (which
+ships no application) when one is newer than the latest `gui` release. Download the newest
+release tagged `MarkdownToPdf-v*` specifically, not whatever the sidebar highlights.
+
 The installer will:
 
 1. Copy the application to the standard location: `~/.local/share/MarkdownToPdf` on Linux,
@@ -118,18 +122,41 @@ Double-click the `MarkdownToPdf` shortcut on the Desktop, or run:
 
 ## Recovery after a partial release
 
-`release.sh` publishes to Maven Central in step 6, and that step cannot be undone or
-repeated. Steps 7 and 8 — the tag and the GitHub release — are both reversible.
+Both `./release.sh lib` and `./release.sh gui` can fail after the tag is pushed but before the
+GitHub release is created (step 8) — a `gh` auth expiry, a network drop, or an asset upload error
+partway through several ~100 MB zips all leave the tag pushed with no release to show for it.
+Re-running the same command then dies in its own preconditions, since the tag now exists both
+locally and on the remote.
 
-If a release fails after the deploy:
+### lib
 
-    git push --delete origin v<version>
-    git tag -d v<version>
-    gh release delete v<version> --yes    # only if a partial release was created
-    ./release.sh --skip-deploy
+`./release.sh lib` additionally publishes to Maven Central in step 6, and that step cannot be
+undone or repeated — steps 7 and 8 (the tag and the GitHub release) are both reversible on their
+own.
 
-`--skip-deploy` re-downloads the same CI artifacts and resumes from the tag. It works
-from a clean checkout: nothing in steps 3-5 is built locally.
+If a lib release fails after the deploy:
+
+    git push --delete origin md2pdf-v<version>
+    git tag -d md2pdf-v<version>
+    gh release delete md2pdf-v<version> --yes    # only if a partial release was created
+    ./release.sh lib --skip-deploy
+
+`--skip-deploy` re-downloads the same CI artifacts and resumes from the tag. It works from a
+clean checkout: nothing in steps 3-5 is built locally.
+
+### gui
+
+gui has no irreversible step — every stage is safe to redo, so recovery is just
+delete-and-re-run, every time. On the first gui release under the new tag scheme, also delete
+the `v<version>` compatibility tag and release if they were created:
+
+    git push --delete origin MarkdownToPdf-v<version>
+    git tag -d MarkdownToPdf-v<version>
+    gh release delete MarkdownToPdf-v<version> --yes    # only if a partial release was created
+    git push --delete origin v<version>                  # first new-style gui release only
+    git tag -d v<version>                                # first new-style gui release only
+    gh release delete v<version> --yes                   # first new-style gui release only
+    ./release.sh gui
 
 ## Style Profiles
 

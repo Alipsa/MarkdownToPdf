@@ -12,10 +12,10 @@ public final class VersionComparator {
 
   /**
    * Returns {@code true} if {@code candidate} is a strictly newer release than {@code current}. A
-   * trailing {@code -SNAPSHOT}-style suffix is stripped from each side before the dotted numeric
-   * segments are compared; if the numeric segments are otherwise equal, the side that had a suffix
-   * stripped is treated as older (so a locally built {@code 0.1.1-SNAPSHOT} is reported as older
-   * than a released {@code 0.1.1}, never as ahead of it).
+   * trailing {@code -suffix} is treated as an opaque prerelease marker and stripped before the
+   * dotted numeric segments are compared. If the numeric segments are otherwise equal, a suffixed
+   * version is older than an unsuffixed release; two differently suffixed versions (for example
+   * {@code 0.2.1-beta} and {@code 0.2.1-SNAPSHOT}) compare as equal.
    *
    * @param candidate the version to test
    * @param current the currently running version
@@ -34,6 +34,17 @@ public final class VersionComparator {
     boolean candidateHadSuffix = hasSuffix(candidate);
     boolean currentHadSuffix = hasSuffix(current);
     return currentHadSuffix && !candidateHadSuffix;
+  }
+
+  /**
+   * Returns {@code true} if {@code version}'s dotted-numeric prefix can be parsed — i.e. {@link
+   * #isNewer} can meaningfully compare it against another version.
+   *
+   * @param version the version string to check
+   * @return {@code true} when {@code version} is parseable
+   */
+  public static boolean isParseable(String version) {
+    return parse(version) != null;
   }
 
   private static int compareParts(int[] a, int[] b) {

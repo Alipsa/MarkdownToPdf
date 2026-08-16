@@ -10,6 +10,12 @@
     <version>${revision}</version>
   </parent>
   <artifactId>MarkdownToPdf</artifactId>
+  <!-- gui's own version, independent of the parent's <revision>. Bump this when releasing
+       gui; keep gui/MarkdownToPdf.xml's dependency version in lockstep (release.sh checks
+       this). The <parent><version> above MUST stay the unresolved revision property
+       reference, never a literal version — overriding revision here or hardcoding the
+       parent reference both break the build (see the design spec's "Rejected" section). -->
+  <version>0.2.1</version>
   <packaging>jar</packaging>
 
   <name>MarkdownToPdf Editor</name>
@@ -187,8 +193,9 @@
             <configuration>
               <target>
                 <propertyfile file="${project.build.outputDirectory}/MarkdownToPdf.properties">
-                  <entry key="Implementation-Version" value="${revision}"/>
+                  <entry key="Implementation-Version" value="${project.version}"/>
                   <entry key="Build-Time" value="${maven.build.timestamp}"/>
+                  <entry key="Md2pdf-Version" value="${md2pdf.version}"/>
                   <entry key="Batik-Version" value="${batik.version}"/>
                   <entry key="Jsoup-Version" value="${jsoup.version}"/>
                   <entry key="Openhtmltopdf-Version" value="${openhtmltopdfVersion}"/>

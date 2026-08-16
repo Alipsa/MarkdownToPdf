@@ -74,4 +74,45 @@ public class GitHubReleaseJsonTest {
     String json = "{\"tag_name\": \"v0.1.2\", \"assets\": []}";
     assertTrue(GitHubReleaseJson.extractAssets(json).isEmpty());
   }
+
+  @Test
+  void extractsBooleanFieldWhenTrue() {
+    String json = "{\"tag_name\": \"v0.1.2\", \"draft\": true, \"assets\": []}";
+    assertTrue(GitHubReleaseJson.extractBooleanBeforeAssets(json, "draft"));
+  }
+
+  @Test
+  void extractsBooleanFieldWhenFalse() {
+    String json = "{\"tag_name\": \"v0.1.2\", \"draft\": false, \"assets\": []}";
+    assertFalse(GitHubReleaseJson.extractBooleanBeforeAssets(json, "draft"));
+  }
+
+  @Test
+  void absentBooleanFieldDefaultsToFalseWithoutThrowing() {
+    String json = "{\"tag_name\": \"v0.1.2\", \"assets\": []}";
+    assertFalse(GitHubReleaseJson.extractBooleanBeforeAssets(json, "draft"));
+    assertFalse(GitHubReleaseJson.extractBooleanBeforeAssets(json, "prerelease"));
+  }
+
+  @Test
+  void booleanFieldNestedInsideAssetsIsNotConfusedWithReleaseLevelField() {
+    // The release itself has no "draft" field, but an asset's nested object does. That nested
+    // occurrence, which appears after "assets", must not be mistaken for the release's own flag.
+    String json =
+        """
+        {
+          "tag_name": "v0.1.2",
+          "assets": [
+            {
+              "name": "md2pdf-0.1.2-linux-x64.zip",
+              "uploader": {
+                "login": "someone",
+                "draft": true
+              }
+            }
+          ]
+        }
+        """;
+    assertFalse(GitHubReleaseJson.extractBooleanBeforeAssets(json, "draft"));
+  }
 }

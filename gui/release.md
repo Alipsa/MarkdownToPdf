@@ -1,6 +1,14 @@
 # MarkdownToPdf GUI Release History
 (Note, dates are in yyyy-MM-dd format)
 
+## 0.2.1 (2026-08-16)
+- GUI releases now have an independent version from the bundled md2pdf library; this release uses
+  md2pdf 0.2.0. The **About** dialog shows both versions.
+- Made update checks reliable when the repository also has library releases: they select GUI
+  releases only, follow paginated release results, and safely ignore drafts, prereleases and
+  malformed release data.
+- Added the required high-resolution macOS application icon for Mac App Store packaging.
+
 ## 0.2.0 (2026-08-15)
 - Added a pluggable file-access layer for sandboxed distributions. Stored projects are retained
   when their files are temporarily inaccessible, and the application can ask to locate an

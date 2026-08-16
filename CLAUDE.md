@@ -40,7 +40,7 @@ SpotBugs runs at `verify` with `effort=Max`, `threshold=Medium`. False positives
 
 ## Module structure
 
-This is a Maven multi-module project with `${revision}` CI-friendly versioning (resolved by flatten-maven-plugin).
+This is a Maven multi-module project. `lib` uses `${revision}` CI-friendly versioning (resolved by flatten-maven-plugin); `gui` has its own independent `<version>`, see below.
 
 ### `lib` — the engine library (`se.alipsa:md2pdf`)
 
@@ -81,4 +81,4 @@ bundle their own Java 25 runtime, so end users do not need a JDK.
 - **Zero new Maven dependencies** for anything in the `gui` model layer or `lib` core. The CSS round-trip parser in `StyleProfile.fromCss()` is intentionally hand-written for this reason.
 - **No `--add-exports`/`--add-opens` config needed** — Spotless 3.x handles Google Java Format's module requirements automatically.
 - Build-generated files such as `.flattened-pom.xml` and `dependency-reduced-pom.xml` are ignored by `.gitignore`; do not commit them.
-- The `${revision}` property in the root POM controls the version for all modules. Bump it in `pom.xml` only; flatten-maven-plugin propagates it. `gui/MarkdownToPdf.xml` inherits the root parent, so its launcher dependency follows `${revision}` as well.
+- The `${revision}` property in the root POM controls `lib`'s version (and the parent's). `gui` has its own independent `<version>` in `gui/pom.xml`, bumped separately at gui release time. A gui release requires bumping **two** files in lockstep: `gui/pom.xml`'s `<version>` and the dependency `<version>` in `gui/MarkdownToPdf.xml` (`release.sh gui` checks they match). `gui/MarkdownToPdf.xml`'s own `<parent>` reference still follows `${revision}` (i.e. lib's version) since that file is unchanged by gui's version override — only its dependency on the built `MarkdownToPdf` artifact needs gui's version directly.

@@ -7,14 +7,14 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Isolated;
 import se.alipsa.md2pdf.gui.update.UpdateCheckException;
+import se.alipsa.md2pdf.gui.update.UpdateCheckOutcome;
+import se.alipsa.md2pdf.gui.update.UpdateCheckResult;
 import se.alipsa.md2pdf.gui.update.UpdateChecker;
-import se.alipsa.md2pdf.gui.update.UpdateInfo;
 import se.alipsa.md2pdf.gui.update.UpdatePlatform;
 
 /**
@@ -36,9 +36,11 @@ public class UpdateCheckerHttpTest {
   void startServer() throws IOException {
     server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.start();
+    // HttpServer context matching is path-only; the query string does not need to be part
+    // of the registered context path below.
     System.setProperty(
         UpdateChecker.API_URL_PROPERTY,
-        "http://127.0.0.1:" + server.getAddress().getPort() + "/releases/latest");
+        "http://127.0.0.1:" + server.getAddress().getPort() + "/releases?per_page=100");
   }
 
   @AfterEach
@@ -51,7 +53,7 @@ public class UpdateCheckerHttpTest {
 
   private void respond(int status, String body) {
     server.createContext(
-        "/releases/latest",
+        "/releases",
         exchange -> {
           byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
           // sendResponseHeaders' responseLength contract: 0 means chunked with unspecified
@@ -66,6 +68,23 @@ public class UpdateCheckerHttpTest {
         });
   }
 
+  private void respondTwoPages(String firstPage, String secondPage) {
+    server.createContext(
+        "/releases",
+        exchange -> {
+          boolean secondRequest = "page=2".equals(exchange.getRequestURI().getQuery());
+          String body = secondRequest ? secondPage : firstPage;
+          byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+          if (!secondRequest) {
+            exchange.getResponseHeaders().add("Link", "</releases?page=2>; rel=\"next\"");
+          }
+          exchange.sendResponseHeaders(200, bytes.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+          }
+        });
+  }
+
   @Test
   void non200StatusThrowsUpdateCheckException() {
     respond(500, "boom");
@@ -74,17 +93,21 @@ public class UpdateCheckerHttpTest {
   }
 
   @Test
-  void emptyBodyReturnsEmptyWithoutThrowing() throws UpdateCheckException {
+  void emptyBodyIsIndeterminateWithoutThrowing() throws UpdateCheckException {
     respond(200, "");
     UpdateChecker checker = new UpdateChecker();
-    assertTrue(checker.checkForUpdate("0.1.0").isEmpty());
+    UpdateCheckResult result = checker.checkForUpdate("0.1.0");
+    assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    assertTrue(result.updateInfo().isEmpty());
   }
 
   @Test
-  void malformedJsonReturnsEmptyWithoutThrowing() throws UpdateCheckException {
+  void malformedJsonIsIndeterminateWithoutThrowing() throws UpdateCheckException {
     respond(200, "{not json at all");
     UpdateChecker checker = new UpdateChecker();
-    assertTrue(checker.checkForUpdate("0.1.0").isEmpty());
+    UpdateCheckResult result = checker.checkForUpdate("0.1.0");
+    assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    assertTrue(result.updateInfo().isEmpty());
   }
 
   @Test
@@ -94,20 +117,96 @@ public class UpdateCheckerHttpTest {
     respond(
         200,
         """
-        {
-          "tag_name": "v99.0.0",
-          "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/v99.0.0",
-          "assets": [
-            {"name": "%s", "browser_download_url": "https://example.com/%s"}
-          ]
-        }
+        [
+          {
+            "tag_name": "MarkdownToPdf-v99.0.0",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v99.0.0",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
         """
             .formatted(assetName, assetName));
 
-    Optional<UpdateInfo> result = new UpdateChecker().checkForUpdate("0.1.0");
+    UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
 
-    // Deterministic on every platform CI runs on: UNSUPPORTED never matches (no asset suffix to
-    // build a real file name from), every supported platform matches the asset built above.
-    assertEquals(platform != UpdatePlatform.UNSUPPORTED, result.isPresent());
+    // Deterministic on every platform CI runs on: UNSUPPORTED is INDETERMINATE (no asset suffix
+    // to build a real file name from), every supported platform matches the asset built above.
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    } else {
+      assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
+      assertTrue(result.updateInfo().isPresent());
+    }
+  }
+
+  @Test
+  void nextPageIsFetchedBeforeSelectingTheLatestGuiRelease() throws UpdateCheckException {
+    UpdatePlatform platform = UpdatePlatform.detectCurrent();
+    String assetName = "md2pdf-0.1.1" + platform.assetSuffix();
+    respondTwoPages(
+        """
+        [
+          {
+            "tag_name": "MarkdownToPdf-v0.1.0",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v0.1.0",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
+        """
+            .formatted(assetName, assetName),
+        """
+        [
+          {
+            "tag_name": "MarkdownToPdf-v0.1.1",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v0.1.1",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
+        """
+            .formatted(assetName, assetName));
+
+    UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
+
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    } else {
+      assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
+      assertEquals("0.1.1", result.updateInfo().get().latestVersion());
+    }
+  }
+
+  @Test
+  void nonArrayLaterPageKeepsTheReleaseFoundOnEarlierPages() throws UpdateCheckException {
+    UpdatePlatform platform = UpdatePlatform.detectCurrent();
+    String assetName = "md2pdf-0.1.1" + platform.assetSuffix();
+    respondTwoPages(
+        """
+        [
+          {
+            "tag_name": "MarkdownToPdf-v0.1.1",
+            "html_url": "https://github.com/Alipsa/MarkdownToPdf/releases/tag/MarkdownToPdf-v0.1.1",
+            "assets": [
+              {"name": "%s", "browser_download_url": "https://example.com/%s"}
+            ]
+          }
+        ]
+        """
+            .formatted(assetName, assetName),
+        "GitHub is temporarily unavailable");
+
+    UpdateCheckResult result = new UpdateChecker().checkForUpdate("0.1.0");
+
+    if (platform == UpdatePlatform.UNSUPPORTED) {
+      assertEquals(UpdateCheckOutcome.INDETERMINATE, result.outcome());
+    } else {
+      assertEquals(UpdateCheckOutcome.UPDATE_AVAILABLE, result.outcome());
+      assertEquals("0.1.1", result.updateInfo().get().latestVersion());
+    }
   }
 }

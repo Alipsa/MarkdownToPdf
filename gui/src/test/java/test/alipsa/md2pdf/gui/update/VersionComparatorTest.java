@@ -59,4 +59,21 @@ public class VersionComparatorTest {
     assertFalse(VersionComparator.isNewer("0.1.2", null));
     assertFalse(VersionComparator.isNewer("", ""));
   }
+
+  @Test
+  void normalVersionIsParseable() {
+    assertTrue(VersionComparator.isParseable("0.1.1"));
+  }
+
+  @Test
+  void unparseableVersionIsNotParseable() {
+    assertFalse(VersionComparator.isParseable("0.4.0.RC1"));
+  }
+
+  @Test
+  void nullOrBlankVersionIsNotParseable() {
+    assertFalse(VersionComparator.isParseable(null));
+    assertFalse(VersionComparator.isParseable(""));
+    assertFalse(VersionComparator.isParseable("   "));
+  }
 }
