@@ -26,6 +26,7 @@ case "$MODULE" in
     esac
     ;;
   gui)
+    SKIP_DEPLOY=0
     case "${2:-}" in
       "") ;;
       --skip-deploy) die "gui has no Maven Central deploy step, so --skip-deploy does not apply. usage: ./release.sh gui" ;;

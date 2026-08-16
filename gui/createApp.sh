@@ -88,9 +88,11 @@ app_version() {
   printf '%s\n' "$version"
 }
 
-# Exactly one candidate, never "the first one". target/ accumulates: bump ${revision} without
-# a clean and two versions sit side by side, and picking either one silently produces an
-# archive whose name, contents and version need not agree.
+# Exactly one candidate, never "the first one". A stale jar left in target/ from a previous
+# build (e.g. gui's own <version> was bumped without a clean) would otherwise silently pick
+# either one, producing an archive whose name, contents and version need not agree. This does
+# NOT catch a lib-only revision bump left in target/ — gui's jar name no longer embeds lib's
+# version, so that drift is caught downstream instead, by check-lib-classpath.sh.
 app_jar() {
   local jars count
   jars="$(find "$TARGET" -maxdepth 1 -name 'MarkdownToPdf-*.jar' \
