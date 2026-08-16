@@ -76,7 +76,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Read the project version
-        run: echo "APP_VERSION=$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)" >> "$GITHUB_ENV"
+        run: |
+          echo "APP_VERSION=$(mvn -q -pl gui org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
+          echo "LIB_VERSION=$(mvn -q org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=revision -DforceStdout)" >> "$GITHUB_ENV"
 
       - run: mvn install -DskipTests
 
@@ -155,8 +157,19 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: matrix.platform == 'linux'
         with:
-          name: md2pdf-${{ env.APP_VERSION }}-javadoc
-          path: lib/target/md2pdf-${{ env.APP_VERSION }}-javadoc.jar
+          name: md2pdf-${{ env.LIB_VERSION }}-javadoc
+          path: lib/target/md2pdf-${{ env.LIB_VERSION }}-javadoc.jar
+          if-no-files-found: error
+
+      - name: Build the sources jar
+        if: matrix.platform == 'linux'
+        run: mvn -pl lib source:jar
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.platform == 'linux'
+        with:
+          name: md2pdf-${{ env.LIB_VERSION }}-sources
+          path: lib/target/md2pdf-${{ env.LIB_VERSION }}-sources.jar
           if-no-files-found: error
 
   install-failures:
