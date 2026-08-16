@@ -15,7 +15,7 @@
        this). The <parent><version> above MUST stay the unresolved revision property
        reference, never a literal version — overriding revision here or hardcoding the
        parent reference both break the build (see the design spec's "Rejected" section). -->
-  <version>0.2.0</version>
+  <version>0.2.1</version>
   <packaging>jar</packaging>
 
   <name>MarkdownToPdf Editor</name>

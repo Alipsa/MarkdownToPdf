@@ -37,7 +37,7 @@
            builds, tests, or touches this file (only CLAUDE.md references it), so a stale
            value here is invisible until someone runs `mvn -f gui/MarkdownToPdf.xml
            javafx:run`. release.sh's gui flow checks this stays in sync. -->
-      <version>0.2.0</version>
+      <version>0.2.1</version>
     </dependency>
     <dependency>
       <groupId>org.openjfx</groupId>
