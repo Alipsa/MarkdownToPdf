@@ -98,6 +98,12 @@ case "$VERSION" in
   0.1.0|0.1.1|0.2.0)
     git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null \
       && die "$VERSION was already released under the pre-split tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
+    if git ls-remote --exit-code --tags origin "v$VERSION" > /dev/null 2>&1; then
+      die "$VERSION was already released under the pre-split tag v$VERSION — bump the version before releasing under the new $MODULE-specific tag scheme"
+    else
+      status=$?
+      [ "$status" -eq 2 ] || die "could not check remote pre-split tag v$VERSION"
+    fi
     ;;
 esac
 if [ -n "$LEGACY_GUI_TAG" ]; then
@@ -297,6 +303,7 @@ if [ -n "$LEGACY_GUI_TAG" ]; then
   step "Creating compatibility GitHub release"
   gh release create "$LEGACY_GUI_TAG" "$STAGING"/* \
     --title "$TITLE (legacy updater compatibility)" \
+    --latest \
     --notes-file "$NOTES"
   # Old clients use the repository-wide releases/latest endpoint. Both release tags point to the
   # same commit, so assert GitHub selected the compatibility release rather than relying on an

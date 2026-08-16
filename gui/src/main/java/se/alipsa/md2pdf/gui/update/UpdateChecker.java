@@ -171,7 +171,7 @@ public class UpdateChecker {
       String page = response.body().strip();
       if (!page.startsWith("[")) {
         if (fetchedPages.size() == 1) {
-          return response.body();
+          return page;
         }
         LOGGER.warn(
             "Ignoring non-array response after {} valid GitHub Releases page(s).",

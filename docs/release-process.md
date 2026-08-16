@@ -42,7 +42,9 @@ The legacy updater only looks at the repository-wide `releases/latest` endpoint,
 window closes as soon as either module publishes another release. `release.sh` verifies that the
 compatibility release initially wins GitHub's latest-release selection; after that, leave both lib
 and gui releases quiet for at least seven days to give normally active legacy installs time to run
-their daily update check.
+their daily update check. Run the first new-style gui release in an exclusive release window: a
+concurrent release can displace the compatibility release before the script verifies it, leaving
+both tags and releases to clean up manually.
 
 ## What `release.sh` checks
 
