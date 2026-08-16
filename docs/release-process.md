@@ -44,7 +44,9 @@ compatibility release initially wins GitHub's latest-release selection; after th
 and gui releases quiet for at least seven days to give normally active legacy installs time to run
 their daily update check. Run the first new-style gui release in an exclusive release window: a
 concurrent release can displace the compatibility release before the script verifies it, leaving
-both tags and releases to clean up manually.
+both tags and releases to clean up manually. This one-time compatibility flow requires a GitHub
+CLI version that supports `gh release create --latest`; `release.sh` checks that capability before
+publishing anything.
 
 ## What `release.sh` checks
 

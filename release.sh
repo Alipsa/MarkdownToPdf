@@ -88,6 +88,14 @@ LEGACY_GUI_TAG=""
 if [ "$MODULE" = "gui" ] && [ -z "$(git tag --list 'MarkdownToPdf-v*')" ]; then
   LEGACY_GUI_TAG="v$VERSION"
 fi
+NEW_RELEASE_LATEST_OPTION=()
+if [ -n "$LEGACY_GUI_TAG" ]; then
+  gh release create --help | grep -F -- '--latest' > /dev/null \
+    || die "the first new-style gui release requires a gh version that supports gh release create --latest"
+  # Do not let an old updater observe the new-style tag during the short interval before the
+  # compatibility release below is created and explicitly marked latest.
+  NEW_RELEASE_LATEST_OPTION=(--latest=false)
+fi
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && die "tag $TAG already exists locally"
 git ls-remote --exit-code --tags origin "$TAG" > /dev/null 2>&1 && die "tag $TAG already exists on the remote"
 
@@ -298,7 +306,8 @@ fi
 # gh release create takes filenames or globs, never a directory.
 gh release create "$TAG" "$STAGING"/* \
   --title "$TITLE" \
-  --notes-file "$NOTES"
+  --notes-file "$NOTES" \
+  "${NEW_RELEASE_LATEST_OPTION[@]}"
 if [ -n "$LEGACY_GUI_TAG" ]; then
   step "Creating compatibility GitHub release"
   gh release create "$LEGACY_GUI_TAG" "$STAGING"/* \
